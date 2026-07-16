@@ -1,0 +1,212 @@
+<?php
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Copy-paste authoring aids for the form editor.
+ *
+ * Until the in-product AI generator ships, the Design tab offers two
+ * "copy" links backed by this class:
+ *   - human_spec()   a tight, scannable reference a person reads to see
+ *                    what an Emblem Studio asset must contain and may use;
+ *   - ai_preprompt() a ready-to-fill ChatGPT / Claude prompt, which
+ *                    embeds the fuller, instruction-style ai_spec().
+ * The two specs are deliberately different: people want terse, an AI
+ * wants explicit. Admin-only — loaded behind the is_admin() gate.
+ */
+class ES_Authoring {
+
+	/**
+	 * Tight, scannable form reference for a person to read. Backs the
+	 * "Copy form specifications" link. Deliberately terse — the fuller,
+	 * instruction-style spec for an AI lives in ai_spec().
+	 */
+	public static function human_spec(): string {
+		return <<<'SPEC'
+EMBLEM STUDIO — FORM SPEC
+
+An asset is two blocks you write yourself: HTML and CSS. Everything else
+— submitting, spam protection, delivery, stats, the popup / ribbon /
+slide-in chrome — is handled for you. Write a fragment: no <html>,
+<head> or <body>.
+
+TWO KINDS OF ASSET
+- Form asset (default): captures leads — has the email input, a submit
+  button, and (optionally) the thank-you state below.
+- Form-less asset: an announcement / CTA (ribbon, slide-in, popup) that
+  just presents an offer and links out — no inputs, no submit, no
+  thank-you. The action is a tracked link: <a data-es-track="..." href="...">.
+  The root is still one <form class="esf-form">, just with no fields.
+
+HTML
+- Root element: one <form class="esf-form" novalidate>.
+- Inputs carry a name=. Recognised: email, first_name, last_name, phone.
+  Any other name becomes a custom field.
+- A form asset includes exactly one <input type="email" name="email"
+  required>; a form-less announcement has no fields — skip it.
+- Pair each input with a <label for="..."> and an autocomplete value.
+- GDPR: a required checkbox — name="gdpr_consent", data-esf-consent —
+  with a link to your privacy policy.
+- A submit <button type="submit"> (form assets only).
+- Thank-you state (optional, form assets only): one element marked
+  data-esf-thankyou hidden — shown after a successful submit, with the
+  form hidden. Optional: the asset's success behaviour can instead show a
+  custom message or redirect.
+- No honeypot needed; one is added automatically.
+
+CSS
+- Must start with:  [hidden] { display: none !important; }
+- The form is style-isolated (Shadow DOM): the theme can't reach it and
+  it can't inherit from the theme — style everything it needs.
+- Keep colours, fonts and spacing in --esf-* variables at the top.
+- Single-class selectors. No IDs. No !important (except [hidden]).
+- Design ~480px wide; add a @media (max-width: 480px) block.
+
+NOTES
+- Prefix your own class names with "esf-"; scope every rule to .esf-form.
+- Add data-es-track="label" to a link or button to track its clicks.
+- Animations and hover effects are welcome.
+- The shell adds the popup backdrop, positioning and close button — don't
+  build your own overlay, modal wrapper or full-bleed background. Put the
+  background, padding, border-radius and box-shadow on the single root
+  (.esf-form) itself, not on an extra wrapper around it, so a rounded design
+  shows no stray box behind it as a popup / ribbon / slide-in.
+- Removed on save: <script>, on* handlers, javascript: URLs, external
+  <link> / <script> tags.
+- One asset works everywhere: inline, click popup, auto popup, ribbon,
+  slide-in.
+SPEC;
+	}
+
+	/**
+	 * Fuller, explicit form-authoring spec written for an AI to follow
+	 * to the letter. Embedded in ai_preprompt(); never shown on its own.
+	 */
+	public static function ai_spec(): string {
+		return <<<'SPEC'
+EMBLEM STUDIO — FORM SPECIFICATION
+What a hand-authored Emblem Studio asset must contain and may use.
+
+THE TWO BLOCKS
+You author two things: one block of HTML and one block of CSS. Emblem
+Studio handles submission, spam protection, lead delivery, analytics and
+the popup / ribbon / slide-in chrome — you only build the form itself.
+Author a fragment: no <html>, <head> or <body> tags.
+
+ASSET TYPES — two kinds
+- FORM asset (the default): captures leads. Has the email input + submit
+  button + (optionally) the thank-you state below.
+- FORM-LESS asset: an announcement / CTA (ribbon, slide-in, popup) that
+  just presents an offer and links out — NO inputs, NO submit, NO
+  thank-you. The action is a tracked link: <a data-es-track="..."
+  href="...">. The root is still one <form class="esf-form">, just with
+  no fields.
+
+HTML — STRUCTURE
+- Include exactly one <form> element, wrapped as
+  <form class="esf-form" novalidate> ... </form>.
+- Give your own elements "esf-"-prefixed class names (esf-header,
+  esf-field, esf-cta, ...). Scope every CSS rule under .esf-form.
+- Do not add a honeypot or spam field — Emblem Studio injects its own.
+
+HTML — FIELDS
+- Every input needs a "name". That name is what gets delivered to your
+  email tool / CRM. Standard names: email, first_name, last_name, phone.
+  Any other name is treated as a custom field you can map later.
+- A form asset always includes exactly one
+  <input type="email" name="email" required>. A form-less announcement
+  asset has no fields — skip this.
+- Give every input a matching <label for="..."> and an "autocomplete"
+  value (email, given-name, family-name, tel).
+- GDPR consent — include a required checkbox inside a <label>:
+  <input type="checkbox" name="gdpr_consent" required data-esf-consent>
+  with a link to your privacy policy.
+- Submit with <button type="submit">.
+
+HTML — THE THANK-YOU STATE (optional; form assets only)
+- A form asset MAY include one element marked  data-esf-thankyou hidden
+  — your "you're in" confirmation. It stays hidden until a successful
+  submit, then Emblem Studio reveals it and hides the form. Example:
+  <div class="esf-success" data-esf-thankyou hidden> ... </div>
+  It is NOT mandatory: the asset's success behaviour can instead show a
+  custom message or redirect. A form-less announcement asset omits it.
+
+CSS
+- The FIRST CSS rule must be:  [hidden] { display: none !important; }
+  This makes the hidden thank-you state reliable.
+- The form renders inside an isolated Shadow DOM: the site theme cannot
+  style it, and your CSS cannot borrow from the theme. Style everything
+  the form needs.
+- Put colours, fonts and spacing in CSS custom properties (--esf-bg,
+  --esf-accent, --esf-radius, ...) in a ".esf-form { }" block at the top,
+  so they are easy to retune in one place.
+- Use single-class selectors. No IDs. No !important (except the
+  [hidden] rule above).
+- The shell supplies the popup backdrop, positioning and close button —
+  never add your own overlay, modal wrapper or full-bleed background.
+  Style the single .esf-form root directly: put its background, padding,
+  border-radius and box-shadow on that root (not on an extra wrapper
+  around it), so it renders cleanly as a popup / ribbon / slide-in with no
+  stray box showing behind its rounded corners.
+- Design at about 480px wide and include a
+  @media (max-width: 480px) { } block — assets often show in narrow
+  popups and on phones.
+
+OPTIONAL
+- Add  data-es-track="a short label"  to any link or button you want
+  counted separately in click stats.
+- Entrance animations and hover effects are fine — keep them tasteful.
+
+NOT ALLOWED (stripped automatically on save)
+- <script> tags, inline event handlers (onclick, onerror, ...),
+  javascript: URLs, and external <link> / <script> references.
+
+WHERE IT RUNS
+The same HTML/CSS works inline (via shortcode), as a click popup, an
+auto popup, a ribbon bar, or a slide-in. Pick the placement in the
+Shells tab — design once, it adapts.
+SPEC;
+	}
+
+	/**
+	 * A ready-to-use generation prompt for ChatGPT / Claude / etc. The
+	 * author fills the [BRACKET] placeholders and pastes the whole thing
+	 * into an AI chat to get a form's HTML + CSS. The full ai_spec() is
+	 * appended so the prompt is self-contained — one copy, one paste.
+	 */
+	public static function ai_preprompt(): string {
+		$intro = <<<'PROMPT'
+ROLE
+You are a senior conversion designer and front-end developer. Design a
+beautiful, high-converting opt-in asset (a form) for the project below,
+then write its HTML and CSS.
+
+MY PROJECT — replace every [BRACKET] before you send this
+- Brand / product name: [YOUR BRAND]
+- What I give people for signing up: [THE OFFER — e.g. 10% off, a PDF guide, a weekly newsletter]
+- Who my audience is: [DESCRIBE THEM IN A SENTENCE]
+- The one job of this asset: [e.g. collect emails for a launch waitlist]
+- Mood / visual style: [e.g. warm and editorial / bold and modern / calm and minimal]
+- Brand colours: [HEX CODES — or write "you choose"]
+- Fonts: [FONT NAMES — or write "you choose"]
+- Headline: [WRITE ONE — or write "you choose"]
+- Fields to collect: [e.g. first name + email]
+- Privacy policy URL: [PASTE URL — or leave as #]
+
+WHAT TO RETURN
+Return exactly two fenced code blocks and nothing else: first the HTML,
+then the CSS. No commentary before or after.
+
+DESIGN BAR
+Make it look crafted by a senior designer: a deliberate type scale,
+generous whitespace, one confident accent colour, a clear visual
+hierarchy, and a tasteful entrance animation. The submit button must be
+impossible to miss. Avoid the generic default-form look.
+
+TECHNICAL SPEC — follow every rule below exactly.
+PROMPT;
+
+		return $intro . "\n\n" . self::ai_spec();
+	}
+}

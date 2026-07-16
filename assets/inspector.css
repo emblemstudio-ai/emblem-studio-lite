@@ -1,0 +1,888 @@
+/* =====================================================================
+ * Emblem Studio — Inspector (semi-builder) takeover.
+ *
+ * A full-screen workspace layered over the form-edit screen. Three
+ * columns: layer tree (left), live form (middle), relevant CSS (right).
+ * It edits the HTML/CSS held in the page's CodeMirror editors and writes
+ * back on close — it never saves to the DB itself.
+ *
+ * Step 1 ships the shell only: open/close, top bar, the three-column
+ * frame, and the middle live form. Tree + CSS panels are placeholders.
+ * ===================================================================== */
+
+/* The launch button sits in the inline-preview bar on the Design tab. */
+.es-inspector-open {
+	margin-left: auto;
+}
+
+/* Lock the underlying page from scrolling while the takeover is open. */
+html.es-inspector-locked,
+body.es-inspector-locked {
+	overflow: hidden !important;
+}
+
+/* ── Overlay + shell ───────────────────────────────────────────── */
+.es-inspector-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	display: flex;
+	background: #fbf1e6;
+	box-sizing: border-box;
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	animation: es-inspector-fade 140ms ease both;
+}
+@keyframes es-inspector-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.es-inspector-shell {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	background: #fbf1e6;
+	overflow: hidden;
+}
+
+/* ── Top bar ───────────────────────────────────────────────────── */
+.es-inspector-topbar {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 12px 18px;
+	background: #ffffff;
+	border-bottom: 1px solid #efe6da;
+	flex: 0 0 auto;
+}
+.es-inspector-brand {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+.es-inspector-brand .es-inspector-eyebrow {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: #E27D40;
+}
+.es-inspector-title {
+	font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-size: 14px;
+	font-weight: 600;
+	color: #181a2e;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 40vw;
+}
+.es-inspector-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+.es-inspector-btn {
+	appearance: none;
+	border: 1px solid #e7ddcf;
+	background: #fff;
+	color: #22273f;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	padding: 7px 14px;
+	border-radius: 7px;
+	cursor: pointer;
+	transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.es-inspector-btn:hover:not([disabled]) { border-color: #9aa0b0; background: #fffaf3; }
+.es-inspector-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.es-inspector-btn.is-primary {
+	background: linear-gradient(120deg, #EC8B3C 0%, #E0694C 55%, #D2567E 100%);
+	border-color: transparent;
+	color: #fff;
+	box-shadow: 0 6px 16px rgba(200, 110, 60, 0.22);
+}
+.es-inspector-btn.is-primary:hover {
+	background: linear-gradient(120deg, #EC8B3C 0%, #E0694C 55%, #D2567E 100%);
+	border-color: transparent;
+	box-shadow: 0 10px 22px rgba(200, 110, 60, 0.30);
+}
+.es-inspector-btn.is-danger {
+	background: #dc2626;
+	border-color: #dc2626;
+	color: #fff;
+}
+.es-inspector-btn.is-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+.es-inspector-btn.is-active {
+	background: var(--es-accent-soft, #fbeede);
+	border-color: var(--es-accent, #E27D40);
+	color: var(--es-accent, #E27D40);
+}
+
+/* ── Edit HTML panel ───────────────────────────────────────────── */
+.es-inspector-html {
+	position: absolute;
+	inset: 0;
+	z-index: 6;
+	display: flex;
+	flex-direction: column;
+	background: #fbf1e6;
+}
+.es-inspector-html-head {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	padding: 12px 18px;
+	background: #fff;
+	border-bottom: 1px solid #efe6da;
+}
+.es-inspector-html-title { font-size: 14px; font-weight: 600; color: #181a2e; }
+.es-inspector-html-hint { font-size: 12px; color: #6c7180; }
+.es-inspector-html-editor {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	background: #fff;
+	margin: 14px 18px;
+	border: 1px solid #efe6da;
+	border-radius: 8px;
+}
+.es-inspector-html-editor .CodeMirror {
+	height: 100%;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12.5px;
+	line-height: 1.6;
+}
+.es-inspector-html-textarea {
+	width: 100%;
+	height: 100%;
+	border: 0;
+	resize: none;
+	padding: 10px 12px;
+	box-sizing: border-box;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12.5px;
+	line-height: 1.6;
+	color: #353a52;
+}
+.es-inspector-html-foot {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 18px;
+	background: #fff;
+	border-top: 1px solid #efe6da;
+}
+.es-inspector-html-error {
+	flex: 0 0 auto;
+	font-size: 12px;
+	font-weight: 600;
+	color: #b91c1c;
+	background: #fef2f2;
+	border-top: 1px solid #fecaca;
+	padding: 6px 12px;
+}
+.es-inspector-html-error[hidden] { display: none; }
+.es-inspector-html-actions { margin-left: auto; display: flex; gap: 8px; flex: 0 0 auto; }
+
+/* ── Discard confirmation ──────────────────────────────────────── */
+.es-inspector-confirm {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(15, 23, 42, 0.45);
+}
+.es-inspector-confirm[hidden] { display: none; }
+.es-inspector-confirm-card {
+	width: 320px;
+	max-width: 90%;
+	background: #fff;
+	border-radius: 12px;
+	padding: 20px;
+	box-shadow: 0 20px 50px -12px rgba(15, 23, 42, 0.5);
+	text-align: left;
+}
+.es-inspector-confirm-title {
+	margin: 0 0 6px;
+	font-size: 15px;
+	font-weight: 700;
+	color: #181a2e;
+}
+.es-inspector-confirm-text {
+	margin: 0 0 16px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #6c7180;
+}
+.es-inspector-confirm-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+/* ── Body: three columns ───────────────────────────────────────── */
+.es-inspector-body {
+	--es-tree-w: 320px;
+	--es-css-w: 320px;
+	display: grid;
+	grid-template-columns: var(--es-tree-w) minmax(0, 1fr) var(--es-css-w);
+	flex: 1 1 auto;
+	min-height: 0;
+}
+/* Full screen: both side panels gone, the canvas takes everything —
+ * and the viewport fills it edge-to-edge (no stage margin or frame). */
+.es-inspector-body.is-fullscreen { grid-template-columns: minmax(0, 1fr); }
+.es-inspector-body.is-fullscreen .es-inspector-col-tree,
+.es-inspector-body.is-fullscreen .es-inspector-col-css { display: none; }
+.es-inspector-body.is-fullscreen .es-inspector-stage-wrap { padding: 0; }
+.es-inspector-body.is-fullscreen .es-inspector-frame {
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+.es-inspector-col {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	background: #ffffff;
+}
+.es-inspector-col + .es-inspector-col { border-left: 1px solid #efe6da; }
+
+.es-inspector-col-head {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: #6c7180;
+	border-bottom: 1px solid #f5efe6;
+	background: #fffaf3;
+}
+.es-inspector-col-title {
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.es-inspector-col-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+}
+
+/* Placeholder copy for panels not built yet (steps 2+). */
+.es-inspector-placeholder {
+	padding: 18px 16px;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #9aa0b0;
+}
+
+/* ── Left view toggle (HTML ⇄ Layers) ──────────────────────────── */
+.es-inspector-leftview { display: flex; gap: 2px; margin-left: auto; flex: 0 0 auto; }
+.es-inspector-leftview-btn {
+	border: 1px solid #e7ddcf;
+	background: #fff;
+	color: #555a72;
+	font: inherit;
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	padding: 2px 8px;
+	cursor: pointer;
+}
+.es-inspector-leftview-btn:first-child { border-radius: 5px 0 0 5px; }
+.es-inspector-leftview-btn:last-child { border-radius: 0 5px 5px 0; border-left: 0; }
+.es-inspector-leftview-btn:hover { background: #fffaf3; }
+.es-inspector-leftview-btn.is-active {
+	background: var(--es-accent, #E27D40);
+	border-color: var(--es-accent, #E27D40);
+	color: #fff;
+}
+
+/* ── HTML view (formatted source, fills the column, scrolls inside) ── */
+.es-inspector-col-tree.is-htmlview .es-inspector-col-scroll {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.es-inspector-htmlview { flex: 1 1 auto; min-height: 0; width: 100%; }
+.es-inspector-htmlview .CodeMirror {
+	height: 100%;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	background: #fff;
+	color: #353a52;
+}
+.es-inspector-htmlview .CodeMirror-lines { padding: 8px 14px; }
+/* The selected element's markup pops; everything else dims. */
+.es-inspector-htmlview .CodeMirror .es-inspector-dim-text { opacity: 0.3; }
+.es-inspector-htmlview .CodeMirror .es-inspector-html-sel { background: rgba(79, 70, 229, 0.12); }
+/* Markup that broke validation (unclosed/mismatched tag). */
+.es-inspector-htmlview .CodeMirror .es-inspector-html-err { background: rgba(220, 38, 38, 0.18); border-radius: 2px; }
+
+/* ── Layer tree (left column) ──────────────────────────────────── */
+.es-inspector-tree {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+/* Nested lists indent one notch and grow a guide rule. */
+.es-inspector-tree .es-inspector-tree {
+	margin-left: 9px;
+	padding-left: 6px;
+	border-left: 1px solid #f5efe6;
+}
+.es-inspector-tree-li.is-collapsed > .es-inspector-tree { display: none; }
+
+.es-inspector-node {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px 3px 4px;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	line-height: 1.5;
+	color: #555a72;
+	border-radius: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+	user-select: none;
+}
+.es-inspector-node:hover { background: #fbf1e6; }
+/* Mirrors a hover happening in the middle live form. */
+.es-inspector-node.is-hovered { background: #f5efe6; box-shadow: inset 0 0 0 1px rgba(79,70,229,0.25); }
+.es-inspector-node.is-selected {
+	background: var(--es-accent-soft, #fbeede);
+	color: #22273f;
+	box-shadow: inset 0 0 0 1px var(--es-accent, #E27D40);
+}
+
+.es-inspector-node-toggle {
+	width: 12px;
+	flex: 0 0 12px;
+	text-align: center;
+	color: #9aa0b0;
+	font-size: 9px;
+}
+.es-inspector-node-toggle.is-toggle { cursor: pointer; }
+.es-inspector-node-toggle.is-toggle:hover { color: #555a72; }
+
+.es-inspector-node-tag { color: #E27D40; font-weight: 600; }
+.es-inspector-node.is-selected .es-inspector-node-tag { color: var(--es-accent, #E27D40); }
+.es-inspector-node-id { color: #0ea5e9; }
+.es-inspector-node-class { color: #6c7180; }
+
+/* ── Relevant-CSS panel (right column) ─────────────────────────── */
+.es-inspector-css-head {
+	padding: 10px 14px;
+	border-bottom: 1px solid #f5efe6;
+	position: sticky;
+	top: 0;
+	background: #fff;
+	z-index: 1;
+}
+.es-inspector-css-head code {
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	font-weight: 600;
+	color: #22273f;
+	background: #fbf1e6;
+	padding: 2px 7px;
+	border-radius: 5px;
+}
+.es-inspector-css-rules { padding: 8px 10px 24px; }
+
+.es-inspector-rule {
+	border: 1px solid #efe6da;
+	border-radius: 8px;
+	margin-bottom: 10px;
+	overflow: hidden;
+	background: #fff;
+}
+.es-inspector-rule-media {
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 10.5px;
+	font-weight: 600;
+	color: #b45309;
+	background: #fffbeb;
+	border-bottom: 1px solid #fde68a;
+	padding: 4px 10px;
+}
+.es-inspector-rule-sel {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 10px;
+	background: #fffaf3;
+	border-bottom: 1px solid #f5efe6;
+}
+.es-inspector-rule-sel-text {
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: #E27D40;
+	word-break: break-all;
+}
+.es-inspector-rule-tag {
+	flex: 0 0 auto;
+	font-size: 9.5px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: #b45309;
+	background: #fef3c7;
+	padding: 1px 6px;
+	border-radius: 999px;
+}
+/* Delete-rule button, pushed to the right edge of the selector row. */
+.es-inspector-rule-del {
+	flex: 0 0 auto;
+	margin-left: auto;
+	width: 20px;
+	height: 20px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: #9aa0b0;
+	font-size: 16px;
+	cursor: pointer;
+	padding: 0;
+}
+.es-inspector-rule-del:hover { background: #fee2e2; color: #dc2626; }
+.es-inspector-rule-body {
+	margin: 0;
+	padding: 8px 10px;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	line-height: 1.55;
+	color: #353a52;
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-x: auto;
+}
+
+/* Pinned (added but not-matching) rules read dimmer. */
+.es-inspector-rule.is-not-matching { opacity: 0.85; }
+.es-inspector-rule.is-not-matching .es-inspector-rule-sel { background: #fffaf0; }
+
+/* All-CSS view: rules that don't target the selected element are dimmed
+   (still fully interactive — just a visual cue). At-rules read distinct. */
+.es-inspector-rule.is-dimmed { opacity: 0.5; }
+.es-inspector-rule.is-at-rule .es-inspector-rule-sel-text { color: #b45309; }
+
+/* All-CSS view: the whole stylesheet as one plain editor (a real .css file
+   look). It fills the column and scrolls internally (virtualized), so even
+   a large sheet edits smoothly. Non-matching rules dim; overridden
+   declarations strike through. */
+.es-inspector-col-css.is-allview .es-inspector-col-scroll {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.es-inspector-col-css.is-allview .es-inspector-css-rules {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	padding: 0;
+}
+.es-inspector-allcss { flex: 1 1 auto; min-height: 0; width: 100%; position: relative; }
+.es-inspector-allcss .CodeMirror {
+	height: 100%;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	background: #fff;
+	color: #353a52;
+}
+/* A bit of breathing room left/right (was flush to the edge). */
+.es-inspector-allcss .CodeMirror-lines { padding: 8px 14px; }
+.es-inspector-allcss .CodeMirror .es-inspector-dim-text { opacity: 0.3; }
+/* Rules that target the selected element get a soft fade background. */
+.es-inspector-allcss .CodeMirror .es-line-applies { background: rgba(79, 70, 229, 0.05); }
+
+/* Overview ruler — clickable markers for rules that target the selection. */
+.es-inspector-allcss-ruler {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 9px;
+	pointer-events: none;
+	z-index: 6;
+	/* A very light tint of the marker color so the track itself reads. */
+	background: rgba(79, 70, 229, 0.08);
+	border-radius: 3px;
+}
+.es-inspector-ruler-tick {
+	position: absolute;
+	right: 1px;
+	width: 7px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--es-accent, #E27D40);
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+	pointer-events: auto;
+	cursor: pointer;
+}
+.es-inspector-ruler-tick:hover { right: 0; width: 9px; background: var(--es-accent-hover, #cf6730); }
+
+/* The blinking caret AND the mouse I-beam can render white (a Chrome /
+   Windows 11 quirk). admin.css fixes these for .emblem-studio-wrap, but the
+   takeover is appended to <body> outside that wrapper, so repeat them here. */
+.es-inspector-overlay .CodeMirror-cursor { border-left: 1.5px solid #1d2327 !important; }
+.es-inspector-overlay .CodeMirror,
+.es-inspector-overlay .CodeMirror-scroll,
+.es-inspector-overlay .CodeMirror-lines,
+.es-inspector-overlay .CodeMirror-line,
+.es-inspector-overlay .CodeMirror-lines pre {
+	cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cline x1='5' y1='2' x2='11' y2='2' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='5' y1='14' x2='11' y2='14' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='8' y1='2' x2='8' y2='14' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 8 8, text;
+}
+
+/* CSS view toggle (Relevant ⇄ All) in the panel header. */
+.es-inspector-cssview { display: flex; gap: 2px; margin-left: auto; flex: 0 0 auto; }
+.es-inspector-cssview-btn {
+	border: 1px solid #e7ddcf;
+	background: #fff;
+	color: #555a72;
+	font: inherit;
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	padding: 2px 8px;
+	cursor: pointer;
+}
+.es-inspector-cssview-btn:first-child { border-radius: 5px 0 0 5px; }
+.es-inspector-cssview-btn:last-child { border-radius: 0 5px 5px 0; border-left: 0; }
+.es-inspector-cssview-btn:hover { background: #fffaf3; }
+.es-inspector-cssview-btn.is-active {
+	background: var(--es-accent, #E27D40);
+	border-color: var(--es-accent, #E27D40);
+	color: #fff;
+}
+.es-inspector-css-head-note {
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	font-weight: 600;
+	color: #6c7180;
+}
+
+/* ── Editable rule body ────────────────────────────────────────── */
+.es-inspector-rule-editor { font-size: 11.5px; }
+.es-inspector-rule-editor .CodeMirror {
+	height: auto;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	line-height: 1.6;
+	padding: 4px 4px;
+	background: #fff;
+}
+.es-inspector-rule-editor .CodeMirror-lines { padding: 4px 0; }
+/* Hanging indent: when a declaration wraps onto more lines, the
+ * continuation lines line up indented instead of dropping to column 0. */
+.es-inspector-rule-editor .CodeMirror pre.CodeMirror-line,
+.es-inspector-rule-editor .CodeMirror pre.CodeMirror-line-like {
+	padding-left: 2.2em;
+	text-indent: -2.2em;
+}
+.es-inspector-rule-textarea {
+	width: 100%;
+	border: 0;
+	resize: vertical;
+	padding: 8px 10px;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	line-height: 1.55;
+	color: #353a52;
+	box-sizing: border-box;
+}
+.es-inspector-rule-textarea:focus { outline: 2px solid var(--es-accent-soft, #f0d9c4); outline-offset: -2px; }
+
+/* Overridden declaration (lost the cascade) — struck through, dimmed. */
+.es-inspector-decl-crossed {
+	text-decoration: line-through;
+	text-decoration-color: rgba(220, 38, 38, 0.7);
+	opacity: 0.55;
+}
+
+/* Inline color swatch shown right before a color value in the editor. Rendered
+   as a ::before on a white-space:nowrap mark over the color token, so the swatch
+   can never wrap to a different row than its color code. --sw carries the color. */
+.es-color-mark { white-space: nowrap; }
+.es-color-mark::before {
+	content: '';
+	display: inline-block;
+	width: 11px;
+	height: 11px;
+	margin: 0 4px -1px 0;
+	border-radius: 3px;
+	cursor: pointer;
+	vertical-align: baseline;
+	border: 1px solid rgba(15, 23, 42, 0.25);
+	background-image: linear-gradient(var(--sw, transparent), var(--sw, transparent)),
+		repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%);
+	background-size: 100% 100%, 8px 8px;
+}
+.es-color-mark:hover::before { transform: scale(1.12); }
+
+/* ── Add-selector control ──────────────────────────────────────── */
+.es-inspector-add-rule {
+	display: flex;
+	gap: 6px;
+	margin-top: 6px;
+	padding: 2px;
+}
+.es-inspector-add-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: 1px solid #e7ddcf;
+	border-radius: 6px;
+	padding: 6px 9px;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	color: #22273f;
+}
+.es-inspector-add-input:focus { outline: none; border-color: var(--es-accent, #E27D40); }
+.es-inspector-add-btn {
+	flex: 0 0 auto;
+	border: 1px solid var(--es-accent, #E27D40);
+	background: var(--es-accent, #E27D40);
+	color: #fff;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 6px 12px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.es-inspector-add-btn:hover { background: var(--es-accent-hover, #cf6730); }
+
+/* ── Color picker popover ──────────────────────────────────────── */
+.es-color-popover {
+	position: fixed;
+	z-index: 100002;
+	width: 200px;
+	padding: 10px;
+	background: #fff;
+	border: 1px solid #e7ddcf;
+	border-radius: 10px;
+	box-shadow: 0 16px 40px -10px rgba(15, 23, 42, 0.4);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+.es-color-sv {
+	position: relative;
+	width: 180px;
+	height: 130px;
+	border-radius: 6px;
+	cursor: crosshair;
+	margin-bottom: 10px;
+}
+.es-color-sv-thumb {
+	position: absolute;
+	width: 12px;
+	height: 12px;
+	margin: -6px 0 0 -6px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+	pointer-events: none;
+}
+.es-color-sliders { display: flex; align-items: center; gap: 8px; }
+.es-color-swatch {
+	flex: 0 0 auto;
+	width: 26px;
+	height: 26px;
+	border-radius: 6px;
+	border: 1px solid rgba(15, 23, 42, 0.2);
+	background-image: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%);
+	background-size: 8px 8px;
+}
+.es-color-tracks { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+.es-color-hue, .es-color-alpha {
+	position: relative;
+	height: 12px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.es-color-hue {
+	background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.es-color-hue-thumb, .es-color-alpha-thumb {
+	position: absolute;
+	top: 50%;
+	width: 12px;
+	height: 12px;
+	margin: -6px 0 0 -6px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+	pointer-events: none;
+}
+.es-color-row {
+	display: flex;
+	align-items: stretch;
+	gap: 6px;
+	margin-top: 10px;
+}
+.es-color-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	box-sizing: border-box;
+	border: 1px solid #e7ddcf;
+	border-radius: 6px;
+	padding: 5px 8px;
+	font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11.5px;
+	color: #22273f;
+}
+.es-color-text:focus { outline: none; border-color: var(--es-accent, #E27D40); }
+/* HEX / RGBA notation switcher. */
+.es-color-modes {
+	display: flex;
+	flex: 0 0 auto;
+	border: 1px solid #e7ddcf;
+	border-radius: 6px;
+	overflow: hidden;
+}
+.es-color-mode {
+	border: 0;
+	background: #faf6f0;
+	color: #6b6256;
+	font: inherit;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	padding: 0 7px;
+	cursor: pointer;
+}
+.es-color-mode + .es-color-mode { border-left: 1px solid #e7ddcf; }
+.es-color-mode.is-active { background: var(--es-accent, #E27D40); color: #fff; }
+
+/* ── Middle: live form stage ───────────────────────────────────── */
+/* Neutral gray (NOT the warm chrome) so the live asset preview reads
+ * true — a warm backdrop would tint the user's own design. The viewport
+ * itself stays white. */
+.es-inspector-col-stage { background: #f3f3f4; min-width: 0; }
+/* The viewport always sits in a framed container on a darker stage —
+ * for both Fluid and fixed widths. */
+.es-inspector-stage-wrap {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	align-items: stretch;
+	overflow: hidden;
+	box-sizing: border-box;
+	padding: 18px;
+	background: #e8e8ea;
+}
+/* Loading overlay — centered spinner until the frame reports ready. */
+.es-inspector-loader {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #e8e8ea;
+	pointer-events: none;
+}
+.es-inspector-loader[hidden] { display: none; }
+.es-inspector-spinner {
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	border: 3px solid #e7ddcf;
+	border-top-color: var(--es-accent, #E27D40);
+	animation: es-inspector-spin 0.7s linear infinite;
+}
+@keyframes es-inspector-spin { to { transform: rotate(360deg); } }
+.es-inspector-frame {
+	flex: 0 0 auto;
+	width: 100%;
+	max-width: 100%;
+	height: 100%;
+	border: 1px solid #e7ddcf;
+	border-radius: 8px;
+	box-shadow: 0 8px 28px -10px rgba(15, 23, 42, 0.35);
+	background: #fff;
+}
+
+/* Shell switcher (left, after the Live form title). */
+.es-inspector-col-stage .es-inspector-col-title { flex: 0 0 auto; }
+.es-inspector-shells { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.es-inspector-shell-tab {
+	border: 1px solid #e7ddcf;
+	background: #fff;
+	color: #555a72;
+	font: inherit;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	padding: 2px 9px;
+	border-radius: 999px;
+	cursor: pointer;
+}
+.es-inspector-shell-tab:hover { border-color: #9aa0b0; }
+.es-inspector-shell-tab.is-active {
+	background: var(--es-accent, #E27D40);
+	border-color: var(--es-accent, #E27D40);
+	color: #fff;
+}
+
+/* Width toolbar (right side of the Live form header). */
+.es-inspector-width { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
+.es-inspector-width-slider { width: 120px; accent-color: var(--es-accent, #E27D40); }
+.es-inspector-width-label {
+	min-width: 42px;
+	font-size: 11px;
+	font-weight: 600;
+	color: #6c7180;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+	text-transform: none;
+}
+.es-inspector-width button {
+	border: 1px solid #e7ddcf;
+	background: #fff;
+	color: #555a72;
+	font: inherit;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	padding: 2px 8px;
+	border-radius: 5px;
+	cursor: pointer;
+}
+.es-inspector-width button:hover { border-color: #9aa0b0; }
+.es-inspector-width button.is-active {
+	background: var(--es-accent, #E27D40);
+	border-color: var(--es-accent, #E27D40);
+	color: #fff;
+}
+
+/* ── Responsive shrink ─────────────────────────────────────────── */
+@media (max-width: 1100px) {
+	.es-inspector-body { --es-tree-w: 280px; --es-css-w: 280px; }
+}

@@ -1,0 +1,5257 @@
+/* ============================================================
+ * Emblem Studio admin — self-hosted brand fonts
+ * ============================================================
+ * Inter (body/UI) + Space Grotesk (display/headings), shipped in
+ * assets/fonts/ so the admin never depends on Google Fonts (avoids
+ * the offline-blank-font failure and the EU GDPR concern of phoning
+ * Google on every admin load). woff2 only — every browser we target
+ * supports it. font-display: swap so text paints immediately. */
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url('fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url('fonts/inter-600.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('fonts/inter-700.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Space Grotesk';
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url('fonts/space-grotesk-500.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Space Grotesk';
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url('fonts/space-grotesk-600.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Space Grotesk';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('fonts/space-grotesk-700.woff2') format('woff2');
+}
+
+/* ============================================================
+ * Emblem Studio admin — design tokens (Pass 1 of redesign)
+ * ============================================================
+ * Scoped to .emblem-studio-wrap so the variables only live on our
+ * pages and the rest of wp-admin keeps its native palette. Token
+ * decisions are documented in docs/DESIGN-SYSTEM.md — change a
+ * value there first, then mirror it here.
+ *
+ * The accent tokens (--es-accent, -hover, -active, -soft) are the
+ * single fixed Sunset brand theme, defined in the brand section
+ * below. (They used to be injected per-install by ES_Theme, which
+ * has been removed now that the admin ships one theme.) */
+.emblem-studio-wrap {
+	/* Neutral ramp — warm "Sunset → Dusk" neutrals (cream → night ink).
+	   Replaces the old cool slate ramp; same token names so every
+	   component that consumes the surface tokens below inherits the
+	   warm rebrand without edits. */
+	--es-gray-50:  #fffaf3;   /* warm page bg (cream) */
+	--es-gray-100: #fbf1e6;   /* warm hover tint */
+	--es-gray-200: #efe6da;   /* warm border */
+	--es-gray-300: #e7ddcf;   /* stronger border */
+	--es-gray-400: #9aa0b0;   /* faint text */
+	--es-gray-500: #6c7180;   /* muted text */
+	--es-gray-600: #555a72;   /* dense UI text */
+	--es-gray-700: #353a52;   /* body text (dusk ink-2) */
+	--es-gray-800: #22273f;   /* headings */
+	--es-gray-900: #181a2e;   /* max contrast (dusk ink) */
+
+	/* Surface tokens — components consume these, never the raw ramp */
+	--es-surface:        #ffffff;
+	--es-surface-muted:  var(--es-gray-50);
+	--es-surface-hover:  var(--es-gray-100);
+	--es-border:         var(--es-gray-200);
+	--es-border-strong:  var(--es-gray-300);
+	--es-text:           var(--es-gray-700);
+	--es-text-strong:    var(--es-gray-800);
+	--es-text-muted:     var(--es-gray-500);
+	--es-text-faint:     var(--es-gray-400);
+
+	/* Semantic — locked, same regardless of accent choice */
+	--es-success:       #16a34a;
+	--es-success-soft:  #dcfce7;
+	--es-warning:       #d97706;
+	--es-warning-soft:  #fef3c7;
+	--es-danger:        #dc2626;
+	--es-danger-soft:   #fee2e2;
+	--es-info:          #0284c7;
+	--es-info-soft:     #e0f2fe;
+
+	/* Typography — Inter for body/UI, Space Grotesk for display/headings */
+	--es-font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+	--es-font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--es-font-mono:  ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--es-text-xs:    10px;
+	--es-text-sm:    11px;
+	--es-text-base:  13px;
+	--es-text-md:    14px;
+	--es-text-lg:    15px;
+	--es-text-xl:    18px;
+	--es-text-2xl:   22px;
+	--es-leading-tight:   1.25;
+	--es-leading-normal:  1.5;
+	--es-tracking-tight:  -0.01em;
+	--es-tracking-wide:   0.06em;
+
+	/* Spacing — multiples of 4 */
+	--es-space-1: 4px;
+	--es-space-2: 8px;
+	--es-space-3: 12px;
+	--es-space-4: 16px;
+	--es-space-5: 24px;
+	--es-space-6: 32px;
+	--es-space-7: 48px;
+	--es-space-8: 64px;
+
+	/* Radii */
+	--es-radius-sm:   4px;
+	--es-radius-md:   6px;
+	--es-radius-lg:   10px;
+	--es-radius-pill: 9999px;
+
+	/* Shadows — minimal, soft */
+	--es-shadow-xs: 0 1px 1px rgba(15, 23, 42, 0.04);
+	--es-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+	--es-shadow-md: 0 4px 6px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+	--es-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+
+	/* Motion */
+	--es-duration-fast:   120ms;
+	--es-duration-normal: 180ms;
+	--es-duration-slow:   240ms;
+	--es-easing:          cubic-bezier(0.4, 0, 0.2, 1);
+
+	/* ---------- Brand: Sunset → Dusk ----------
+	   The true emblem gradient (gold → orange → pink) is reserved for the
+	   logo mark so the brand stays vivid; the muted --es-sunset carries
+	   everything else (bars, primary buttons, accents). Dusk = the deep
+	   navy "sky after sundown" used for dark accents, badges, footers. */
+	--es-gold:        #EAA63C;
+	--es-orange:      #E27D40;
+	--es-pink:        #D85F82;
+	--es-sunset:      linear-gradient(120deg, #EEAF45 0%, #E68249 52%, #D85F82 100%);
+	--es-sunset-btn:  linear-gradient(120deg, #EC8B3C 0%, #E0694C 55%, #D2567E 100%);
+	--es-sunset-soft: #fbeede;
+	--es-emblem:      linear-gradient(135deg, #FFD60A 0%, #FF9500 48%, #FF3D81 100%);
+	--es-dusk-1:      #243056;
+	--es-dusk-2:      #131a36;
+	--es-dusk-3:      #0a0e20;
+	--es-dusk:        linear-gradient(165deg, #1f2a4c 0%, #131a36 54%, #0a0e20 100%);
+	--es-dusk-soft:   #eef1f8;
+	--es-shadow-sun:  0 12px 26px rgba(200, 110, 60, 0.22);
+
+	/* Accent — the single fixed Sunset brand theme. Previously injected
+	   per-install by ES_Theme::inline_css(); now hardcoded here since the
+	   admin ships one theme. Components read these via var(--es-accent…). */
+	--es-accent:        #E27D40;
+	--es-accent-hover:  #cf6730;
+	--es-accent-active: #b85426;
+	--es-accent-soft:   #fbeede;
+
+	/* Re-point WordPress's own admin color-scheme variable to our accent,
+	   scoped to our pages. WP paints native checkboxes/radios (and a few
+	   other controls) by filling the box with var(--wp-admin-theme-color);
+	   overriding it here turns all those blue controls sunset orange in one
+	   place, instead of fighting each :checked/::before rule. */
+	--wp-admin-theme-color:            var(--es-accent);
+	--wp-admin-theme-color-darker-10:  var(--es-accent-hover);
+	--wp-admin-theme-color-darker-20:  var(--es-accent-active);
+}
+
+/* Typography + page surface for the entire Emblem Studio admin scope.
+ * Inter falls through to system-ui if the woff2 isn't installed locally
+ * — future polish step is dropping the font files into assets/fonts/
+ * so it's used everywhere; for now system-ui carries the look. */
+.emblem-studio-wrap {
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-base);
+	line-height: var(--es-leading-normal);
+	color: var(--es-text);
+	background: var(--es-surface-muted);
+	min-height: 100vh;
+	/* margin:0 (not negative) — let the wrap fill its parent's content
+	 * area. Negative margins here overflow #wpbody-content's right edge
+	 * because the parent has no padding-right to absorb them, which
+	 * causes a horizontal scrollbar on every admin page. */
+	margin: 0;
+	padding: var(--es-space-5) var(--es-space-5) var(--es-space-7);
+	box-sizing: border-box;
+}
+@media (max-width: 782px) {
+	.emblem-studio-wrap {
+		padding: var(--es-space-4) var(--es-space-3) var(--es-space-6);
+	}
+}
+.emblem-studio-wrap h1,
+.emblem-studio-wrap h2,
+.emblem-studio-wrap h3,
+.emblem-studio-wrap h4 {
+	font-family: var(--es-font-display);
+	color: var(--es-text-strong);
+	letter-spacing: var(--es-tracking-tight);
+}
+.emblem-studio-wrap h1 { font-size: var(--es-text-2xl); font-weight: 700; }
+.emblem-studio-wrap h2 { font-size: var(--es-text-xl);  font-weight: 700; }
+.emblem-studio-wrap h3 { font-size: var(--es-text-lg);  font-weight: 600; }
+.emblem-studio-wrap p  { color: var(--es-text); }
+.emblem-studio-wrap .description {
+	color: var(--es-text-muted);
+	font-size: var(--es-text-sm);
+}
+/* WordPress wraps every form-table value cell text in tiny gray;
+ * align with our scale so it doesn't read as "default WP UI" anymore. */
+.emblem-studio-wrap .form-table td,
+.emblem-studio-wrap .form-table th {
+	font-size: var(--es-text-base);
+	color: var(--es-text-strong);
+}
+
+/* Cards — promote big content groupings to floating surfaces over
+ * the muted page background. .widefat is a WP table class we already
+ * use on Settings; .es-form-editor, .es-tab-panel are ours. */
+.emblem-studio-wrap > h1 {
+	margin: 0 0 var(--es-space-5);
+}
+/* .es-form-editor is intentionally not a card — it's an invisible
+ * <form> wrapper. The form-header inside it IS a card (sticky top,
+ * rounded corners, shadow) and each tab-panel IS a card too. Making
+ * the form-editor a card too would stack card-in-card and force
+ * negative margins on the header that overflow the parent. */
+.emblem-studio-wrap .widefat,
+.emblem-studio-wrap .es-tab-panel {
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+}
+.emblem-studio-wrap .es-tab-panel {
+	padding: var(--es-space-5);
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .widefat {
+	box-shadow: var(--es-shadow-xs);
+	overflow: hidden;                       /* clip rounded corners */
+}
+.emblem-studio-wrap .widefat tbody td {
+	border-bottom: 1px solid var(--es-border);
+}
+
+.emblem-studio-wrap .CodeMirror { border: 1px solid #c3c4c7; height: 520px !important; }
+.emblem-studio-wrap .CodeMirror-scroll { min-height: 520px; }
+/* CodeMirror's caret can render near-white under some themes (depends on
+   the user's WP admin color scheme). Force a dark, always-visible caret. */
+.emblem-studio-wrap .CodeMirror-cursor {
+	border-left: 1.5px solid #1d2327 !important;
+}
+/* Chrome on Windows occasionally draws the I-beam mouse pointer as pure
+   white with no outline (Windows 11's white default cursor theme + a
+   Chrome rendering quirk we hit on drag handles in v0.48.x too). The
+   I-beam ends up invisible on the white editor background. Ship our own
+   SVG I-beam so the OS cursor theme can't make it disappear. Hotspot is
+   centered at 8,8 in a 16x16 viewBox. Fallback to 'text' if data-URI
+   cursors are blocked by a browser policy. */
+.emblem-studio-wrap .CodeMirror,
+.emblem-studio-wrap .CodeMirror-scroll,
+.emblem-studio-wrap .CodeMirror-lines,
+.emblem-studio-wrap .CodeMirror-line,
+.emblem-studio-wrap .CodeMirror-lines pre {
+	cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cline x1='5' y1='2' x2='11' y2='2' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='5' y1='14' x2='11' y2='14' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='8' y1='2' x2='8' y2='14' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 8 8, text;
+}
+.emblem-studio-wrap .es-form-editor textarea.code { font-family: Menlo, Consolas, monospace; }
+.emblem-studio-wrap .es-success-field { display: none; }
+.emblem-studio-wrap .es-success-field.is-visible { display: table-row; }
+
+/* ---- Form-edit tabbed layout ---- */
+.emblem-studio-wrap .es-form-header {
+	position: sticky;
+	top: 32px; /* below WP admin bar */
+	z-index: 50;
+	background: var(--es-surface);
+	margin: 0 0 var(--es-space-5);
+	padding: calc(var(--es-space-4) + 3px) var(--es-space-5) var(--es-space-3);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	box-shadow: var(--es-shadow-sm);
+	box-sizing: border-box;
+	overflow: hidden; /* clip the sunset accent bar to the rounded corners */
+}
+/* Sunset accent bar across the top of the editor's sticky header — the
+   same brand signal the KPI cards carry, so the editor reads as part of
+   the redesign even at rest. */
+.emblem-studio-wrap .es-form-header::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: var(--es-sunset);
+}
+@media (max-width: 782px) {
+	.emblem-studio-wrap .es-form-header { top: 46px; }
+}
+.emblem-studio-wrap .es-form-header-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin-bottom: 12px;
+}
+.emblem-studio-wrap .es-form-header-left {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--es-space-3);
+}
+.emblem-studio-wrap .es-form-header-name-label {
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: var(--es-tracking-wide);
+	color: var(--es-text-muted);
+	flex-shrink: 0;
+}
+.emblem-studio-wrap .es-form-header-right {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+.emblem-studio-wrap .es-form-header-name {
+	flex: 1;
+	max-width: 520px;
+	font-size: 17px;
+	font-weight: 500;
+	padding: 6px 10px;
+	border: 1px solid transparent;
+	background: transparent;
+	border-radius: 4px;
+	transition: border-color 0.15s, background 0.15s;
+}
+.emblem-studio-wrap .es-form-header-name:hover { border-color: var(--es-border-strong); }
+.emblem-studio-wrap .es-form-header-name:focus {
+	border-color: var(--es-orange);
+	background: var(--es-surface);
+	box-shadow: 0 0 0 3px rgba(226, 125, 64, 0.16);
+	outline: none;
+}
+.emblem-studio-wrap .es-form-header-name::placeholder { color: var(--es-text-faint); font-weight: 400; }
+
+/* "Asset saved" toast — a small pill that floats over the content (fixed,
+   so it never reflows the page) and self-dismisses. No close button:
+   it animates in, holds ~0.75s, animates out. JS toggles .is-in / .is-out. */
+.es-toast {
+	position: fixed;
+	top: 60px;
+	left: 50%;
+	z-index: 100000;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	/* Short confirmations stay a tidy one-line pill; longer notices (e.g.
+	   "Form duplicated. You're now editing the copy…") wrap within this cap
+	   instead of running off-screen. */
+	max-width: min(460px, calc(100vw - 40px));
+	padding: 8px 16px;
+	border-radius: 18px;
+	background: #fff;
+	box-shadow: 0 6px 22px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.4;
+	color: #1d2327;
+	text-align: left;
+	pointer-events: none;
+	opacity: 0;
+	transform: translateX(-50%) translateY(-10px) scale(0.97);
+	transition: opacity 0.26s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.es-toast::before {
+	content: '';
+	width: 8px;
+	height: 8px;
+	margin-top: 4px;
+	border-radius: 50%;
+	background: #2c8a4a;
+	align-self: flex-start;
+	flex-shrink: 0;
+}
+.es-toast.is-in  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+.es-toast.is-out { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+	.es-toast { transition: opacity 0.2s ease; transform: translateX(-50%); }
+	.es-toast.is-in  { transform: translateX(-50%); }
+	.es-toast.is-out { transform: translateX(-50%); }
+}
+
+/* Custom date picker (reports filters) — replaces the native calendar so we
+   control which days are disabled and can show a cursor-following tooltip over
+   exactly the pre-first-date days. The native input stays for form submission
+   but is visually hidden (.es-dp-native). */
+.emblem-studio-wrap .es-dp { position: relative; display: inline-block; }
+.emblem-studio-wrap .es-dp-native {
+	position: absolute !important;
+	width: 1px; height: 1px;
+	padding: 0; margin: -1px; border: 0;
+	clip: rect(0 0 0 0); overflow: hidden;
+}
+.emblem-studio-wrap .es-dp-trigger {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	min-width: 160px;
+	/* Match the native select / input control height (36px) so the From/To
+	   fields line up with the Form/Shell selects in the filter row. */
+	height: 36px;
+	padding: 0 12px;
+	box-sizing: border-box;
+	border: 1px solid var(--es-border-strong, #cbd5e1);
+	border-radius: var(--es-radius-md, 6px);
+	background: var(--es-surface, #fff);
+	font-size: var(--es-text-base, 13px);
+	color: var(--es-text-strong, #1d2327);
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.emblem-studio-wrap .es-dp-trigger:hover { border-color: #a7aaad; }
+.emblem-studio-wrap .es-dp-trigger[aria-expanded="true"],
+.emblem-studio-wrap .es-dp-trigger:focus-visible {
+	border-color: var(--es-accent, #2271b1);
+	box-shadow: 0 0 0 1px var(--es-accent, #2271b1);
+	outline: none;
+}
+.emblem-studio-wrap .es-dp-trigger.is-empty .es-dp-value { color: #8c8f94; }
+.emblem-studio-wrap .es-dp-cal { color: #646970; flex-shrink: 0; }
+
+.emblem-studio-wrap .es-dp-pop {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	z-index: 1000;
+	width: 256px;
+	padding: 12px;
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	border-radius: 10px;
+	box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
+}
+.emblem-studio-wrap .es-dp-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+.emblem-studio-wrap .es-dp-title { font-size: 14px; font-weight: 600; color: #1d2327; }
+.emblem-studio-wrap .es-dp-nav {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px; height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: #50575e;
+	cursor: pointer;
+	transition: background 0.12s, color 0.12s;
+}
+.emblem-studio-wrap .es-dp-nav:hover { background: #f0f0f1; color: #1d2327; }
+.emblem-studio-wrap .es-dp-dows {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	margin-bottom: 4px;
+}
+.emblem-studio-wrap .es-dp-dows span {
+	text-align: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: #8c8f94;
+	padding: 4px 0;
+}
+.emblem-studio-wrap .es-dp-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+}
+.emblem-studio-wrap .es-dp-pad { height: 32px; }
+.emblem-studio-wrap .es-dp-day {
+	height: 32px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	font-size: 13px;
+	color: #1d2327;
+	cursor: pointer;
+	transition: background 0.12s, color 0.12s;
+}
+.emblem-studio-wrap .es-dp-day:hover { background: #eef4fb; }
+.emblem-studio-wrap .es-dp-day.is-today { font-weight: 700; box-shadow: inset 0 0 0 1px #c3c4c7; }
+.emblem-studio-wrap .es-dp-day.is-selected,
+.emblem-studio-wrap .es-dp-day.is-selected:hover {
+	background: var(--es-accent, #2271b1);
+	color: #fff;
+	font-weight: 600;
+}
+.emblem-studio-wrap .es-dp-day.is-disabled { color: #c3c4c7; cursor: not-allowed; }
+.emblem-studio-wrap .es-dp-day.is-disabled:hover { background: #fbeaea; color: #b32d2e; }
+.emblem-studio-wrap .es-dp-foot {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid #f0f0f1;
+	text-align: right;
+}
+.emblem-studio-wrap .es-dp-today {
+	border: 0;
+	background: transparent;
+	color: var(--es-accent, #2271b1);
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	padding: 2px 4px;
+}
+.emblem-studio-wrap .es-dp-today:hover { text-decoration: underline; }
+.emblem-studio-wrap .es-dp-tip {
+	position: absolute;
+	z-index: 5;
+	pointer-events: none;
+	opacity: 0;
+	white-space: nowrap;
+	background: #1d2327;
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.3;
+	padding: 4px 8px;
+	border-radius: 4px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.emblem-studio-wrap .es-dp-tip.is-visible { opacity: 1; }
+
+/* Status toggle — a switch in the form-header that flips Active / Inactive.
+   The visible control is a button[role=switch]; a hidden input carries the
+   "active"/"inactive" value so the form submits exactly as before. */
+.emblem-studio-wrap .es-status-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	line-height: 1;
+}
+.emblem-studio-wrap .es-status-switch {
+	position: relative;
+	flex-shrink: 0;
+	width: 38px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid #dcdcde;
+	border-radius: 999px;
+	background: #e6e6e8;
+	cursor: pointer;
+	transition: background 0.18s ease, border-color 0.18s ease;
+}
+.emblem-studio-wrap .es-status-switch::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+	transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.emblem-studio-wrap .es-status-switch[aria-checked="true"] {
+	background: #2c8a4a;
+	border-color: #2c8a4a;
+}
+.emblem-studio-wrap .es-status-switch[aria-checked="true"]::after { transform: translateX(16px); }
+.emblem-studio-wrap .es-status-switch:focus-visible {
+	outline: 2px solid var(--es-accent, #2271b1);
+	outline-offset: 2px;
+}
+.emblem-studio-wrap .es-status-text {
+	font-weight: 500;
+	color: #646970;
+	min-width: 52px;
+}
+.emblem-studio-wrap .es-form-header[data-status="active"] .es-status-text { color: #1d2327; }
+
+/* TEST pill — only renders next to the status pill while an A/B test
+   is running on the form. Different shape + color from the status
+   pill so it reads as a separate piece of info, not a status state. */
+.emblem-studio-wrap .es-test-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 4px 10px;
+	border: 1px solid #c9d0e6;
+	border-radius: 999px;
+	background: var(--es-dusk-soft);
+	color: var(--es-dusk-1);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1;
+}
+.emblem-studio-wrap .es-test-pill-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--es-orange);
+	flex-shrink: 0;
+	animation: es-test-dot-pulse 2s ease-in-out infinite;
+}
+@keyframes es-test-dot-pulse {
+	0%, 100% { opacity: 1; }
+	50%      { opacity: 0.4; }
+}
+
+/* A/B test badge on the Forms list — marks rows whose form has a
+   running test. Links to that form's Stats tab (winner declaration). */
+.emblem-studio-wrap .es-ab-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-top: 4px;
+	padding: 2px 8px;
+	border: 1px solid #c9d0e6;
+	border-radius: 999px;
+	background: var(--es-dusk-soft);
+	color: var(--es-dusk-1);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-decoration: none;
+	line-height: 1.6;
+}
+.emblem-studio-wrap .es-ab-badge:hover {
+	background: var(--es-dusk-1);
+	border-color: var(--es-dusk-1);
+	color: #fff;
+}
+.emblem-studio-wrap .es-ab-badge-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--es-orange);
+	flex-shrink: 0;
+	animation: es-test-dot-pulse 2s ease-in-out infinite;
+}
+.emblem-studio-wrap .es-ab-badge:hover .es-ab-badge-dot { background: #fff; }
+
+/* A/B variant pane — wraps a complete editor pair (HTML + CSS) per
+   slot when a test is running. Inactive pane is hidden; tab clicks
+   toggle .is-active to reveal one or the other. */
+.emblem-studio-wrap .es-ab-pane { display: none; }
+.emblem-studio-wrap .es-ab-pane.is-active { display: block; }
+
+/* A/B variant strip — lives above the editors grid on the Design tab.
+   Two states:
+     .es-ab-strip--idle    → just a "Start A/B test" button + tagline
+     .es-ab-strip--running → A/B tabs + day counter
+*/
+.emblem-studio-wrap .es-ab-strip {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--es-space-3);
+	padding: 10px 14px;
+	margin: 0 0 var(--es-space-3);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	background: var(--es-surface);
+}
+.emblem-studio-wrap .es-ab-strip--idle .es-ab-strip-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.emblem-studio-wrap .es-ab-strip--running {
+	border-color: #c9d0e6;
+	background: var(--es-dusk-soft);
+	/* Dock below the sticky form header so the user can switch slots
+	   without scrolling back to the top. The top offset is set
+	   dynamically in admin.js (syncStickyStripOffset) by measuring
+	   the actual form-header + WP-admin-bar heights, so we don't
+	   have to guess across viewports + font-load timing. The 140px
+	   fallback below is in case JS doesn't run for some reason —
+	   close enough that the strip is still usable. z-index 49 is
+	   one below the form header (50) so the tabs win on overlap. */
+	position: sticky;
+	top: 140px;
+	z-index: 49;
+}
+.emblem-studio-wrap .es-ab-tabs {
+	display: inline-flex;
+	gap: 6px;
+}
+.emblem-studio-wrap .es-ab-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 14px;
+	border: 1px solid #c9d0e6;
+	border-radius: var(--es-radius-md);
+	background: #fff;
+	color: var(--es-text);
+	font-size: 13px;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+.emblem-studio-wrap .es-ab-tab:hover { border-color: var(--es-dusk-1); }
+.emblem-studio-wrap .es-ab-tab.is-active {
+	background: var(--es-dusk-1);
+	border-color: var(--es-dusk-1);
+	color: #fff;
+}
+.emblem-studio-wrap .es-ab-tab-slot {
+	font-weight: 700;
+	font-size: 14px;
+	letter-spacing: 0.05em;
+}
+.emblem-studio-wrap .es-ab-tab-traffic {
+	opacity: 0.7;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.emblem-studio-wrap .es-ab-tab.is-active .es-ab-tab-traffic { opacity: 0.9; }
+.emblem-studio-wrap .es-ab-strip-meta {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.emblem-studio-wrap .es-ab-strip-day {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--es-dusk-1);
+}
+.emblem-studio-wrap .es-ab-strip-active-slot { color: var(--es-dusk-1); }
+/* Declare-winner cluster on the running strip — right-aligned so the user can
+   pick a winner without leaving the Design tab. */
+.emblem-studio-wrap .es-ab-strip-declare {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.emblem-studio-wrap .es-ab-strip-declare-label { margin-right: 2px; }
+
+/* Start-test confirmation modal — graphic (two distinct variant mini-cards:
+   A = sunset accent, B = dusk) + an irreversible-reset warning. */
+.emblem-studio-wrap .es-ab-start-modal .es-modal-dialog { max-width: 470px; text-align: left; }
+.emblem-studio-wrap .es-ab-start-graphic {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
+	padding: 22px 12px;
+	margin-bottom: 18px;
+	background: linear-gradient(180deg, var(--es-dusk-soft) 0%, #fff 100%);
+	border-radius: var(--es-radius-lg);
+}
+.emblem-studio-wrap .es-ab-mini {
+	position: relative;
+	width: 116px;
+	padding: 10px;
+	background: #fff;
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	box-shadow: 0 1px 2px rgba( 16, 24, 40, 0.06 );
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.emblem-studio-wrap .es-ab-mini--b { border-color: #c7cee0; }
+.emblem-studio-wrap .es-ab-mini-badge {
+	position: absolute;
+	top: -9px;
+	left: -9px;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	box-shadow: 0 1px 2px rgba( 16, 24, 40, 0.18 );
+}
+.emblem-studio-wrap .es-ab-mini--a .es-ab-mini-badge { background: var(--es-accent); }
+.emblem-studio-wrap .es-ab-mini--b .es-ab-mini-badge { background: var(--es-dusk-1); }
+.emblem-studio-wrap .es-ab-mini-h { height: 8px; width: 75%; border-radius: 3px; background: #e3dccf; }
+.emblem-studio-wrap .es-ab-mini--b .es-ab-mini-h { background: #d7dcea; }
+.emblem-studio-wrap .es-ab-mini-l { height: 6px; width: 100%; border-radius: 3px; background: var(--es-gray-100); }
+.emblem-studio-wrap .es-ab-mini-l.is-short { width: 84%; }
+.emblem-studio-wrap .es-ab-mini-btn { height: 20px; border-radius: 5px; margin-top: 2px; }
+.emblem-studio-wrap .es-ab-mini--a .es-ab-mini-btn { background: rgba( 226, 125, 64, 0.85 ); }
+.emblem-studio-wrap .es-ab-mini--b .es-ab-mini-btn { background: var(--es-dusk-1); }
+.emblem-studio-wrap .es-ab-start-split {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	color: #38bdf8; /* matches the SaaS split icon (sky-400), via currentColor */
+}
+.emblem-studio-wrap .es-ab-start-split-icon { width: 28px; height: 28px; }
+.emblem-studio-wrap .es-ab-start-split-label {
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #0284c7; /* matches the SaaS label (sky-600) */
+}
+.emblem-studio-wrap .es-ab-start-text { color: var(--es-text); margin: 0 0 14px; }
+.emblem-studio-wrap .es-ab-start-warning {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	padding: 11px 13px;
+	border: 1px solid #f4d77a;
+	background: #fef9ec;
+	color: #8a5a00;
+	border-radius: var(--es-radius-md);
+	font-size: 13px;
+}
+.emblem-studio-wrap .es-ab-start-warning .dashicons { color: #c98a00; flex: 0 0 auto; }
+/* Right-aligned row (Cancel + Start), like the SaaS modal. The compound
+   .es-modal-actions.es-ab-start-actions selector beats the base
+   .es-modal-actions rules (column + full-width buttons) regardless of order. */
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions {
+	margin-top: 18px;
+	flex-direction: row;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 6px;
+}
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .button { width: auto; }
+/* Match the SaaS modal: a borderless text Cancel + a sunset-gradient primary. */
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button,
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button:hover,
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button:focus {
+	background: transparent;
+	border-color: transparent;
+	box-shadow: none;
+}
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button { color: var(--es-text-muted); }
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button:hover,
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button:focus { color: var(--es-text-strong); }
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button,
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button:hover,
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button:focus {
+	background: var(--es-sunset-btn);
+	border-color: transparent;
+	color: #fff;
+	box-shadow: var(--es-shadow-sun);
+}
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button:hover,
+.emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button:focus { transform: translateY(-1px); }
+
+/* A/B test settings panel — collapsible, lives above the variant strip
+   on the Design tab when a test is running. Traffic split inputs +
+   per-condition toggles + live met/not-met status badges. */
+.emblem-studio-wrap .es-ab-config {
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	background: var(--es-surface);
+	margin: 0 0 var(--es-space-3);
+}
+.emblem-studio-wrap .es-ab-config > summary {
+	list-style: none;
+	cursor: pointer;
+	padding: 10px 14px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	border-radius: var(--es-radius-md);
+	font-size: 13px;
+}
+.emblem-studio-wrap .es-ab-config > summary::-webkit-details-marker { display: none; }
+.emblem-studio-wrap .es-ab-config-summary-icon {
+	font-size: 14px;
+	color: var(--es-dusk-1);
+}
+.emblem-studio-wrap .es-ab-config-summary-title { font-weight: 600; }
+.emblem-studio-wrap .es-ab-config-summary-hint { font-weight: 400; }
+.emblem-studio-wrap .es-ab-primary-metric-badge {
+	margin-left: auto;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: var(--es-dusk-soft);
+	color: var(--es-dusk-1);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	cursor: help;
+}
+.emblem-studio-wrap .es-ab-config[open] > summary {
+	border-bottom: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md) var(--es-radius-md) 0 0;
+}
+.emblem-studio-wrap .es-ab-config-body {
+	padding: 14px 16px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.emblem-studio-wrap .es-ab-config-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+.emblem-studio-wrap .es-ab-config-label {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--es-text);
+}
+.emblem-studio-wrap .es-ab-traffic-fields {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.emblem-studio-wrap .es-ab-traffic-slot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: var(--es-dusk-soft);
+	color: var(--es-dusk-1);
+	font-size: 12px;
+	font-weight: 700;
+}
+.emblem-studio-wrap .es-ab-traffic-input { width: 60px; text-align: right; }
+.emblem-studio-wrap .es-ab-traffic-unit { color: var(--es-text-faint); font-size: 13px; }
+.emblem-studio-wrap .es-ab-traffic-sep { color: var(--es-text-faint); margin: 0 4px; }
+.emblem-studio-wrap .es-ab-traffic-note { margin-left: 4px; }
+
+.emblem-studio-wrap .es-ab-conditions-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 10px;
+	padding-top: 4px;
+	border-top: 1px dashed var(--es-border);
+	margin-top: 4px;
+}
+.emblem-studio-wrap .es-ab-condition {
+	padding: 10px 12px;
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.emblem-studio-wrap .es-ab-condition.is-met {
+	border-color: var(--es-success);
+	background: var(--es-success-soft, #ecfdf5);
+}
+.emblem-studio-wrap .es-ab-condition-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+}
+.emblem-studio-wrap .es-ab-condition-label { color: var(--es-text); }
+.emblem-studio-wrap .es-ab-condition-input input[type="number"] {
+	width: 100px;
+}
+.emblem-studio-wrap .es-ab-condition-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: var(--es-text-faint);
+	font-variant-numeric: tabular-nums;
+}
+.emblem-studio-wrap .es-ab-condition-status.is-met { color: var(--es-success); font-weight: 500; }
+.emblem-studio-wrap .es-ab-condition-status-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	font-weight: 700;
+}
+.emblem-studio-wrap .es-ab-condition-status.is-met .es-ab-condition-status-icon {
+	color: var(--es-success);
+}
+
+/* A/B archive — sits in the variant strip's actions cluster. Toggle
+   button reveals the panel below the strip (or below the editors
+   when no strip is shown — same placement either way). */
+.emblem-studio-wrap .es-ab-strip-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+.emblem-studio-wrap .es-ab-archive-toggle {
+	display: inline-flex !important;
+	align-items: center;
+	gap: 4px;
+	color: var(--es-text-faint) !important;
+	text-decoration: none !important;
+	font-size: 12px !important;
+}
+.emblem-studio-wrap .es-ab-archive-toggle:hover { color: var(--es-accent, #2271b1) !important; }
+.emblem-studio-wrap .es-ab-archive-toggle .dashicons {
+	font-size: 14px;
+	width: 14px;
+	height: 14px;
+}
+.emblem-studio-wrap .es-ab-archive-panel {
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	background: #fff;
+	padding: 12px 14px;
+	margin: 0 0 var(--es-space-3);
+}
+.emblem-studio-wrap .es-ab-archive-title {
+	margin: 0 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.emblem-studio-wrap .es-ab-archive-title .description {
+	font-weight: 400;
+	font-size: 12px;
+}
+.emblem-studio-wrap .es-ab-archive-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+.emblem-studio-wrap .es-ab-archive-table th,
+.emblem-studio-wrap .es-ab-archive-table td {
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--es-border);
+	text-align: left;
+}
+.emblem-studio-wrap .es-ab-archive-table th.num,
+.emblem-studio-wrap .es-ab-archive-table td.num { text-align: right; }
+.emblem-studio-wrap .es-ab-archive-table tbody tr:last-child td { border-bottom: 0; }
+.emblem-studio-wrap .es-ab-archive-id {
+	display: inline-block;
+	margin-right: 6px;
+	color: var(--es-text-faint);
+	font-variant-numeric: tabular-nums;
+	font-size: 12px;
+}
+.emblem-studio-wrap .es-ab-archive-table .button-small { margin-left: 4px; }
+
+/* Global A/B Tests admin page — list of every test across forms. */
+.emblem-studio-wrap .es-tests-filter { margin: var(--es-space-3) 0; }
+.emblem-studio-wrap .es-tests-table .es-tests-col-form { width: 22%; }
+.emblem-studio-wrap .es-tests-table .es-tests-col-status { width: 16%; }
+.emblem-studio-wrap .es-tests-table .es-tests-col-leader { width: 14%; }
+.emblem-studio-wrap .es-tests-table .es-tests-col-started { width: 12%; }
+.emblem-studio-wrap .es-tests-variants {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.emblem-studio-wrap .es-tests-variant {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+.emblem-studio-wrap .es-tests-variant strong { font-weight: 600; color: var(--es-text); }
+.emblem-studio-wrap .es-tests-completed-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: var(--es-gray-100);
+	color: var(--es-text-muted);
+	font-size: 12px;
+}
+.emblem-studio-wrap .es-tests-auto-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--es-text-faint);
+	font-size: 12px;
+}
+.emblem-studio-wrap .es-tests-auto-status .dashicons {
+	font-size: 14px;
+	width: 14px;
+	height: 14px;
+	color: var(--es-text-faint);
+}
+.emblem-studio-wrap .es-tests-auto-status.is-met,
+.emblem-studio-wrap .es-tests-auto-status.is-met .dashicons {
+	color: var(--es-success);
+	font-weight: 500;
+}
+
+/* Stats tab A/B banner — appears at the top of Stats when a test is
+   running. Side-by-side variant cards + Declare-winner actions. */
+.emblem-studio-wrap .es-ab-banner {
+	border: 1px solid #c9d0e6;
+	border-radius: var(--es-radius-lg);
+	background: linear-gradient(180deg, var(--es-dusk-soft) 0%, #fff 100%);
+	padding: 18px 20px;
+	margin: 0 0 var(--es-space-4);
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.emblem-studio-wrap .es-ab-banner-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.emblem-studio-wrap .es-ab-banner-title {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: #1d2327;
+}
+.emblem-studio-wrap .es-ab-banner-variants {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+@media (max-width: 720px) {
+	.emblem-studio-wrap .es-ab-banner-variants { grid-template-columns: 1fr; }
+}
+.emblem-studio-wrap .es-ab-variant-card {
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	background: #fff;
+	padding: 14px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.emblem-studio-wrap .es-ab-variant-card.is-leader {
+	border-color: var(--es-dusk-1);
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+.emblem-studio-wrap .es-ab-variant-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.emblem-studio-wrap .es-ab-variant-letter {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: var(--es-dusk-soft);
+	color: var(--es-dusk-1);
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+}
+.emblem-studio-wrap .es-ab-variant-card.is-leader .es-ab-variant-letter {
+	background: var(--es-sunset);
+	color: #fff;
+}
+.emblem-studio-wrap .es-ab-leader-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: var(--es-sunset-btn);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+.emblem-studio-wrap .es-ab-variant-card-stats {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 12px;
+}
+.emblem-studio-wrap .es-ab-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.emblem-studio-wrap .es-ab-stat-label {
+	font-size: 11px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--es-text-faint);
+}
+.emblem-studio-wrap .es-ab-stat-value {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--es-text);
+	font-variant-numeric: tabular-nums;
+}
+.emblem-studio-wrap .es-ab-banner-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+.emblem-studio-wrap .es-ab-banner-actions .button-link-delete {
+	color: var(--es-danger);
+	margin-left: auto;
+	text-decoration: underline;
+	font-size: 12px;
+}
+
+/* Per-shell stats table — variant sub-rows when a test is running.
+   The base shell row stays in place (totals = A + B), with two
+   indented sub-rows directly under it showing per-variant numbers. */
+.emblem-studio-wrap .es-stats-variant-row > td { background: #fafafa; }
+.emblem-studio-wrap .es-stats-variant-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding-left: 24px !important;
+	color: var(--es-text-faint);
+}
+.emblem-studio-wrap .es-stats-variant-arrow { font-size: 13px; opacity: 0.5; }
+.emblem-studio-wrap .es-ab-variant-letter--inline {
+	width: 20px;
+	height: 20px;
+	font-size: 11px;
+}
+
+.emblem-studio-wrap .es-tabs {
+	display: flex;
+	gap: 0;
+	margin: 0;
+	padding: 0;
+	border-bottom: 1px solid var(--es-border);
+}
+.emblem-studio-wrap .es-tab {
+	position: relative;
+	padding: var(--es-space-3) var(--es-space-4);
+	color: var(--es-text-muted);
+	text-decoration: none;
+	font-weight: 600;
+	font-size: var(--es-text-base);
+	border-bottom: 2px solid transparent;
+	margin-bottom: -1px;
+	transition: color var(--es-duration-fast) var(--es-easing),
+				background-color var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-tab:hover {
+	color: var(--es-text-strong);
+	background: var(--es-sunset-soft);
+}
+.emblem-studio-wrap .es-tab:focus { outline: none; box-shadow: none; }
+.emblem-studio-wrap .es-tab:focus-visible {
+	outline: 2px solid var(--es-accent);
+	outline-offset: -2px;
+}
+.emblem-studio-wrap .es-tab.is-active {
+	color: var(--es-text-strong);
+	background: transparent;
+}
+/* Sunset gradient underline on the active tab (3px, doesn't shift layout
+   because it's a pseudo-element over the 1px container border). */
+.emblem-studio-wrap .es-tab.is-active::after {
+	content: '';
+	position: absolute;
+	left: var(--es-space-3);
+	right: var(--es-space-3);
+	bottom: -1px;
+	height: 3px;
+	border-radius: 3px 3px 0 0;
+	background: var(--es-sunset);
+}
+
+.emblem-studio-wrap .es-tab-panel { display: none; }
+.emblem-studio-wrap .es-tab-panel.is-active {
+	display: block;
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	padding: 1.5em 1.75em;
+	box-shadow: var(--es-shadow-xs);
+}
+
+/* Modernize form-table inside tab panels:
+   - lighter label weight and smaller font
+   - subtle row separators instead of bulky padding
+   - more breathing room around inputs */
+.emblem-studio-wrap .es-tab-panel .form-table {
+	margin-top: 0;
+}
+.emblem-studio-wrap .es-tab-panel .form-table th {
+	font-weight: 500;
+	font-size: 13px;
+	color: #1d2327;
+	width: 200px;
+	padding: 18px 10px 18px 0;
+}
+.emblem-studio-wrap .es-tab-panel .form-table td {
+	padding: 18px 10px;
+}
+.emblem-studio-wrap .es-tab-panel .form-table > tbody > tr + tr,
+.emblem-studio-wrap .es-tab-panel .form-table > tr + tr {
+	border-top: 1px solid #f0f0f1;
+}
+.emblem-studio-wrap .es-tab-panel .form-table .description {
+	font-size: 12px;
+	color: #646970;
+}
+
+/* Section headers inside tab panels — quieter than default <h2> */
+.emblem-studio-wrap .es-tab-panel h2 {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #50575e;
+	margin: 1.75em 0 0.75em;
+	padding-bottom: 0.5em;
+	border-bottom: 1px solid #f0f0f1;
+}
+.emblem-studio-wrap .es-tab-panel > h2:first-child,
+.emblem-studio-wrap .es-tab-panel > .form-table:first-child + h2 {
+	margin-top: 0.5em;
+}
+
+/* Editor grid h2s are slightly different — they label two code editors */
+.emblem-studio-wrap .es-tab-panel .es-editors-grid h2 {
+	border-bottom: none;
+	padding-bottom: 0;
+	margin-top: 0;
+	font-size: 11px;
+}
+
+/* Checkbox pill group (used for FunnelKit lists) — compact, scan-friendly */
+.emblem-studio-wrap .es-checkbox-group {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 6px;
+}
+.emblem-studio-wrap .es-checkbox-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 6px 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 999px;
+	background: #fff;
+	font-size: 13px;
+	cursor: pointer;
+	user-select: none;
+	transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.emblem-studio-wrap .es-checkbox-pill:hover {
+	border-color: var(--es-accent);
+}
+.emblem-studio-wrap .es-checkbox-pill input[type="checkbox"] {
+	margin: 0;
+	width: 14px;
+	height: 14px;
+}
+.emblem-studio-wrap .es-checkbox-pill.is-checked {
+	background: var(--es-sunset-soft);
+	border-color: var(--es-accent);
+	color: var(--es-text-strong);
+}
+
+/* ---- Shells tab: per-shell cards ---- */
+.emblem-studio-wrap .es-shells-intro {
+	margin: 0 0 1em;
+}
+.emblem-studio-wrap .es-shells-list {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	align-items: start;
+	gap: 10px;
+	margin: 0 0 1.5em;
+}
+/* Left column: inline / click / auto popup (can be combined). Right column:
+   ribbon + slide-in (each exclusive) — fills the space beside the short cards. */
+.emblem-studio-wrap .es-shells-col {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+}
+@media (max-width: 1100px) {
+	.emblem-studio-wrap .es-shells-list {
+		grid-template-columns: 1fr;
+	}
+}
+/* Column hint: left = "can be combined", right = "pick one". */
+.emblem-studio-wrap .es-shells-col-head {
+	padding: 0 2px 2px;
+}
+.emblem-studio-wrap .es-shells-col-head strong {
+	display: block;
+	font-size: 11px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: #50575e;
+}
+.emblem-studio-wrap .es-shells-col-head span {
+	font-size: 12px;
+	color: #646970;
+}
+/* Per-shell identity colour (+ soft tint), shared by the selector card and the
+   settings panel so a shell looks the same wherever it appears. */
+.emblem-studio-wrap .es-shell-card[data-shell="inline"],
+.emblem-studio-wrap .es-shell-settings-panel[data-shell="inline"]      { --shell-color: #1d4ed8; --shell-soft: #eef3fd; }
+.emblem-studio-wrap .es-shell-card[data-shell="popup-click"],
+.emblem-studio-wrap .es-shell-settings-panel[data-shell="popup-click"] { --shell-color: #6d28d9; --shell-soft: #f3eefd; }
+.emblem-studio-wrap .es-shell-card[data-shell="popup-auto"],
+.emblem-studio-wrap .es-shell-settings-panel[data-shell="popup-auto"]  { --shell-color: #0f766e; --shell-soft: #ecfdf7; }
+.emblem-studio-wrap .es-shell-card[data-shell="ribbon"],
+.emblem-studio-wrap .es-shell-settings-panel[data-shell="ribbon"]      { --shell-color: #c2410c; --shell-soft: #fff3ec; }
+.emblem-studio-wrap .es-shell-card[data-shell="slide-in"],
+.emblem-studio-wrap .es-shell-settings-panel[data-shell="slide-in"]    { --shell-color: #be185d; --shell-soft: #fdf0f6; }
+
+/* Shared settings container under the 2-column grid. Hidden by JS until an
+   auto shell (auto popup / ribbon / slide-in) is selected. The selected shell's
+   colour drives the top edge, header text/dot, and the background gradient. */
+.emblem-studio-wrap .es-shell-settings-wrap {
+	margin: 0 0 1.5em;
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var(--es-border, #dcdcde);
+	border-top: 0;
+	border-radius: 6px;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.emblem-studio-wrap .es-shell-settings-panel {
+	border-top: 3px solid var(--shell-color, var(--es-accent, #2271b1));
+	/* Gradient from the shell's soft tint at the top down to the page bg. */
+	background: linear-gradient(180deg, var(--shell-soft, #eef4fb) 0%, #fff 110px);
+}
+.emblem-studio-wrap .es-shell-settings-head {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0;
+	padding: 12px 16px;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--shell-color, #1d2327);
+	border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+.emblem-studio-wrap .es-shell-settings-head::before {
+	content: "";
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--shell-color, var(--es-accent, #2271b1));
+}
+.emblem-studio-wrap .es-shell-settings-panel > .es-auto-triggers {
+	padding: 16px;
+}
+/* The relocated trigger/rules panel — the box framing now comes from the
+   container above, so the panel itself is plain. Spans the full container so
+   the two-column settings + display-rules layouts use all available width. */
+.emblem-studio-wrap .es-auto-triggers {
+	max-width: none;
+}
+
+/* Connector: a line drawn (positioned by JS) from the selected shell card down
+   into its display-rules container, so it's obvious the two belong together.
+   The Shells tab panel is the positioning context. */
+.emblem-studio-wrap #es-tab-shells { position: relative; }
+.emblem-studio-wrap .es-shell-connector {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	overflow: visible;
+	z-index: 4;
+	color: var(--es-accent, #2271b1); /* JS overrides with the active shell colour */
+}
+/* Overlay stays rendered (so it's always measurable); the drawn pieces just
+   fade out via opacity when no shell with rules is selected. currentColor is
+   set on the SVG by JS to the selected shell's identity colour. */
+.emblem-studio-wrap .es-shell-connector:not(.is-visible) .es-connector-path,
+.emblem-studio-wrap .es-shell-connector:not(.is-visible) .es-connector-dot,
+.emblem-studio-wrap .es-shell-connector:not(.is-visible) .es-connector-arrow { opacity: 0; }
+.emblem-studio-wrap .es-connector-path {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.emblem-studio-wrap .es-connector-dot { fill: currentColor; }
+.emblem-studio-wrap .es-connector-arrow { fill: currentColor; }
+
+/* "who · when · which pages" hint next to the Targeting summary title. */
+.emblem-studio-wrap .es-dr-summary-hint {
+	font-weight: 400;
+	font-size: 11px;
+	letter-spacing: 0.02em;
+	color: #8a8a8a;
+}
+/* Settings panel split: trigger (left) vs appearance + dismissal (right),
+   divided by a vertical rule centred in the 48px channel between them. */
+.emblem-studio-wrap .es-shell-cfg-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0;
+	align-items: stretch;
+}
+.emblem-studio-wrap .es-shell-cfg-col { min-width: 0; }
+.emblem-studio-wrap .es-shell-cfg-trigger { padding-right: 24px; }
+.emblem-studio-wrap .es-shell-cfg-appearance {
+	padding-left: 24px;
+	border-left: 1px solid #dcdcde;
+}
+.emblem-studio-wrap .es-close-config {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid #f0f0f1;
+}
+/* Auto popup has no position/corner block, so its close config sits alone at
+   the top of the right column — drop the separator line in that case. */
+.emblem-studio-wrap .es-shell-cfg-appearance > .es-close-config:first-child {
+	margin-top: 0;
+	padding-top: 0;
+	border-top: 0;
+}
+@media (max-width: 900px) {
+	.emblem-studio-wrap .es-shell-cfg-grid {
+		grid-template-columns: 1fr;
+	}
+	/* Stacked: swap the vertical rule for a horizontal one above the right col. */
+	.emblem-studio-wrap .es-shell-cfg-trigger { padding-right: 0; }
+	.emblem-studio-wrap .es-shell-cfg-appearance {
+		padding-left: 0;
+		border-left: 0;
+		margin-top: 14px;
+		padding-top: 14px;
+		border-top: 1px solid #dcdcde;
+	}
+}
+.emblem-studio-wrap .es-shell-card {
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	/* Soft shell tint on the left fading to the page background on the right. */
+	background: linear-gradient(90deg, var(--shell-soft, #fff) 0%, #fff 75%);
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.emblem-studio-wrap .es-shell-card[data-enabled="true"] {
+	border-color: var(--shell-color, #c6d6e6);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.emblem-studio-wrap .es-shell-card-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.75rem;
+	padding: 12px 16px;
+	cursor: pointer;
+	user-select: none;
+	margin: 0;
+}
+.emblem-studio-wrap .es-shell-card-header input[type="checkbox"] {
+	margin-top: 2px;
+	flex-shrink: 0;
+}
+.emblem-studio-wrap .es-shell-card-title {
+	flex: 1;
+	line-height: 1.4;
+}
+.emblem-studio-wrap .es-shell-card-title strong {
+	font-weight: 600;
+	font-size: 14px;
+	color: #1d2327;
+}
+.emblem-studio-wrap .es-shell-tagline {
+	color: #646970;
+	font-size: 13px;
+	margin-left: 0.5rem;
+}
+.emblem-studio-wrap .es-shell-card-body {
+	display: none;
+	padding: 0 16px 16px 40px; /* left padding aligns with the title, past the checkbox */
+}
+.emblem-studio-wrap .es-shell-card[data-enabled="true"] .es-shell-card-body {
+	display: block;
+}
+.emblem-studio-wrap .es-shell-card-body > :first-child {
+	margin-top: 0;
+}
+.emblem-studio-wrap .es-shell-card-body code.es-copy {
+	font-size: 13px;
+	padding: 4px 8px;
+}
+
+/* ---- Help tooltip "?" icon ---- */
+.emblem-studio-wrap .es-help {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	margin: 0 0 0 6px;
+	padding: 0;
+	border: 1px solid var(--es-border-strong, #c3c4c7);
+	border-radius: 50%;
+	background: var(--es-surface, #fff);
+	color: var(--es-text-muted, #646970);
+	font-size: 10px;
+	line-height: 1;
+	font-weight: 600;
+	font-family: inherit;
+	cursor: help;
+	position: relative;
+	vertical-align: middle;
+	transition: border-color var(--es-duration-fast, 120ms), color var(--es-duration-fast, 120ms);
+}
+.emblem-studio-wrap .es-help:hover,
+.emblem-studio-wrap .es-help:focus {
+	border-color: var(--es-accent, #2271b1);
+	color: var(--es-accent, #2271b1);
+	outline: none;
+}
+.emblem-studio-wrap .es-help::after {
+	content: attr(data-tip);
+	position: absolute;
+	bottom: calc(100% + 10px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: #1d2327;
+	color: #fff;
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.45;
+	padding: 8px 10px;
+	border-radius: 4px;
+	white-space: normal;
+	width: 260px;
+	text-align: left;
+	text-transform: none;
+	letter-spacing: 0;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s;
+	z-index: 100;
+}
+.emblem-studio-wrap .es-help::before {
+	content: '';
+	position: absolute;
+	bottom: calc(100% + 4px);
+	left: 50%;
+	transform: translateX(-50%);
+	width: 0;
+	height: 0;
+	border: 6px solid transparent;
+	border-top-color: #1d2327;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s;
+}
+.emblem-studio-wrap .es-help:hover::after,
+.emblem-studio-wrap .es-help:focus::after,
+.emblem-studio-wrap .es-help:hover::before,
+.emblem-studio-wrap .es-help:focus::before {
+	opacity: 1;
+}
+
+.emblem-studio-wrap .es-tab-empty {
+	border: 1px dashed #c3c4c7;
+	background: #f6f7f7;
+	padding: 2em;
+	text-align: center;
+	border-radius: 4px;
+}
+.emblem-studio-wrap .es-tab-empty h2 { margin-top: 0; }
+
+/* Live inline preview under the HTML/CSS editors */
+.emblem-studio-wrap .es-inline-preview {
+	margin-top: 1.5em;
+	padding-top: 1em;
+	border-top: 1px solid #f0f0f1;
+}
+.emblem-studio-wrap .es-inline-preview-bar {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+.emblem-studio-wrap .es-inline-preview-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+}
+.emblem-studio-wrap .es-inline-preview-hint { margin: 0 !important; font-style: italic; }
+.emblem-studio-wrap .es-inline-preview-frame-wrap {
+	margin-top: 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	overflow: hidden;
+	background: #fff;
+}
+.emblem-studio-wrap .es-inline-preview-frame {
+	display: block;
+	width: 100%;
+	height: 520px;
+	border: 0;
+	background: #fff;
+}
+
+/* Stats tab — per-shell numbers, same shape as the Forms list */
+/* Revisions tab — chronological list of HTML/CSS saves with dual-preview */
+.emblem-studio-wrap .es-revisions-intro { margin: 0 0 12px; }
+.emblem-studio-wrap .es-revisions-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	overflow: hidden;
+	background: #fff;
+}
+.emblem-studio-wrap .es-revision { border-bottom: 1px solid #f0f0f1; }
+.emblem-studio-wrap .es-revision:last-child { border-bottom: none; }
+.emblem-studio-wrap .es-revision-summary {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 12px 16px;
+	background: transparent;
+	border: 0;
+	text-align: left;
+	cursor: pointer;
+	font-size: 13px;
+	color: #1d2327;
+	transition: background 0.15s;
+}
+.emblem-studio-wrap .es-revision-summary:hover { background: #fbfbfb; }
+.emblem-studio-wrap .es-revision.is-open > .es-revision-summary { background: var(--es-sunset-soft); }
+.emblem-studio-wrap .es-revision-when { font-weight: 500; }
+.emblem-studio-wrap .es-revision-by { color: #646970; font-size: 12px; }
+.emblem-studio-wrap .es-revision-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 9px;
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.emblem-studio-wrap .es-revision-badge-current { background: #d8eddc; color: #2c8a4a; }
+.emblem-studio-wrap .es-revision-note-display {
+	font-style: italic;
+	color: #50575e;
+	font-size: 12px;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-revision-chevron {
+	margin-left: auto;
+	color: #8c8f94;
+	transition: transform 0.15s;
+}
+.emblem-studio-wrap .es-revision.is-open .es-revision-chevron { transform: rotate(180deg); }
+.emblem-studio-wrap .es-revision-body { padding: 12px 16px 16px; background: #fafafa; }
+
+/* Diff panes — CSS grid with each diff entry as one row of two cells.
+   The grid auto-equalizes row heights so wrapped lines on one side
+   don't break alignment with the other. Old (red) on the left,
+   current (green) on the right. */
+.emblem-studio-wrap .es-revision-diff-block { margin-bottom: 16px; }
+.emblem-studio-wrap .es-revision-diff-section-label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #50575e;
+	margin-bottom: 6px;
+}
+/* Shared pane label — pill badge + subtitle. Used above each diff column
+   AND above each preview iframe so old/new orientation reads identically
+   across the whole revision body. */
+.emblem-studio-wrap .es-revision-pane-labels {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+.emblem-studio-wrap .es-revision-pane-label {
+	font-size: 13px;
+	color: #1d2327;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 4px;
+}
+.emblem-studio-wrap .es-revision-pane-label strong {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding: 2px 8px;
+	border-radius: 9px;
+}
+.emblem-studio-wrap .es-revision-pane-label-old strong { background: #fcebea; color: #b32d2e; }
+.emblem-studio-wrap .es-revision-pane-label-new strong { background: #e7f5e9; color: #2c8a4a; }
+.emblem-studio-wrap .es-revision-pane-sub {
+	font-size: 12px;
+	color: #646970;
+}
+.emblem-studio-wrap .es-revision-diff-scroll {
+	max-height: 320px;
+	overflow: auto;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+.emblem-studio-wrap .es-revision-diff-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	font-family: Menlo, Consolas, "Courier New", monospace;
+	font-size: 12px;
+	line-height: 1.45;
+}
+.emblem-studio-wrap .es-diff-cell {
+	padding: 2px 10px;
+	min-height: 1.45em;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	border-top: 1px solid #f5f5f5;
+}
+.emblem-studio-wrap .es-diff-cell:nth-child(odd) { border-right: 1px solid #ececec; }
+.emblem-studio-wrap .es-diff-cell.is-common  { color: #1d2327; }
+.emblem-studio-wrap .es-diff-cell.is-removed { background: #fcebea; color: #8a1a1a; }
+.emblem-studio-wrap .es-diff-cell.is-added   { background: #e7f5e9; color: #1f5a2a; }
+.emblem-studio-wrap .es-diff-cell.is-spacer  { background: #fafafa; }
+/* Modified rows — softer line tint, with the actually-changed substring
+   wrapped in .is-changed for the stronger red/green highlight. */
+.emblem-studio-wrap .es-diff-cell.is-modified-old { background: #fdf5f5; color: #1d2327; }
+.emblem-studio-wrap .es-diff-cell.is-modified-new { background: #f5fbf5; color: #1d2327; }
+.emblem-studio-wrap .es-diff-cell.is-modified-old .is-changed {
+	background: #fcebea;
+	color: #8a1a1a;
+	border-radius: 2px;
+	padding: 0 1px;
+}
+.emblem-studio-wrap .es-diff-cell.is-modified-new .is-changed {
+	background: #c9eed0;
+	color: #1f5a2a;
+	border-radius: 2px;
+	padding: 0 1px;
+}
+
+.emblem-studio-wrap .es-revision-previews {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+@media (max-width: 900px) {
+	.emblem-studio-wrap .es-revision-previews { grid-template-columns: 1fr; }
+}
+.emblem-studio-wrap .es-revision-preview-col {
+	display: flex;
+	flex-direction: column;
+}
+.emblem-studio-wrap .es-revision-preview-current,
+.emblem-studio-wrap .es-revision-preview-old {
+	display: block;
+	width: 100%;
+	height: 360px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #fff;
+}
+.emblem-studio-wrap .es-revision-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.emblem-studio-wrap .es-revision-note-edit { flex: 1; min-width: 200px; }
+.emblem-studio-wrap .es-revision-note-input {
+	width: 100%;
+	padding: 4px 8px;
+	font-size: 13px;
+	font-style: italic;
+}
+
+.emblem-studio-wrap .es-stats-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 0 0 var(--es-space-4);
+}
+.emblem-studio-wrap .es-stats-table th,
+.emblem-studio-wrap .es-stats-table td {
+	padding: 10px 12px;
+	text-align: left;
+	border-bottom: 1px solid var(--es-border);
+	font-size: var(--es-text-sm);
+	color: var(--es-text);
+}
+.emblem-studio-wrap .es-stats-table thead th {
+	font-size: var(--es-text-xs);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--es-dusk-1);
+	background: linear-gradient(180deg, #fdeada 0%, #fae0c6 100%);
+	border-bottom: 2px solid var(--es-orange);
+}
+.emblem-studio-wrap .es-stats-table tbody tr:hover {
+	background: #fff7ef;
+}
+.emblem-studio-wrap .es-stats-table th.num,
+.emblem-studio-wrap .es-stats-table td.num { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Vertical column delimiters so the many stat columns read clearly. */
+.emblem-studio-wrap .es-stats-table th.num,
+.emblem-studio-wrap .es-stats-table td.num { border-left: 1px solid var(--es-border); }
+.emblem-studio-wrap .es-forms-table th.col-stat,
+.emblem-studio-wrap .es-forms-table th.col-stat-narrow,
+.emblem-studio-wrap .es-forms-table td.col-stat,
+.emblem-studio-wrap .es-forms-table td.col-stat-narrow { border-left: 1px solid var(--es-border); }
+.emblem-studio-wrap .es-stats-table td.dim,
+.emblem-studio-wrap .es-stats-table td .dim { color: var(--es-text-faint); }
+
+/* Stats tab — section headings + clicks subsection. The Stats panel now
+ * has two data sections (per-shell, per-click-target); both get the same
+ * h3 treatment so they read as peers. The toggle + summary live on
+ * dedicated rows so they don't crowd the heading. */
+.emblem-studio-wrap .es-stats-section-heading {
+	margin: var(--es-space-5) 0 var(--es-space-2);
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	color: var(--es-text-muted);
+	text-transform: uppercase;
+	letter-spacing: var(--es-tracking-wide);
+}
+.emblem-studio-wrap .es-stats-section-heading:first-of-type {
+	margin-top: 0;
+}
+.emblem-studio-wrap .es-clicks-toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	margin: 0 0 0.75em;
+}
+.emblem-studio-wrap .es-clicks-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4em;
+	cursor: pointer;
+}
+.emblem-studio-wrap .es-clicks-summary {
+	margin: 0 0 var(--es-space-3);
+	padding: var(--es-space-2) var(--es-space-3);
+	background: var(--es-surface-muted);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	font-size: var(--es-text-sm);
+	color: var(--es-text-muted);
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.35em;
+}
+.emblem-studio-wrap .es-clicks-summary strong {
+	color: var(--es-text-strong);
+	font-variant-numeric: tabular-nums;
+}
+.emblem-studio-wrap .es-clicks-summary-sep {
+	color: var(--es-border-strong);
+	margin: 0 0.15em;
+}
+.emblem-studio-wrap .es-stats-table tr.es-click-row-untagged {
+	opacity: 0.65;
+	font-style: italic;
+}
+
+/* Close / backdrop rows: shown in the breakdown but excluded from the
+   headline Clicks numbers. Dim them and tag them so it's obvious why. */
+.emblem-studio-wrap .es-stats-table tr.es-click-row-excluded td {
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-click-excluded-tag {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 8px;
+	font-size: 11px;
+	font-style: normal;
+	font-weight: 600;
+	line-height: 1.7;
+	color: var(--es-text-muted);
+	background: var(--es-surface-muted);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-pill);
+	vertical-align: middle;
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-clicks-legend {
+	margin-top: var(--es-space-2);
+	font-size: 12px;
+	color: var(--es-text-muted);
+}
+
+.emblem-studio-wrap .es-danger-zone {
+	margin-top: var(--es-space-6);
+	padding: var(--es-space-5);
+	border: 1px solid var(--es-danger-soft);
+	border-left: 4px solid var(--es-danger);
+	background: var(--es-danger-soft);
+	border-radius: var(--es-radius-md);
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-danger-zone h2 {
+	margin: 0 0 var(--es-space-2);
+	color: var(--es-danger);
+	font-size: var(--es-text-md);
+	font-weight: 600;
+	letter-spacing: 0;
+}
+.emblem-studio-wrap .es-danger-zone .description {
+	margin: 0 0 var(--es-space-4);
+	color: var(--es-text);
+}
+
+/* ---- Modal ---- */
+.emblem-studio-wrap .es-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+}
+.emblem-studio-wrap .es-modal[hidden] { display: none; }
+.emblem-studio-wrap .es-modal-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(15, 17, 21, 0.55);
+	-webkit-backdrop-filter: blur(4px);
+	backdrop-filter: blur(4px);
+	animation: es-modal-fade 0.18s ease-out;
+}
+.emblem-studio-wrap .es-modal-dialog {
+	position: relative;
+	background: #fff;
+	border-radius: 8px;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+	max-width: 460px;
+	width: 100%;
+	padding: 24px;
+	animation: es-modal-rise 0.22s ease-out;
+}
+.emblem-studio-wrap .es-modal-dialog h3 {
+	margin: 0 0 8px;
+	font-size: 16px;
+	font-weight: 600;
+}
+.emblem-studio-wrap .es-modal-dialog .description { margin: 0 0 16px; }
+.emblem-studio-wrap .es-modal-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.emblem-studio-wrap .es-modal-actions .button { width: 100%; text-align: center; }
+.emblem-studio-wrap .es-modal-close {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	width: 28px;
+	height: 28px;
+	border: none;
+	background: transparent;
+	color: #646970;
+	font-size: 22px;
+	line-height: 1;
+	cursor: pointer;
+	border-radius: 4px;
+	transition: background 0.15s, color 0.15s;
+}
+.emblem-studio-wrap .es-modal-close:hover {
+	background: #f0f0f1;
+	color: #1d2327;
+}
+.emblem-studio-wrap .es-button-danger {
+	color: var(--es-danger) !important;
+	border-color: var(--es-danger) !important;
+	background: var(--es-surface) !important;
+}
+.emblem-studio-wrap .es-button-danger:hover {
+	background: var(--es-danger) !important;
+	border-color: var(--es-danger) !important;
+	color: #fff !important;
+}
+@keyframes es-modal-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes es-modal-rise {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+.emblem-studio-wrap .es-editors-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 1.5rem;
+	margin: 1.5em 0;
+}
+@media (min-width: 1200px) {
+	.emblem-studio-wrap .es-editors-grid { grid-template-columns: 1fr 1fr; }
+}
+.emblem-studio-wrap .es-editors-grid h2 { margin-top: 0; }
+.emblem-studio-wrap .es-editors-grid .es-editor-col { min-width: 0; }
+
+/* Reports */
+/* Reports filter bar — a card that groups the Form/Shell/date controls and
+   the quick-range pills so the whole control surface reads as one unit. */
+.emblem-studio-wrap .es-filter-bar {
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	box-shadow: var(--es-shadow-xs);
+	padding: var(--es-space-4);
+	margin: 0 0 var(--es-space-4);
+}
+.emblem-studio-wrap .es-reports-filters {
+	display: flex;
+	gap: var(--es-space-4);
+	align-items: flex-end;
+	flex-wrap: wrap;
+	margin: 0;
+}
+.emblem-studio-wrap .es-reports-filters label {
+	display: flex;
+	flex-direction: column;
+	gap: var(--es-space-1);
+	font-weight: 600;
+	font-size: var(--es-text-sm);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-reports-filters select,
+.emblem-studio-wrap .es-reports-filters input[type="date"] {
+	min-width: 160px;
+}
+/* Pin every control in the filter row to one height + box model so the
+   selects, the custom date trigger, the native date fallback, and the
+   Update button all line up exactly. WP's .button base sets height without
+   box-sizing (→ 38px), which is what threw the row off. */
+.emblem-studio-wrap .es-reports-filters select,
+.emblem-studio-wrap .es-reports-filters input[type="date"],
+.emblem-studio-wrap .es-reports-filters .es-dp,
+.emblem-studio-wrap .es-reports-filters .es-dp-trigger,
+.emblem-studio-wrap .es-reports-filters .button {
+	height: 36px;
+	min-height: 36px;
+	box-sizing: border-box;
+}
+
+/* Quick-range dropdown — sits under a divider inside the filter bar. The
+   <select>'s option values are target URLs; reports.js navigates on change. */
+.emblem-studio-wrap .es-presets {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--es-space-2);
+	margin: var(--es-space-4) 0 0;
+	padding-top: var(--es-space-4);
+	border-top: 1px solid var(--es-border);
+}
+.emblem-studio-wrap .es-presets-label {
+	font-size: var(--es-text-sm);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--es-text-faint);
+}
+.emblem-studio-wrap .es-quick-range {
+	min-width: 180px;
+}
+
+.emblem-studio-wrap .es-range-caption {
+	margin: 0 0 var(--es-space-5);
+	color: var(--es-text-muted);
+	font-size: var(--es-text-base);
+}
+
+.emblem-studio-wrap .es-kpis {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: var(--es-space-3);
+	margin-bottom: var(--es-space-5);
+}
+.emblem-studio-wrap .es-kpi {
+	position: relative;
+	overflow: hidden;
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	padding: var(--es-space-4) var(--es-space-5);
+	box-shadow: var(--es-shadow-xs);
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing);
+}
+/* Sunset gradient accent bar across the top of each KPI tile. */
+.emblem-studio-wrap .es-kpi::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: var(--es-sunset);
+}
+.emblem-studio-wrap .es-kpi:hover {
+	border-color: var(--es-border-strong);
+	transform: translateY(-2px);
+	box-shadow: var(--es-shadow-md);
+}
+.emblem-studio-wrap .es-kpi-label {
+	font-size: var(--es-text-xs);
+	letter-spacing: var(--es-tracking-wide);
+	text-transform: uppercase;
+	font-weight: 600;
+	color: var(--es-text-muted);
+	margin-bottom: 0.4rem;
+}
+.emblem-studio-wrap .es-kpi-value {
+	font-family: var(--es-font-display);
+	font-size: 28px;
+	font-weight: 700;
+	color: var(--es-text-strong);
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: var(--es-tracking-tight);
+	margin-top: var(--es-space-2);
+}
+.emblem-studio-wrap .es-kpi-sub {
+	font-size: var(--es-text-xs);
+	color: var(--es-text-muted);
+	margin-top: var(--es-space-1);
+}
+.emblem-studio-wrap .es-kpi-delta { font-weight: 600; letter-spacing: 0.02em; }
+.emblem-studio-wrap .es-kpi-delta-up   { color: #16a34a; }
+.emblem-studio-wrap .es-kpi-delta-down { color: #b32d2e; }
+.emblem-studio-wrap .es-kpi-delta-flat { color: #8a8a8a; }
+
+/* KPI tile rendered as an anchor (e.g. "Bots filtered" → #bots). */
+.emblem-studio-wrap a.es-kpi-link { text-decoration: none; display: block; color: inherit; }
+.emblem-studio-wrap a.es-kpi-link:hover { color: inherit; }
+
+/* Bot traffic breakdown — foldable category → per-bot tree. */
+.emblem-studio-wrap .es-bot-breakdown { margin-top: var(--es-space-7, 2rem); scroll-margin-top: 2rem; }
+.emblem-studio-wrap .es-bot-cats {
+	max-width: 640px;
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	overflow: hidden;
+	background: var(--es-surface);
+}
+.emblem-studio-wrap .es-bot-cat { border-bottom: 1px solid var(--es-border); }
+.emblem-studio-wrap .es-bot-cat:last-child { border-bottom: 0; }
+.emblem-studio-wrap .es-bot-cat > summary {
+	display: grid;
+	grid-template-columns: 1fr 120px auto;
+	align-items: center;
+	gap: var(--es-space-4, 1rem);
+	padding: 0.65rem var(--es-space-4, 1rem);
+	cursor: pointer;
+	list-style: none;
+	font-weight: 600;
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-bot-cat > summary::-webkit-details-marker { display: none; }
+.emblem-studio-wrap .es-bot-cat > summary:hover { background: var(--es-surface-muted, #f6f7f7); }
+.emblem-studio-wrap .es-bot-cat-name::before { content: "▸ "; color: var(--es-text-muted); }
+.emblem-studio-wrap .es-bot-cat[open] > summary .es-bot-cat-name::before { content: "▾ "; }
+.emblem-studio-wrap .es-bot-cat-bar {
+	height: 8px;
+	border-radius: 4px;
+	background: var(--es-border, #e0e0e0);
+	overflow: hidden;
+}
+.emblem-studio-wrap .es-bot-cat-bar > span { display: block; height: 100%; background: var(--es-sunset); }
+.emblem-studio-wrap .es-bot-cat-count { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.emblem-studio-wrap .es-bot-pct { color: var(--es-text-muted); font-weight: 400; font-size: var(--es-text-xs); }
+.emblem-studio-wrap .es-bot-table { width: 100%; border-collapse: collapse; background: var(--es-surface-muted, #f9fafb); }
+.emblem-studio-wrap .es-bot-table td { padding: 0.35rem var(--es-space-4, 1rem); border-top: 1px solid var(--es-border); font-size: var(--es-text-sm, 13px); }
+.emblem-studio-wrap .es-bot-table .es-bot-name { width: 100%; }
+.emblem-studio-wrap .es-bot-table .es-bot-count { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.emblem-studio-wrap .es-bot-table .es-bot-pct-cell { text-align: right; color: var(--es-text-muted); white-space: nowrap; }
+.emblem-studio-wrap .es-bot-unattributed {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: var(--es-space-4, 1rem);
+	padding: 0.65rem var(--es-space-4, 1rem);
+	color: var(--es-text-muted);
+	font-style: italic;
+}
+
+.emblem-studio-wrap .es-chart-block {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 1rem 1.25rem 1.25rem;
+	margin-bottom: 1rem;
+}
+.emblem-studio-wrap .es-chart-block h2 {
+	margin: 0 0 0.5rem;
+	font-size: 14px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #646970;
+}
+.emblem-studio-wrap .es-chart { width: 100%; position: relative; }
+.emblem-studio-wrap .es-chart .es-chart-dot { cursor: pointer; }
+/* Instant, JS-driven chart tooltip (replaces native SVG <title>, which has
+   an unavoidable browser hover delay). No transition on opacity → no fade-in
+   delay; it snaps on the instant the pointer hits a node. */
+.emblem-studio-wrap .es-chart-tip {
+	position: absolute;
+	z-index: 10;
+	pointer-events: none;
+	opacity: 0;
+	white-space: nowrap;
+	background: #1d2327;
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.3;
+	padding: 4px 8px;
+	border-radius: 4px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.emblem-studio-wrap .es-chart-tip.is-visible { opacity: 1; }
+
+/* Tag input (chip / token style) */
+.emblem-studio-wrap .es-tag-input {
+	position: relative;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	align-items: center;
+	min-height: 36px;
+	min-width: 280px;
+	max-width: 600px;
+	padding: 4px 6px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	cursor: text;
+	font-size: 13px;
+}
+.emblem-studio-wrap .es-tag-input:focus-within {
+	border-color: var(--es-accent);
+	box-shadow: 0 0 0 3px rgba(226, 125, 64, 0.16);
+	outline: 2px solid transparent;
+}
+.emblem-studio-wrap .es-tag-chips {
+	display: contents;
+}
+.emblem-studio-wrap .es-tag-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: var(--es-sunset-soft);
+	color: #1d2327;
+	padding: 2px 4px 2px 8px;
+	border: 1px solid #c3d6e4;
+	border-radius: 2px;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.4;
+}
+.emblem-studio-wrap .es-tag-chip-remove {
+	background: transparent;
+	border: 0;
+	padding: 0 4px;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	color: #50575e;
+	font-weight: 400;
+}
+.emblem-studio-wrap .es-tag-chip-remove:hover { color: #b32d2e; }
+.emblem-studio-wrap .es-tag-typer {
+	border: 0 !important;
+	outline: 0 !important;
+	box-shadow: none !important;
+	background: transparent;
+	flex: 1;
+	min-width: 140px;
+	font-size: 13px;
+	padding: 4px 2px;
+}
+.emblem-studio-wrap .es-tag-suggestions {
+	position: absolute;
+	top: calc(100% + 2px);
+	left: 0;
+	right: 0;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	max-height: 220px;
+	overflow-y: auto;
+	z-index: 10;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+.emblem-studio-wrap .es-tag-suggestion {
+	padding: 6px 10px;
+	cursor: pointer;
+	font-size: 13px;
+	line-height: 1.4;
+}
+.emblem-studio-wrap .es-tag-suggestion:hover,
+.emblem-studio-wrap .es-tag-suggestion.is-active {
+	background: var(--es-sunset-soft);
+}
+.emblem-studio-wrap .es-tag-suggestion-new {
+	color: #50575e;
+	font-style: italic;
+	border-top: 1px solid #f0f0f1;
+}
+.emblem-studio-wrap .es-tag-suggestion-new strong {
+	font-style: normal;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+/* Field mapper */
+.emblem-studio-wrap .es-mapper { margin: 1em 0 1.5em; }
+.emblem-studio-wrap .es-mapper-cols {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 1rem;
+}
+@media (min-width: 1100px) {
+	.emblem-studio-wrap .es-mapper-cols { grid-template-columns: 1.4fr 1fr; }
+}
+.emblem-studio-wrap .es-mapper-fk,
+.emblem-studio-wrap .es-mapper-form {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 0.75rem 1rem;
+	min-height: 200px;
+}
+.emblem-studio-wrap .es-mapper-fk h3,
+.emblem-studio-wrap .es-mapper-form h3 {
+	margin: 0 0 0.5rem;
+	font-size: 13px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #646970;
+}
+.emblem-studio-wrap .es-mapper-form h3 small {
+	font-weight: 400;
+	color: #8a8a8a;
+	letter-spacing: 0;
+	text-transform: none;
+	margin-left: 0.4rem;
+}
+.emblem-studio-wrap .es-mapper-group {
+	margin-bottom: 0.8rem;
+	padding-bottom: 0.4rem;
+	border-bottom: 1px solid #f0f0f1;
+}
+.emblem-studio-wrap .es-mapper-group:last-child { border-bottom: 0; }
+.emblem-studio-wrap .es-mapper-group-label {
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: #50575e;
+	font-weight: 600;
+	margin: 0.5rem 0 0.35rem;
+}
+.emblem-studio-wrap .es-mapper-row {
+	display: grid;
+	grid-template-columns: 1fr 1.2fr;
+	gap: 0.6rem;
+	align-items: center;
+	padding: 0.35rem 0;
+}
+.emblem-studio-wrap .es-mapper-row-label {
+	font-size: 13px;
+	color: #1d2327;
+}
+.emblem-studio-wrap .es-mapper-required { color: #b32d2e; font-weight: 700; }
+.emblem-studio-wrap .es-mapper-kind {
+	display: inline-block;
+	margin-left: 0.4rem;
+	padding: 1px 6px;
+	font-size: 10px;
+	letter-spacing: 0.03em;
+	border-radius: 9px;
+	background: #f0f0f1;
+	color: #646970;
+	font-weight: 500;
+	vertical-align: middle;
+}
+.emblem-studio-wrap .es-mapper-slot {
+	min-height: 32px;
+	padding: 4px 8px;
+	border: 1px dashed #c3c4c7;
+	border-radius: 3px;
+	background: #fafafa;
+	cursor: pointer;
+	font-size: 12px;
+	color: #8a8a8a;
+	display: flex;
+	align-items: center;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+.emblem-studio-wrap .es-mapper-slot.is-empty:hover { border-color: var(--es-accent); background: var(--es-sunset-soft); color: var(--es-text-strong); }
+.emblem-studio-wrap .es-mapper-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: #d8eddc;
+	border: 1px solid #abc8b1;
+	border-radius: 2px;
+	padding: 2px 4px 2px 8px;
+	font-size: 12px;
+	color: #1d2327;
+	font-weight: 500;
+}
+.emblem-studio-wrap .es-mapper-pill.is-orphan { background: #fcf0d6; border-color: #d8b86b; }
+.emblem-studio-wrap .es-mapper-pill.is-warn   { background: #fff1e8; border-color: #e8a47b; }
+.emblem-studio-wrap .es-mapper-pill.is-auto   {
+	background: var(--es-gray-100);
+	border: 1px dashed var(--es-border-strong);
+	color: var(--es-text-muted);
+	font-style: italic;
+	font-weight: 400;
+}
+.emblem-studio-wrap .es-mapper-auto-tag {
+	display: inline-block;
+	margin-left: 4px;
+	padding: 1px 6px;
+	font-size: 9px;
+	font-style: normal;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	border-radius: 9px;
+	background: #fff;
+	color: var(--es-accent);
+	border: 1px solid var(--es-border-strong);
+	line-height: 1.2;
+}
+.emblem-studio-wrap .es-mapper-pill-remove {
+	background: transparent;
+	border: 0;
+	padding: 0 2px;
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+	color: #50575e;
+}
+.emblem-studio-wrap .es-mapper-pill-remove:hover { color: #b32d2e; }
+.emblem-studio-wrap .es-mapper-form-pill {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	width: 100%;
+	margin-bottom: 4px;
+	padding: 6px 10px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	cursor: pointer;
+	text-align: left;
+	font-size: 13px;
+	color: #1d2327;
+	font-family: Menlo, Consolas, monospace;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+.emblem-studio-wrap .es-mapper-form-pill:hover { border-color: var(--es-accent); }
+.emblem-studio-wrap .es-mapper-form-pill.is-selected {
+	border-color: var(--es-accent);
+	background: var(--es-sunset-soft);
+	box-shadow: 0 0 0 1px var(--es-accent) inset;
+}
+.emblem-studio-wrap .es-mapper-form-pill .es-mapper-form-name { flex: 1; }
+
+/* Action rows (above and below the editors) */
+.emblem-studio-wrap .es-editor-actions {
+	margin: 0.5em 0 1.5em;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+.emblem-studio-wrap .es-bottom-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+/* Save button + its "Unsaved" flag. The flag sits absolutely below the
+   button so showing/hiding it never reflows the header row. */
+.emblem-studio-wrap .es-save-group {
+	position: relative;
+	display: inline-flex;
+}
+.emblem-studio-wrap .es-dirty-flag {
+	display: none;
+	color: #b26a00;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-dirty-flag::before {
+	content: "• ";
+	font-size: 18px;
+	line-height: 0;
+	vertical-align: -2px;
+	color: #f0b429;
+}
+.emblem-studio-wrap form.es-form-editor.is-dirty .es-dirty-flag {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+}
+.emblem-studio-wrap form.es-form-editor.is-dirty .button-primary {
+	box-shadow: 0 0 0 1px #f0b429, 0 0 0 3px rgba(240, 180, 41, 0.25);
+}
+.emblem-studio-wrap form.es-form-editor.is-dirty .button-primary::before {
+	content: "• ";
+	color: #f0b429;
+	font-size: 16px;
+	line-height: 0;
+	vertical-align: -1px;
+}
+
+/* Forms list: tighter, content-aware column widths + centered numbers + dividers. */
+/* Compound .wp-list-table.es-forms-table selectors so these out-rank
+   the generic .wp-list-table cell rules defined later in this file —
+   at equal specificity source order would otherwise win. */
+.emblem-studio-wrap .wp-list-table.es-forms-table th,
+.emblem-studio-wrap .wp-list-table.es-forms-table td {
+	border-right: 1px solid var(--es-border);
+	padding: 6px 6px;
+	font-size: 12px;
+}
+.emblem-studio-wrap .es-forms-table thead th:last-child { border-right: 0; }
+.emblem-studio-wrap .wp-list-table.es-forms-table thead th {
+	text-align: center;
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	line-height: 1.3;
+	font-weight: 700;
+	color: var(--es-dusk-1);
+	background: linear-gradient(180deg, #fdeada 0%, #fae0c6 100%);
+	border-bottom: 2px solid var(--es-orange);
+}
+
+/* ── Forms-table type & numbers (the "feel" pass) ─────────────────── */
+/* Asset name in the display face, dusk ink, sunset on hover. */
+.emblem-studio-wrap .es-forms-table .col-name strong { font-family: var(--es-font-display); font-weight: 600; }
+.emblem-studio-wrap .es-forms-table .col-name strong a {
+	font-size: 14px;
+	color: var(--es-gray-900);
+	text-decoration: none;
+	transition: color var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-forms-table .col-name strong a:hover,
+.emblem-studio-wrap .es-forms-table .col-name strong a:focus { color: var(--es-orange); }
+/* Stat columns: tabular figures so digits line up column-to-column. */
+.emblem-studio-wrap .es-forms-table td.col-stat,
+.emblem-studio-wrap .es-forms-table td.col-stat-narrow {
+	font-variant-numeric: tabular-nums;
+	font-weight: 500;
+	color: var(--es-gray-800);
+}
+.emblem-studio-wrap .es-forms-table .col-shortcode code {
+	font-family: var(--es-font-mono);
+	font-size: 11px;
+}
+.emblem-studio-wrap .es-forms-table .col-date { color: var(--es-text-muted); font-size: 11px; }
+.emblem-studio-wrap .es-forms-table .col-cb          { width: 2.4em; text-align: center; padding-left: 8px; padding-right: 0; }
+.emblem-studio-wrap .es-forms-table .col-cb input[type="checkbox"] { margin: 0; }
+/* Horizontal scroll wrapper. With 16 columns the table is wider than
+   the WP admin content area on most screens — scroll instead of squeeze.
+   Min-width keeps each column comfortable; on wide monitors the table
+   stretches to fill, on narrow ones the user scrolls. */
+.emblem-studio-wrap .es-forms-table-scroll {
+	overflow-x: auto;
+	width: 100%;
+}
+.emblem-studio-wrap .es-forms-table {
+	/* Auto layout (override WP's .fixed) so the two-number rate cells size to
+	   their content instead of overflowing fixed % widths into the next column.
+	   The column widths below become hints; nowrap content sets the real minimum. */
+	table-layout: auto;
+	min-width: 1700px;
+}
+.emblem-studio-wrap .es-forms-table .col-name        { width: 13%; text-align: left; }
+.emblem-studio-wrap .es-forms-table .col-shell       { width: 9%;  text-align: center; }
+.emblem-studio-wrap .es-forms-table .col-shortcode   { width: 10%; text-align: left; }
+.emblem-studio-wrap .es-forms-table .col-status      { width: 7%;  text-align: center; }
+.emblem-studio-wrap .es-forms-table .col-stat        { width: 6%;  text-align: center; }
+.emblem-studio-wrap .es-forms-table .col-stat-narrow { width: 5%;  text-align: center; white-space: nowrap; }
+.emblem-studio-wrap .es-forms-table .col-date        { width: 11%; text-align: left; white-space: nowrap; }
+.emblem-studio-wrap .wp-list-table.es-forms-table .col-actions { width: 7%; white-space: nowrap; text-align: left; padding-left: 2px; padding-right: 2px; }
+.emblem-studio-wrap .es-forms-table thead th.col-name,
+.emblem-studio-wrap .es-forms-table thead th.col-shortcode,
+.emblem-studio-wrap .es-forms-table thead th.col-date,
+.emblem-studio-wrap .es-forms-table thead th.col-actions { text-align: left; }
+.emblem-studio-wrap .es-shell-pill {
+	display: inline-block;
+	padding: 3px 10px;
+	border-radius: var(--es-radius-pill);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-shell-inline      { background: #e7f0ff; color: #14467b; }
+.emblem-studio-wrap .es-shell-popup-click { background: #fbe9c8; color: #7a4d12; }
+.emblem-studio-wrap .es-shell-popup-auto  { background: #ddebd6; color: #2d5226; }
+.emblem-studio-wrap .es-shell-ribbon      { background: #f2d6e4; color: #6b1f44; }
+.emblem-studio-wrap .es-shell-slide-in    { background: #e2e4f1; color: #2d3060; }
+/* Vertically centre each trigger option (radio + label) with its field
+   (number input + unit), overriding WP's top-aligned .form-table cells. The
+   "Leaving the page" row keeps top alignment for its multi-line description. */
+.emblem-studio-wrap .es-auto-triggers .es-trigger-row td { vertical-align: middle; }
+.emblem-studio-wrap .es-auto-triggers .es-trigger-row[data-trigger="exit"] td { vertical-align: top; }
+
+/* Close-button style, now grouped with the other close-button settings. */
+.emblem-studio-wrap .es-close-theme-row {
+	margin-top: 10px;
+	padding-left: 1.6em;
+}
+.emblem-studio-wrap .es-close-theme-row--bare { padding-left: 0; }
+.emblem-studio-wrap .es-close-theme-select { max-width: 100%; }
+
+/* Click popup's modal options live inside its selector card (no separate
+   panel), divided from the shortcode above. */
+.emblem-studio-wrap .es-shell-card-options {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid #f0f0f1;
+}
+
+/* Popup options (max width + full-screen) shown at the top of the click +
+   auto popup panels. Two-row grid — labels on row 1, fields on row 2 — so the
+   two fields share a grid row and stay perfectly aligned no matter the label
+   heights. Both field cells are 36px tall (= input height) and centre their
+   content, so the full-screen toggle lines up with the max-width input. */
+.emblem-studio-wrap .es-popup-options {
+	display: grid;
+	grid-template-columns: max-content max-content;
+	grid-template-areas: "lbl-a lbl-b" "fld-a fld-b";
+	justify-content: start;
+	column-gap: 32px;
+	row-gap: 2px;
+	margin: 0 0 10px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #f0f0f1;
+}
+.emblem-studio-wrap .es-popup-options > :nth-child(1) { grid-area: lbl-a; }
+.emblem-studio-wrap .es-popup-options > :nth-child(2) { grid-area: lbl-b; }
+.emblem-studio-wrap .es-popup-options > :nth-child(3) { grid-area: fld-a; }
+.emblem-studio-wrap .es-popup-options > :nth-child(4) { grid-area: fld-b; }
+.emblem-studio-wrap .es-popup-option-label { white-space: nowrap; }
+.emblem-studio-wrap .es-popup-option-label .es-dr-label { display: inline; margin: 0; }
+.emblem-studio-wrap .es-popup-option-field {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 36px;
+}
+.emblem-studio-wrap .es-popup-option-field .es-popup-max-width { width: 5em; }
+.emblem-studio-wrap .es-popup-toggle-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+}
+/* Narrow: stack the two options (label + field pairs) one above the other. */
+@media (max-width: 640px) {
+	.emblem-studio-wrap .es-popup-options {
+		grid-template-columns: max-content;
+		grid-template-areas: "lbl-a" "fld-a" "lbl-b" "fld-b";
+		row-gap: 2px;
+	}
+	.emblem-studio-wrap .es-popup-options > :nth-child(3) { margin-bottom: 6px; }
+}
+
+/* Auto-popup trigger panel: keep the radio + label fully readable on every
+   row (so the user knows they can click it to switch), but dim the inputs
+   and helper text on the rows that aren't currently picked. */
+.emblem-studio-wrap .es-auto-triggers .es-trigger-row.is-disabled td:nth-child(2) { opacity: 0.5; }
+.emblem-studio-wrap .es-auto-triggers .es-trigger-row.is-disabled input[type="number"],
+.emblem-studio-wrap .es-auto-triggers .es-trigger-row.is-disabled input[type="checkbox"] { pointer-events: none; }
+
+/* Display rules disclosure. */
+/* Display rules: its own card so it stands apart from the trigger panel,
+   with a header bar that stays obvious (and shows a rotating chevron) once
+   the section is expanded — so it's easy to find and collapse again. */
+.emblem-studio-wrap .es-display-rules {
+	margin-top: 14px;
+	border: 1px solid #c6d6e6;
+	border-radius: 6px;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.emblem-studio-wrap .es-display-rules > summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	cursor: pointer;
+	font-weight: 600;
+	color: #1d2327;
+	border-radius: 6px;
+	list-style: none;
+}
+.emblem-studio-wrap .es-display-rules > summary::-webkit-details-marker { display: none; }
+.emblem-studio-wrap .es-display-rules > summary::before {
+	content: "";
+	flex: 0 0 auto;
+	width: 0;
+	height: 0;
+	border-left: 6px solid #646970;
+	border-top: 5px solid transparent;
+	border-bottom: 5px solid transparent;
+	transition: transform 0.15s ease;
+}
+.emblem-studio-wrap .es-display-rules > summary:hover { background: #f6f7f7; }
+.emblem-studio-wrap .es-display-rules[open] > summary {
+	background: #f6f7f7;
+	border-bottom: 1px solid #dcdcde;
+	border-radius: 6px 6px 0 0;
+}
+.emblem-studio-wrap .es-display-rules[open] > summary::before { transform: rotate(90deg); }
+.emblem-studio-wrap .es-dr-summary-note { font-weight: 400; font-size: 12px; }
+.emblem-studio-wrap .es-display-rules-body { padding: 12px; }
+
+/* Display rules layout: who/when gates side by side, then the page-targeting
+   include (Show on) / exclude (Hide on) pair side by side. */
+.emblem-studio-wrap .es-dr-gate-grid,
+.emblem-studio-wrap .es-dr-pagematch-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	align-items: start;
+}
+.emblem-studio-wrap .es-dr-pagematch-grid { margin-top: 12px; }
+@media (max-width: 900px) {
+	.emblem-studio-wrap .es-dr-gate-grid,
+	.emblem-studio-wrap .es-dr-pagematch-grid { grid-template-columns: 1fr; }
+}
+
+/* Green = where it shows (include), red = where it's blocked (exclude). Subtle
+   tint + left-rail accent + colored heading; the ✓ / ✕ badge carries the
+   meaning for anyone who can't distinguish the colors. */
+.emblem-studio-wrap .es-display-rules .es-dr-fieldset.es-dr-include {
+	border-left: 3px solid #46b450;
+	background: #f3faf5;
+}
+.emblem-studio-wrap .es-display-rules .es-dr-fieldset.es-dr-exclude {
+	border-left: 3px solid #d63638;
+	background: #fdf4f4;
+}
+.emblem-studio-wrap .es-dr-include legend strong { color: #1e7e34; }
+.emblem-studio-wrap .es-dr-exclude legend strong { color: #b32d2e; }
+.emblem-studio-wrap .es-dr-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1;
+	color: #fff;
+	vertical-align: text-bottom;
+}
+.emblem-studio-wrap .es-dr-badge-include { background: #46b450; }
+.emblem-studio-wrap .es-dr-badge-exclude { background: #d63638; }
+/* Reserves the height of the two Show-on radios on the Hide-on side so the
+   filter pickers in both columns line up. Hidden but still occupies space. */
+.emblem-studio-wrap .es-dr-align-spacer { visibility: hidden; }
+@media (max-width: 900px) {
+	/* Columns stack — no alignment to preserve, so reclaim the space. */
+	.emblem-studio-wrap .es-dr-align-spacer { display: none; }
+}
+
+.emblem-studio-wrap .es-display-rules .es-dr-summary.is-default { color: #646970; }
+.emblem-studio-wrap .es-display-rules .es-dr-summary.is-custom  { color: #1d2327; font-weight: 500; }
+.emblem-studio-wrap .es-display-rules .es-dr-summary.is-warning { color: #b32d2e; font-weight: 500; }
+.emblem-studio-wrap .es-display-rules .es-dr-fieldset { border: 1px solid #dcdcde; border-radius: 4px; padding: 8px 12px; background: #fff; }
+.emblem-studio-wrap .es-display-rules .es-dr-fieldset legend { padding: 0 6px; }
+.emblem-studio-wrap .es-display-rules .es-dr-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 12px;
+	margin-top: 8px;
+}
+.emblem-studio-wrap .es-display-rules .es-dr-cell { min-width: 0; }
+.emblem-studio-wrap .es-display-rules .es-dr-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #50575e; font-weight: 600; margin-bottom: 4px; }
+/* When show_mode=all, the show-filters grid is dimmed and non-interactive. */
+.emblem-studio-wrap .es-display-rules .es-dr-filters.is-disabled { opacity: 0.45; pointer-events: none; }
+
+/* Posts / pages chip pickers — sit beneath the 4-column filter grid, full width per cell. */
+.emblem-studio-wrap .es-display-rules .es-dr-pickers {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 12px;
+	margin-top: 12px;
+}
+.emblem-studio-wrap .es-display-rules .es-dr-picker-cell { min-width: 0; }
+
+.emblem-studio-wrap .es-content-picker {
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #fff;
+	padding: 4px 6px;
+	position: relative;
+}
+.emblem-studio-wrap .es-content-picker .es-content-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	min-height: 0;
+}
+.emblem-studio-wrap .es-content-picker .es-content-chips:not(:empty) { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #e5e5e7; }
+.emblem-studio-wrap .es-content-picker .es-content-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: var(--es-sunset-soft);
+	color: #1d2327;
+	padding: 2px 4px 2px 8px;
+	border: 1px solid #c3d6e4;
+	border-radius: 2px;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.4;
+}
+.emblem-studio-wrap .es-content-picker .es-content-chip-remove {
+	background: transparent;
+	border: 0;
+	padding: 0 4px;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	color: #50575e;
+	font-weight: 400;
+}
+.emblem-studio-wrap .es-content-picker .es-content-chip-remove:hover { color: #b32d2e; }
+.emblem-studio-wrap .es-content-picker .es-content-search-wrap { position: relative; }
+.emblem-studio-wrap .es-content-picker .es-content-search {
+	width: 100%;
+	border: 0 !important;
+	outline: 0 !important;
+	box-shadow: none !important;
+	background: transparent;
+	padding: 4px 2px;
+	font-size: 13px;
+}
+.emblem-studio-wrap .es-content-picker .es-content-suggestions {
+	position: absolute;
+	top: calc(100% + 2px);
+	left: -6px;
+	right: -6px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	max-height: 220px;
+	overflow-y: auto;
+	z-index: 20;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.emblem-studio-wrap .es-content-picker .es-content-suggestion {
+	padding: 6px 10px;
+	cursor: pointer;
+	font-size: 13px;
+	line-height: 1.4;
+}
+.emblem-studio-wrap .es-content-picker .es-content-suggestion:hover,
+.emblem-studio-wrap .es-content-picker .es-content-suggestion.is-active { background: var(--es-sunset-soft); }
+.emblem-studio-wrap .es-content-picker .es-content-suggestion.is-empty,
+.emblem-studio-wrap .es-content-picker .es-content-suggestion.is-loading { color: #8a8a8a; font-style: italic; cursor: default; }
+.emblem-studio-wrap .es-content-picker .es-content-suggestion.is-empty:hover,
+.emblem-studio-wrap .es-content-picker .es-content-suggestion.is-loading:hover { background: transparent; }
+.emblem-studio-wrap .es-forms-table .col-shortcode code {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: inline-block;
+	max-width: 100%;
+	box-sizing: border-box;
+	vertical-align: middle;
+}
+/* Top-align cells that span multiple shell rows so the form-level info
+   (Name, Updated, Actions) lines up with the first shell row. */
+.emblem-studio-wrap .es-forms-table td[rowspan] { vertical-align: top; }
+/* Each form renders as its own card. See the border-collapse note below
+   the actions section for the radii vs. double-border trade-off. */
+.emblem-studio-wrap .es-forms-table { border-spacing: 0; background: transparent; border: 0; }
+.emblem-studio-wrap .es-forms-table.widefat { border: 0; box-shadow: none; }
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr > td,
+.emblem-studio-wrap .es-forms-table.striped > tbody.es-form-group > tr > td { background: #fff; }
+/* Card-to-card gap lives as a spacer ROW inside each form-group
+ * tbody (not a separate spacer tbody). When jQuery UI reorders the
+ * tbodies, each spacer row moves WITH its parent group — no more
+ * orphaned gaps after a drop. The :last-of-type rule hides the
+ * spacer on whichever group is currently last in the DOM. */
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr.es-form-spacer-row > td {
+	padding: 0;
+	height: 7px;
+	/* Paint the gap with the page cream so the generic tbody tr:hover
+	   highlight can't bleed through the otherwise-transparent spacer. */
+	background: var(--es-gray-50);
+	border: 0;
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr.es-form-spacer-row:hover > td {
+	background: var(--es-gray-50);
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:last-of-type > tr.es-form-spacer-row {
+	display: none;
+}
+/* Breathing room between the header and the first card (mirrors the
+   between-card spacer; sits in its own static tbody so reordering the
+   form-group tbodies never moves it). */
+.emblem-studio-wrap .es-forms-table > tbody > tr.es-form-topspacer > td {
+	padding: 0;
+	height: 8px;
+	background: var(--es-gray-50);
+	border: 0;
+}
+
+/* Whole-card hover — lift the entire form card together (warm the white
+   cells + the outline) instead of the per-row flash that used to bleed
+   into the gap. The tinted conv/click columns keep their own colour, so
+   only the white cells and the border respond to hover. */
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:not(.es-form-spacer-row) > td:not(.es-col-conv):not(.es-col-click) {
+	background: #fff7ef;
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:first-child > td,
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:first-child > td[rowspan] {
+	border-top-color: var(--es-orange);
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:first-child > td[rowspan],
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:nth-last-child(2) > td {
+	border-bottom-color: var(--es-orange);
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:first-child > td:first-child {
+	border-left-color: var(--es-orange);
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:first-child > td:last-child {
+	border-right-color: var(--es-orange);
+}
+
+/* Forms-list actions cell — primary actions on row 1, destructive
+ * (Trash / Delete Permanently) on row 2 so the Trash text can't
+ * overflow the column on narrow widths. */
+.emblem-studio-wrap .es-actions-row {
+	display: block;
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-actions-row + .es-actions-row {
+	margin-top: 4px;
+}
+.emblem-studio-wrap .es-actions-sep {
+	color: var(--es-text-faint);
+	margin: 0 2px;
+}
+.emblem-studio-wrap .es-actions-destructive a {
+	color: var(--es-danger);
+}
+.emblem-studio-wrap .es-actions-destructive a:hover {
+	color: #991b1b;
+	text-decoration: underline;
+}
+/* Card outline. We draw it with cell borders because <tbody> can't reliably
+   carry border-radius. Top + bottom borders go on the first / last-VISIBLE
+   <tr>; left on the rowspan'd Name cell (first child of the first tr);
+   right on the rowspan'd Actions cell (last child of the first tr) —
+   both extend the full card height because of rowspan.
+   border-collapse: collapse merges adjacent borders so the thead's
+   bottom border doesn't visually double-up with the first card's top.
+   Trade-off accepted: collapse ignores per-cell border-radius, so the
+   bottom corners on the last card are square instead of rounded.
+   User chose this trade-off over chasing the corner fix further. */
+.emblem-studio-wrap .es-forms-table { border-collapse: collapse; }
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td { border-top: 1px solid var(--es-border-strong); }
+/* nth-last-child(2) targets the row right BEFORE the spacer-row (which is
+   always the literal last child of the tbody, sometimes hidden via
+   display:none on the last group). That row IS the last visible shell row
+   — exactly what we want to get the bottom border. */
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:nth-last-child(2) > td { border-bottom: 1px solid var(--es-border-strong); }
+/* Rowspan'd cells (Name, Updated, Actions) sit in the first <tr> but extend
+   to the bottom of the card — they need a bottom border too. */
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td[rowspan] { border-bottom: 1px solid var(--es-border-strong); }
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td:first-child {
+	border-left: 1px solid var(--es-border-strong);
+	border-top-left-radius: var(--es-radius-lg);
+	border-bottom-left-radius: var(--es-radius-lg);
+}
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td:last-child {
+	border-right: 1px solid var(--es-border-strong);
+	border-top-right-radius: var(--es-radius-lg);
+	border-bottom-right-radius: var(--es-radius-lg);
+}
+/* Inactive shell row (won't render — form inactive OR shell disabled OR blank):
+   dim everything so it reads as "off" at a glance. */
+.emblem-studio-wrap .es-forms-table tr.es-shell-row-inactive td { color: #8a8a8a; }
+.emblem-studio-wrap .es-forms-table tr.es-shell-row-inactive .es-shell-pill { opacity: 0.55; }
+
+/* Status as a pill badge (green = will render, neutral = off) rather than a
+   full-cell tint — lighter, reads cleaner against the warm card. */
+.emblem-studio-wrap .es-status-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 10px 2px 8px;
+	border-radius: var(--es-radius-pill);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-status-pill::before {
+	content: '';
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.emblem-studio-wrap .es-status-active   { background: var(--es-success-soft); color: #15803d; }
+.emblem-studio-wrap .es-status-active::before   { background: var(--es-success); }
+.emblem-studio-wrap .es-status-inactive { background: var(--es-gray-100); color: var(--es-text-muted); }
+.emblem-studio-wrap .es-status-inactive::before { background: var(--es-gray-400); }
+/* Active-but-not-rendering: amber = scheduled (not started yet), slate = expired
+   (window passed). Distinct from the green Active so the "why isn't it showing?"
+   case stands out at a glance. */
+.emblem-studio-wrap .es-status-scheduled { background: #fef3c7; color: #92400e; }
+.emblem-studio-wrap .es-status-scheduled::before { background: #d97706; }
+.emblem-studio-wrap .es-status-expired   { background: #e2e8f0; color: #475569; }
+.emblem-studio-wrap .es-status-expired::before   { background: #64748b; }
+/* Showing now, but has an end date still ahead ("scheduled to end") — sky, so
+   it reads as live-but-time-limited, distinct from plain green Active. */
+.emblem-studio-wrap .es-status-ending    { background: #e0f2fe; color: #075985; }
+.emblem-studio-wrap .es-status-ending::before    { background: #0ea5e9; }
+/* Schedule display-zone toggle (Site time / My local time) — a small joined
+   segmented control. Display only; times are always saved in site time. */
+.emblem-studio-wrap .es-tz-toggle { display: inline-flex; border: 1px solid var(--es-gray-300, #c3c4c7); border-radius: 6px; overflow: hidden; }
+.emblem-studio-wrap .es-tz-btn { appearance: none; border: 0; background: #fff; color: var(--es-text-muted, #646970); padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.emblem-studio-wrap .es-tz-btn + .es-tz-btn { border-left: 1px solid var(--es-gray-300, #c3c4c7); }
+.emblem-studio-wrap .es-tz-btn.is-active { background: var(--es-ink, #1d2327); color: #fff; }
+/* Click-to-copy shortcodes. */
+.es-copy { cursor: pointer; transition: background-color 0.15s; }
+.es-copy:hover { background: var(--es-sunset-soft); }
+.es-copy:active { background: #f6dfc4; }
+.es-copy-tip {
+	background: #1d2327;
+	color: #fff;
+	padding: 4px 10px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+	pointer-events: none;
+	z-index: 100000;
+	box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.es-copy-tip.is-visible { opacity: 1; transform: translate(-50%, -110%); }
+.es-copy-tip.is-error { background: #b32d2e; }
+
+/* ============================================================
+ * Tactical accent overrides — apply the chosen --es-accent to a
+ * handful of high-visibility elements that currently use WP's
+ * blue. Full design-system rollout is a separate pass (see
+ * docs/DESIGN-SYSTEM.md).
+ * ============================================================ */
+/* ============================================================
+ * Pass 2 — Button system
+ * ============================================================
+ * Two layers:
+ *
+ * 1. Global restyle of WP's .button + .button-primary inside our
+ *    scope. Every existing button (Save, Add new, pagination,
+ *    revision actions, etc.) gets the modern look automatically —
+ *    no template changes. WP's submit_button() helper keeps working.
+ *
+ * 2. Explicit .es-btn family for NEW components that want a variant
+ *    WP doesn't have (.es-btn-ghost, .es-btn-danger) or a different
+ *    size (.es-btn-sm 28px, .es-btn-lg 44px). Always paired with a
+ *    .es-btn-* variant class.
+ *
+ * Heights: sm 28px / md 36px (default) / lg 44px. Same height as the
+ * matching form input so they align in toolbars / sticky bars.
+ */
+
+/* --- Layer 1: WP button restyle ------------------------------ */
+.emblem-studio-wrap .button,
+.emblem-studio-wrap input.button,
+.emblem-studio-wrap input[type="submit"].button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 36px;
+	line-height: 1;
+	padding: 0 14px;
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-base);
+	font-weight: 500;
+	letter-spacing: 0;
+	border-radius: var(--es-radius-md);
+	border: 1px solid var(--es-border-strong);
+	background: var(--es-surface);
+	color: var(--es-text-strong);
+	box-shadow: var(--es-shadow-xs);
+	text-shadow: none;
+	cursor: pointer;
+	transition: background var(--es-duration-fast) var(--es-easing),
+				border-color var(--es-duration-fast) var(--es-easing),
+				color var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .button:hover,
+.emblem-studio-wrap .button:focus {
+	background: var(--es-surface-hover);
+	border-color: var(--es-text-muted);
+	color: var(--es-text-strong);
+	box-shadow: var(--es-shadow-sm);
+}
+.emblem-studio-wrap .button:active {
+	transform: translateY(1px);
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .button:focus-visible {
+	outline: 2px solid var(--es-accent, #2271b1);
+	outline-offset: 2px;
+}
+.emblem-studio-wrap .button:disabled,
+.emblem-studio-wrap .button.disabled,
+.emblem-studio-wrap .button[disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+	background: var(--es-surface);
+	border-color: var(--es-border-strong);
+	color: var(--es-text-muted);
+	box-shadow: none;
+	transform: none;
+}
+
+/* Primary — accent-filled. Overrides the .button base above. */
+.emblem-studio-wrap .button-primary {
+	background: var(--es-accent, #2271b1);
+	border-color: var(--es-accent, #2271b1);
+	color: #fff;
+}
+.emblem-studio-wrap .button-primary:hover,
+.emblem-studio-wrap .button-primary:focus {
+	background: var(--es-accent-hover, #135e96);
+	border-color: var(--es-accent-hover, #135e96);
+	color: #fff;
+}
+.emblem-studio-wrap .button-primary:active {
+	background: var(--es-accent-active, #135e96);
+	border-color: var(--es-accent-active, #135e96);
+}
+
+/* Sizes — applied via WP's existing .button-large / .button-small. */
+.emblem-studio-wrap .button.button-small {
+	height: 28px;
+	padding: 0 10px;
+	font-size: var(--es-text-sm);
+}
+.emblem-studio-wrap .button.button-large,
+.emblem-studio-wrap .button.button-hero {
+	height: 44px;
+	padding: 0 20px;
+	font-size: var(--es-text-md);
+}
+
+/* WP renders link-style buttons in some places (.button-link). Keep
+ * them visually link-y, just retoned to the accent. */
+.emblem-studio-wrap .button-link {
+	display: inline;
+	height: auto;
+	padding: 0;
+	background: transparent;
+	border: 0;
+	box-shadow: none;
+	color: var(--es-accent, #2271b1);
+	font-weight: 500;
+}
+.emblem-studio-wrap .button-link:hover {
+	color: var(--es-accent-hover, #135e96);
+	background: transparent;
+	border: 0;
+	box-shadow: none;
+	text-decoration: underline;
+}
+
+/* --- Layer 2: explicit .es-btn family for new components ----- */
+.emblem-studio-wrap .es-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 36px;
+	line-height: 1;
+	padding: 0 14px;
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-base);
+	font-weight: 500;
+	border-radius: var(--es-radius-md);
+	border: 1px solid transparent;
+	background: var(--es-surface);
+	color: var(--es-text-strong);
+	cursor: pointer;
+	transition: background var(--es-duration-fast) var(--es-easing),
+				border-color var(--es-duration-fast) var(--es-easing),
+				color var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing);
+	text-decoration: none;
+}
+.emblem-studio-wrap .es-btn:focus-visible {
+	outline: 2px solid var(--es-accent);
+	outline-offset: 2px;
+}
+.emblem-studio-wrap .es-btn:active { transform: translateY(1px); }
+.emblem-studio-wrap .es-btn:disabled,
+.emblem-studio-wrap .es-btn[disabled] { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.emblem-studio-wrap .es-btn-primary {
+	background: var(--es-accent);
+	border-color: var(--es-accent);
+	color: #fff;
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .es-btn-primary:hover {
+	background: var(--es-accent-hover);
+	border-color: var(--es-accent-hover);
+	box-shadow: var(--es-shadow-sm);
+}
+
+.emblem-studio-wrap .es-btn-secondary {
+	border-color: var(--es-border-strong);
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .es-btn-secondary:hover {
+	background: var(--es-surface-hover);
+	border-color: var(--es-text-muted);
+	box-shadow: var(--es-shadow-sm);
+}
+
+.emblem-studio-wrap .es-btn-ghost {
+	background: transparent;
+}
+.emblem-studio-wrap .es-btn-ghost:hover {
+	background: var(--es-surface-hover);
+	color: var(--es-text-strong);
+}
+
+.emblem-studio-wrap .es-btn-danger {
+	background: var(--es-danger);
+	border-color: var(--es-danger);
+	color: #fff;
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .es-btn-danger:hover {
+	background: #b91c1c;
+	border-color: #b91c1c;
+	box-shadow: var(--es-shadow-sm);
+}
+
+.emblem-studio-wrap .es-btn-sm { height: 28px; padding: 0 10px; font-size: var(--es-text-sm); }
+.emblem-studio-wrap .es-btn-lg { height: 44px; padding: 0 20px; font-size: var(--es-text-md); }
+
+/* ============================================================
+ * Page header — title + subtitle on the left, action buttons on
+ * the right. Replaces WP's float-based wp-heading-inline layout
+ * (which let .subsubsub float up beside the title). Shared by the
+ * Forms & Assets list and the Reports page.
+ * ============================================================ */
+/* Eyebrow pill — the recurring "Sunset" label above a page/section title.
+   Uppercase, sunset-soft fill, gradient dot. Reusable across admin pages. */
+.emblem-studio-wrap .es-eyebrow {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	margin: 0 0 var(--es-space-3);
+	padding: 4px 12px;
+	border: 1px solid #ffe0c4;
+	border-radius: var(--es-radius-pill);
+	background: var(--es-sunset-soft);
+	color: var(--es-orange);
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-xs);
+	font-weight: 700;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+}
+.emblem-studio-wrap .es-eyebrow .es-eyebrow-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--es-sunset);
+	flex-shrink: 0;
+}
+/* Horizon rule — a fading sunset hairline used as a section divider. */
+.emblem-studio-wrap .es-horizon {
+	height: 2px;
+	border: 0;
+	margin: 0 0 var(--es-space-5);
+	background: linear-gradient(90deg, transparent, var(--es-orange) 30%, var(--es-pink) 55%, transparent);
+	opacity: 0.55;
+}
+
+.emblem-studio-wrap .es-page-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--es-space-4);
+	flex-wrap: wrap;
+	margin: 0 0 var(--es-space-5);
+}
+.emblem-studio-wrap .es-page-header .es-page-title {
+	margin: 0;
+	font-family: var(--es-font-display);
+	font-size: var(--es-text-2xl);
+	font-weight: 700;
+	line-height: 1.2;
+}
+.emblem-studio-wrap .es-page-subtitle {
+	margin: var(--es-space-1) 0 0;
+	max-width: 60ch;
+	color: var(--es-text-muted);
+	font-size: var(--es-text-md);
+}
+.emblem-studio-wrap .es-page-header-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--es-space-2);
+	/* Nudge down so the button row aligns to the title baseline, not its top. */
+	padding-top: var(--es-space-1);
+}
+/* Inside the flex header, drop the left margin WP relies on for inline spacing. */
+.emblem-studio-wrap .es-page-header-actions .page-title-action { margin-left: 0; }
+/* Primary header action — sunset-gradient pill (e.g. "Add New"). */
+.emblem-studio-wrap .page-title-action.es-action-primary {
+	color: #fff;
+	background: var(--es-sunset-btn);
+	border-color: transparent;
+	box-shadow: var(--es-shadow-sun);
+}
+.emblem-studio-wrap .page-title-action.es-action-primary:hover,
+.emblem-studio-wrap .page-title-action.es-action-primary:focus {
+	color: #fff;
+	background: var(--es-sunset-btn);
+	border-color: transparent;
+	transform: translateY(-1px);
+	box-shadow: 0 16px 32px rgba(200, 110, 60, 0.30);
+}
+
+/* Status filter tabs (All / Active / Inactive / Trash) as a pill row.
+   Overrides WP's .subsubsub float so it no longer rides up next to the title. */
+.emblem-studio-wrap .es-filter-pills {
+	float: none;
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--es-space-1);
+	margin: 0 0 var(--es-space-4);
+	padding: 0;
+}
+.emblem-studio-wrap .es-filter-pills li { margin: 0; }
+.emblem-studio-wrap .es-filter-pills a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-pill);
+	padding: 5px 12px;
+	font-weight: 600;
+	color: var(--es-text);
+	background: var(--es-surface);
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				background var(--es-duration-fast) var(--es-easing),
+				color var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-filter-pills a:not(.current):hover {
+	border-color: var(--es-orange);
+	background: var(--es-sunset-soft);
+	color: var(--es-gray-900);
+}
+/* Solid accent fill for the selected filter — the soft-accent default read as
+   washed out. Extra .subsubsub specificity so this wins over the base rule. */
+.emblem-studio-wrap .subsubsub.es-filter-pills a.current {
+	background: var(--es-sunset-btn);
+	border-color: transparent;
+	color: #fff;
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .subsubsub.es-filter-pills a.current:hover {
+	background: var(--es-sunset-btn);
+	border-color: transparent;
+	color: #fff;
+}
+.emblem-studio-wrap .es-filter-pills .count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: var(--es-radius-pill);
+	background: var(--es-surface-hover);
+	font-size: var(--es-text-sm);
+	font-weight: 600;
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-filter-pills a.current .count {
+	background: var(--es-surface);
+	color: var(--es-accent, #2271b1);
+}
+
+/* WP's "Add New" header-action link sits next to <h1>. Restyle to
+ * match our secondary button so it doesn't read as a different system. */
+.emblem-studio-wrap .page-title-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 36px;
+	padding: 0 16px;
+	margin-left: 12px;
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-base);
+	font-weight: 600;
+	color: var(--es-text-strong);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border-strong);
+	border-radius: var(--es-radius-pill);
+	box-shadow: var(--es-shadow-xs);
+	text-decoration: none;
+	vertical-align: middle;
+	transition: background var(--es-duration-fast) var(--es-easing),
+				border-color var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .page-title-action:hover,
+.emblem-studio-wrap .page-title-action:focus {
+	background: var(--es-surface);
+	border-color: var(--es-orange);
+	transform: translateY(-1px);
+	box-shadow: var(--es-shadow-sm);
+	color: var(--es-text-strong);
+}
+/* ============================================================
+ * Pass 3 — Form controls + toggle switches
+ * ============================================================
+ * Restyle native text-like inputs / textareas / selects to match
+ * the button system: 36px tall, same border + radius treatment,
+ * Montserrat 13px, accent focus ring. Apply broadly across the
+ * scope so every form across every Emblem Studio screen lifts.
+ *
+ * The .CodeMirror textarea is excluded — it has its own layout
+ * and lives in a different visual lane (code authoring, not
+ * config). Multi-line textareas (.es-success-message,
+ * .es-html / .es-css editors when CodeMirror is off) get the
+ * same treatment with auto height.
+ */
+.emblem-studio-wrap input[type="text"],
+.emblem-studio-wrap input[type="email"],
+.emblem-studio-wrap input[type="url"],
+.emblem-studio-wrap input[type="number"],
+.emblem-studio-wrap input[type="search"],
+.emblem-studio-wrap input[type="tel"],
+.emblem-studio-wrap input[type="password"],
+.emblem-studio-wrap input[type="datetime-local"],
+.emblem-studio-wrap input[type="date"],
+.emblem-studio-wrap input[type="time"],
+.emblem-studio-wrap select {
+	height: 36px;
+	padding: 0 12px;
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-base);
+	line-height: 1;
+	color: var(--es-text-strong);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border-strong);
+	border-radius: var(--es-radius-md);
+	box-shadow: none;
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing);
+	box-sizing: border-box;
+}
+.emblem-studio-wrap textarea:not(.CodeMirror textarea) {
+	min-height: 88px;
+	padding: 10px 12px;
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-base);
+	line-height: var(--es-leading-normal);
+	color: var(--es-text-strong);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border-strong);
+	border-radius: var(--es-radius-md);
+	box-shadow: none;
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing);
+	box-sizing: border-box;
+}
+.emblem-studio-wrap input[type="text"]::placeholder,
+.emblem-studio-wrap input[type="email"]::placeholder,
+.emblem-studio-wrap input[type="url"]::placeholder,
+.emblem-studio-wrap textarea::placeholder { color: var(--es-text-faint); }
+
+.emblem-studio-wrap select {
+	/* Custom chevron — appearance:none kills the native arrow so we can
+	 * paint a single, consistent SVG that works across browsers + matches
+	 * the surrounding text color via currentColor. */
+	appearance: none;
+	-webkit-appearance: none;
+	padding-right: 32px;
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+	background-size: 12px 12px;
+}
+.emblem-studio-wrap select[multiple] {
+	background-image: none;
+	padding-right: 12px;
+	height: auto;
+	min-height: 88px;
+	padding: 6px;
+}
+
+/* Unified focus state — single source of truth, replaces the old
+ * scattered focus rules. Accent ring with offset for keyboard nav. */
+.emblem-studio-wrap input[type="text"]:focus,
+.emblem-studio-wrap input[type="email"]:focus,
+.emblem-studio-wrap input[type="url"]:focus,
+.emblem-studio-wrap input[type="number"]:focus,
+.emblem-studio-wrap input[type="search"]:focus,
+.emblem-studio-wrap input[type="tel"]:focus,
+.emblem-studio-wrap input[type="password"]:focus,
+.emblem-studio-wrap input[type="datetime-local"]:focus,
+.emblem-studio-wrap input[type="date"]:focus,
+.emblem-studio-wrap input[type="time"]:focus,
+.emblem-studio-wrap textarea:focus,
+.emblem-studio-wrap select:focus,
+.emblem-studio-wrap a:not(.button):not(.nav-tab):not(.es-tab):not(.button-link):focus-visible {
+	border-color: var(--es-accent, #2271b1);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--es-accent, #2271b1) 18%, transparent);
+	outline: none;
+}
+
+/* Native checkboxes + radios get their fill from WP's own
+ * var(--wp-admin-theme-color), which we re-point to the brand accent in
+ * the token block above — so the checked box, white check/dot, borders
+ * and focus ring all follow the sunset accent with no per-state hacks.
+ * accent-color covers range sliders + any natively-rendered control. */
+.emblem-studio-wrap input[type="checkbox"]:not(.es-toggle-input),
+.emblem-studio-wrap input[type="radio"],
+.emblem-studio-wrap input[type="range"] {
+	accent-color: var(--es-accent);
+}
+
+/* ============================================================
+ * Toggle switch — checkbox visually rendered as a 36×20 pill
+ * ============================================================
+ * Opt-in: any <input type="checkbox" class="es-toggle-input">
+ * renders as a switch. The checkbox stays semantic (form posts
+ * the same value, screen readers read it correctly) — only the
+ * visual changes. Pair with a sibling label/text however the
+ * template wants — we don't dictate the wrapper.
+ */
+.emblem-studio-wrap .es-toggle-input {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 34px;
+	height: 20px;
+	margin: 0;
+	padding: 0;
+	background: var(--es-gray-300);
+	border-radius: 9999px;
+	border: 0;
+	position: relative;
+	cursor: pointer;
+	vertical-align: middle;
+	transition: background var(--es-duration-fast) var(--es-easing);
+	flex-shrink: 0;
+	box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.emblem-studio-wrap .es-toggle-input::before {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2), 0 1px 1px rgba(15, 23, 42, 0.06);
+	transition: transform var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-toggle-input:checked {
+	background: var(--es-accent, #2271b1);
+}
+.emblem-studio-wrap .es-toggle-input:checked::before {
+	transform: translateX(14px);
+}
+.emblem-studio-wrap .es-toggle-input:focus-visible {
+	outline: 2px solid var(--es-accent, #2271b1);
+	outline-offset: 2px;
+}
+.emblem-studio-wrap .es-toggle-input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ============================================================
+ * Pass 4 — Semantic notices
+ * ============================================================
+ * Two layers:
+ *
+ * 1. Override WP's .notice variants inside our scope so every
+ *    existing inline notice (form saved, restored, duplicated,
+ *    imported, etc.) gets the new look automatically — no
+ *    template changes. WP's is-dismissible × close still works.
+ *
+ * 2. .es-notice classes for explicit usage in new components.
+ *
+ * Treatment per variant: soft tinted background + bold semantic
+ * color text + thick left border in the same bold color. Card-
+ * like in feel, never the WP yellow-and-blue strip look.
+ */
+
+/* Layer 1: WP .notice overrides */
+.emblem-studio-wrap .notice {
+	margin: 0 0 var(--es-space-4);
+	padding: var(--es-space-3) var(--es-space-4);
+	background: var(--es-info-soft);
+	border: 1px solid transparent;
+	border-left: 4px solid var(--es-info);
+	border-radius: var(--es-radius-md);
+	box-shadow: none;
+	color: var(--es-text-strong);
+	font-size: var(--es-text-base);
+}
+.emblem-studio-wrap .notice p {
+	margin: 0;
+	padding: 0;
+	font-size: inherit;
+	color: inherit;
+	line-height: var(--es-leading-normal);
+}
+.emblem-studio-wrap .notice-success {
+	background: var(--es-success-soft);
+	border-left-color: var(--es-success);
+}
+.emblem-studio-wrap .notice-warning {
+	background: var(--es-warning-soft);
+	border-left-color: var(--es-warning);
+}
+.emblem-studio-wrap .notice-error,
+.emblem-studio-wrap .notice-danger {
+	background: var(--es-danger-soft);
+	border-left-color: var(--es-danger);
+}
+.emblem-studio-wrap .notice-info {
+	background: var(--es-info-soft);
+	border-left-color: var(--es-info);
+}
+/* WP's dismissible close button — retone to inherit the notice color */
+.emblem-studio-wrap .notice-dismiss {
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .notice-dismiss:hover,
+.emblem-studio-wrap .notice-dismiss:focus {
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .notice-dismiss:focus {
+	box-shadow: none;
+	outline: 2px solid var(--es-accent);
+	outline-offset: 2px;
+}
+
+/* Layer 2: explicit .es-notice classes for new components */
+.emblem-studio-wrap .es-notice {
+	display: flex;
+	gap: var(--es-space-3);
+	align-items: flex-start;
+	margin: 0 0 var(--es-space-4);
+	padding: var(--es-space-3) var(--es-space-4);
+	border: 1px solid transparent;
+	border-left: 4px solid;
+	border-radius: var(--es-radius-md);
+	font-size: var(--es-text-base);
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-notice-success {
+	background: var(--es-success-soft);
+	border-left-color: var(--es-success);
+}
+.emblem-studio-wrap .es-notice-warning {
+	background: var(--es-warning-soft);
+	border-left-color: var(--es-warning);
+}
+.emblem-studio-wrap .es-notice-danger {
+	background: var(--es-danger-soft);
+	border-left-color: var(--es-danger);
+}
+.emblem-studio-wrap .es-notice-info {
+	background: var(--es-info-soft);
+	border-left-color: var(--es-info);
+}
+
+/* ============================================================
+ * Pass 5 — Cross-screen polish (Forms list / Reports / Trash /
+ * Leads / Settings logs)
+ * ============================================================
+ * Retones WP's stock list table + tablenav + subsubsub filter
+ * row + search box inside our scope so every "data screen"
+ * looks like one product. No template changes — WP's
+ * wp_list_table() output keeps working. */
+
+/* WP list table — borders + radii so it reads as a card */
+.emblem-studio-wrap .wp-list-table {
+	border-collapse: separate;
+	border-spacing: 0;
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	overflow: hidden;
+	background: var(--es-surface);
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .wp-list-table thead th,
+.emblem-studio-wrap .wp-list-table tfoot th {
+	background: var(--es-surface-muted);
+	border-bottom: 1px solid var(--es-border);
+	color: var(--es-text-muted);
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: var(--es-tracking-wide);
+	padding: var(--es-space-3) var(--es-space-4);
+}
+.emblem-studio-wrap .wp-list-table tbody td {
+	padding: var(--es-space-3) var(--es-space-4);
+	border-bottom: 1px solid var(--es-border);
+	font-size: var(--es-text-base);
+	color: var(--es-text);
+	vertical-align: middle;
+}
+.emblem-studio-wrap .wp-list-table tbody tr:last-child td { border-bottom: 0; }
+.emblem-studio-wrap .wp-list-table tbody tr:hover {
+	background: var(--es-surface-hover);
+}
+.emblem-studio-wrap .wp-list-table.striped tbody tr:nth-child(odd) {
+	background: transparent;            /* kill WP's zebra — hover-only feels cleaner */
+}
+.emblem-studio-wrap .wp-list-table.striped tbody tr:nth-child(odd):hover {
+	background: var(--es-surface-hover);
+}
+.emblem-studio-wrap .wp-list-table .check-column {
+	width: 2.5em;
+	padding-left: var(--es-space-4);
+}
+.emblem-studio-wrap .wp-list-table .row-actions {
+	color: var(--es-text-muted);
+	font-size: var(--es-text-sm);
+	padding-top: var(--es-space-1);
+}
+.emblem-studio-wrap .wp-list-table .row-actions a {
+	color: var(--es-text-muted);
+	text-decoration: none;
+}
+.emblem-studio-wrap .wp-list-table .row-actions a:hover {
+	color: var(--es-accent);
+}
+.emblem-studio-wrap .wp-list-table .row-actions .trash a { color: var(--es-danger); }
+
+/* Filter row — "All (n) | Active (n) | Inactive (n) | Trash (n)" */
+.emblem-studio-wrap .subsubsub {
+	margin: var(--es-space-4) 0 var(--es-space-3);
+	font-size: var(--es-text-base);
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .subsubsub li {
+	margin: 0;
+}
+.emblem-studio-wrap .subsubsub a {
+	color: var(--es-text-muted);
+	font-weight: 500;
+	text-decoration: none;
+	padding: 4px 10px;
+	border-radius: var(--es-radius-md);
+	transition: background var(--es-duration-fast), color var(--es-duration-fast);
+}
+.emblem-studio-wrap .subsubsub a:hover {
+	color: var(--es-text-strong);
+	background: var(--es-surface-hover);
+}
+.emblem-studio-wrap .subsubsub a.current {
+	color: var(--es-accent);
+	background: var(--es-accent-soft, var(--es-surface-hover));
+	font-weight: 600;
+}
+.emblem-studio-wrap .subsubsub .count {
+	color: var(--es-text-faint);
+	font-weight: 400;
+}
+
+/* Tablenav — pagination + bulk actions bar above/below the table */
+.emblem-studio-wrap .tablenav {
+	display: flex;
+	align-items: center;
+	gap: var(--es-space-3);
+	padding: var(--es-space-3) 0;
+	background: transparent;
+	border: 0;
+	height: auto;
+}
+.emblem-studio-wrap .tablenav .actions {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--es-space-2);
+	padding: 0;
+	background: transparent;
+}
+.emblem-studio-wrap .tablenav .tablenav-pages {
+	color: var(--es-text-muted);
+	font-size: var(--es-text-sm);
+	margin: 0 0 0 auto;
+}
+.emblem-studio-wrap .tablenav .tablenav-pages .pagination-links a,
+.emblem-studio-wrap .tablenav .tablenav-pages .pagination-links span {
+	min-width: 28px;
+	height: 28px;
+	padding: 0 6px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--es-radius-md);
+}
+.emblem-studio-wrap .tablenav .displaying-num {
+	color: var(--es-text-muted);
+	font-size: var(--es-text-sm);
+	margin-right: var(--es-space-2);
+}
+
+/* Search box on Leads list */
+.emblem-studio-wrap .search-box {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--es-space-2);
+	margin-bottom: var(--es-space-3);
+}
+
+/* Date range picker on Reports — the inline form with from/to dates +
+ * Filter button. Group them visually so it reads as one control bar. */
+.emblem-studio-wrap .es-date-range-form {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--es-space-2);
+	padding: var(--es-space-2) var(--es-space-3);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+	box-shadow: var(--es-shadow-xs);
+}
+
+/* WP form-table (Settings page) — retone label cells + remove
+ * the wide first column treatment that makes settings feel cramped */
+.emblem-studio-wrap .form-table {
+	border-spacing: 0;
+}
+.emblem-studio-wrap .form-table th {
+	padding: var(--es-space-4) var(--es-space-4) var(--es-space-4) 0;
+	color: var(--es-text-strong);
+	font-weight: 500;
+	width: 220px;
+	vertical-align: top;
+}
+.emblem-studio-wrap .form-table td {
+	padding: var(--es-space-4) 0;
+	vertical-align: top;
+}
+
+/* Section gap rhythm between adjacent <h2> sections on a settings page */
+.emblem-studio-wrap > h2,
+.emblem-studio-wrap form > h2 {
+	margin-top: var(--es-space-6);
+	margin-bottom: var(--es-space-3);
+	padding-bottom: var(--es-space-2);
+	border-bottom: 1px solid var(--es-border);
+}
+
+/* ============================================================
+ * Templates gallery — industry-bundle picker
+ * ============================================================ */
+.emblem-studio-wrap .es-templates-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: var(--es-space-4);
+	margin-top: var(--es-space-4);
+}
+.emblem-studio-wrap .es-template-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--es-space-3);
+	padding: var(--es-space-5);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	box-shadow: var(--es-shadow-xs);
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing);
+	text-decoration: none;
+	color: var(--es-text);
+}
+.emblem-studio-wrap .es-template-card:hover {
+	border-color: var(--es-border-strong);
+	box-shadow: var(--es-shadow-sm);
+	transform: translateY(-1px);
+}
+.emblem-studio-wrap .es-template-card-head {
+	display: flex;
+	flex-direction: column;
+	gap: var(--es-space-1);
+}
+.emblem-studio-wrap .es-template-card-eyebrow {
+	font-size: var(--es-text-xs);
+	letter-spacing: var(--es-tracking-wide);
+	text-transform: uppercase;
+	font-weight: 600;
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-template-card-title {
+	font-size: var(--es-text-xl);
+	font-weight: 600;
+	color: var(--es-text-strong);
+	margin: 0;
+	letter-spacing: var(--es-tracking-tight);
+}
+.emblem-studio-wrap .es-template-card-tagline {
+	font-size: var(--es-text-md);
+	line-height: var(--es-leading-normal);
+	color: var(--es-text);
+	margin: 0;
+}
+.emblem-studio-wrap .es-template-card-desc {
+	font-size: var(--es-text-sm);
+	color: var(--es-text-muted);
+	margin: 0;
+	line-height: var(--es-leading-normal);
+}
+.emblem-studio-wrap .es-template-card-forms {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: var(--es-space-2);
+}
+.emblem-studio-wrap .es-template-card-forms li {
+	display: flex;
+	align-items: center;
+	gap: var(--es-space-2);
+	font-size: var(--es-text-sm);
+	color: var(--es-text);
+	margin: 0;
+}
+.emblem-studio-wrap .es-template-form-name {
+	color: var(--es-text-strong);
+	font-weight: 500;
+}
+.emblem-studio-wrap .es-template-card-install {
+	margin-top: auto;
+	align-self: flex-start;
+}
+.emblem-studio-wrap .es-template-card-cta {
+	font-weight: 500;
+	color: var(--es-accent);
+	margin-top: auto;
+}
+.emblem-studio-wrap .es-template-card-blank {
+	background: var(--es-surface-muted);
+	border-style: dashed;
+}
+
+/* ============================================================
+ * Form picker (replaces direct-to-blank on Add New)
+ * ============================================================ */
+
+/* Blank card — wide, prominent, top of picker */
+.emblem-studio-wrap .es-picker-blank {
+	display: flex;
+	align-items: center;
+	gap: var(--es-space-4);
+	padding: var(--es-space-5);
+	margin: var(--es-space-4) 0 var(--es-space-5);
+	background: var(--es-surface);
+	border: 2px dashed var(--es-border-strong);
+	border-radius: var(--es-radius-lg);
+	text-decoration: none;
+	color: var(--es-text);
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				background var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-picker-blank:hover {
+	border-color: var(--es-accent);
+	background: var(--es-surface-hover);
+	transform: translateY(-1px);
+}
+.emblem-studio-wrap .es-picker-blank-icon {
+	flex-shrink: 0;
+	width: 56px;
+	height: 56px;
+	border-radius: var(--es-radius-md);
+	background: var(--es-surface-muted);
+	color: var(--es-text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 32px;
+	font-weight: 300;
+	line-height: 1;
+}
+.emblem-studio-wrap .es-picker-blank-body {
+	flex: 1;
+}
+.emblem-studio-wrap .es-picker-blank-body h2 {
+	margin: 0 0 4px;
+	font-size: var(--es-text-lg);
+	font-weight: 600;
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-picker-blank-body p {
+	margin: 0;
+	font-size: var(--es-text-sm);
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-picker-blank-cta {
+	color: var(--es-accent);
+	font-weight: 500;
+	font-size: var(--es-text-sm);
+	flex-shrink: 0;
+}
+
+/* Filter chips */
+.emblem-studio-wrap .es-picker-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--es-space-2);
+	margin: var(--es-space-4) 0 var(--es-space-3);
+	padding-bottom: var(--es-space-3);
+	border-bottom: 1px solid var(--es-border);
+}
+.emblem-studio-wrap .es-picker-filter {
+	padding: 6px 12px;
+	font-family: var(--es-font-sans);
+	font-size: var(--es-text-sm);
+	font-weight: 500;
+	color: var(--es-text-muted);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-pill);
+	cursor: pointer;
+	transition: background var(--es-duration-fast) var(--es-easing),
+				color var(--es-duration-fast) var(--es-easing),
+				border-color var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-picker-filter:hover {
+	background: var(--es-surface-hover);
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-picker-filter.is-active {
+	background: var(--es-accent);
+	border-color: var(--es-accent);
+	color: #fff;
+}
+.emblem-studio-wrap .es-picker-filter.is-active:hover {
+	background: var(--es-accent-hover);
+}
+
+/* Collections */
+.emblem-studio-wrap .es-picker-collections {
+	display: grid;
+	gap: var(--es-space-6);
+}
+.emblem-studio-wrap .es-picker-collection {
+	display: grid;
+	gap: var(--es-space-4);
+}
+.emblem-studio-wrap .es-picker-collection-head h2 {
+	margin: 0 0 4px;
+	font-size: var(--es-text-xl);
+	font-weight: 600;
+	color: var(--es-text-strong);
+	letter-spacing: var(--es-tracking-tight);
+}
+.emblem-studio-wrap .es-picker-collection-tag {
+	margin: 0;
+	font-size: var(--es-text-sm);
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-picker-collection.is-empty { display: none; }
+
+/* Template thumbnail grid */
+.emblem-studio-wrap .es-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: var(--es-space-4);
+}
+.emblem-studio-wrap .es-picker-card {
+	display: flex;
+	flex-direction: column;
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	overflow: hidden;
+	color: var(--es-text);
+	transition: border-color var(--es-duration-fast) var(--es-easing),
+				box-shadow var(--es-duration-fast) var(--es-easing),
+				transform var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-picker-card:hover {
+	border-color: var(--es-border-strong);
+	box-shadow: var(--es-shadow-md);
+	transform: translateY(-2px);
+}
+.emblem-studio-wrap .es-picker-card.is-filtered-out { display: none; }
+.emblem-studio-wrap .es-picker-card-thumb {
+	position: relative;
+	width: 100%;
+	height: 220px;
+	background: var(--es-surface-muted);
+	overflow: hidden;
+}
+.emblem-studio-wrap .es-picker-thumb-iframe {
+	width: 100%;
+	height: 100%;
+	border: 0;
+	display: block;
+	pointer-events: none;   /* visual only — never an install trigger */
+}
+.emblem-studio-wrap .es-picker-card-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--es-space-3);
+	padding: var(--es-space-3) var(--es-space-4) var(--es-space-2);
+	border-top: 1px solid var(--es-border);
+}
+.emblem-studio-wrap .es-picker-card-name {
+	margin: 0;
+	font-size: var(--es-text-md);
+	font-weight: 600;
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-picker-card-actions {
+	display: flex;
+	align-items: stretch;
+	gap: var(--es-space-2);
+	padding: 0 var(--es-space-4) var(--es-space-3);
+	margin-top: auto;
+}
+.emblem-studio-wrap .es-picker-card-actions .button {
+	flex: 1;
+	justify-content: center;
+}
+.emblem-studio-wrap .es-picker-card-actions .button-primary { flex: 2; }
+
+/* ============================================================
+ * Leads filter bar + status pills
+ * ============================================================ */
+.emblem-studio-wrap .es-leads-filter {
+	margin: var(--es-space-4) 0 var(--es-space-3);
+	padding: var(--es-space-4);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .es-leads-filter-grid {
+	display: grid;
+	grid-template-columns: 1.4fr 1fr 1fr 1fr 1.6fr auto;
+	gap: var(--es-space-3);
+	align-items: end;
+}
+.emblem-studio-wrap .es-leads-filter-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+.emblem-studio-wrap .es-leads-filter-field label {
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: var(--es-tracking-wide);
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-leads-filter-field input,
+.emblem-studio-wrap .es-leads-filter-field select {
+	width: 100%;
+}
+.emblem-studio-wrap .es-leads-filter-actions {
+	display: flex;
+	gap: var(--es-space-2);
+	align-items: center;
+}
+.emblem-studio-wrap .es-leads-filter-count {
+	margin: var(--es-space-3) 0 0;
+	font-size: var(--es-text-sm);
+}
+@media (max-width: 1024px) {
+	.emblem-studio-wrap .es-leads-filter-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+	.emblem-studio-wrap .es-leads-filter-email,
+	.emblem-studio-wrap .es-leads-filter-actions {
+		grid-column: 1 / -1;
+	}
+}
+@media (max-width: 600px) {
+	.emblem-studio-wrap .es-leads-filter-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Flat data tables (Leads, Tests, …) share the forms-list "standout"
+   gold header + warm row hover so every list reads as one family. */
+.emblem-studio-wrap .es-data-table thead th {
+	background: linear-gradient(180deg, #fdeada 0%, #fae0c6 100%);
+	color: var(--es-dusk-1);
+	border-bottom: 2px solid var(--es-orange);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+}
+.emblem-studio-wrap .es-data-table tbody tr:hover,
+.emblem-studio-wrap .es-data-table.striped tbody tr:nth-child(odd):hover {
+	background: #fff7ef;
+}
+
+/* Lead status pills — Synced / Failed / Pending */
+.emblem-studio-wrap .es-lead-status-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 10px;
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	border-radius: var(--es-radius-pill);
+	white-space: nowrap;
+}
+.emblem-studio-wrap .es-lead-status-pill::before {
+	content: '';
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+}
+.emblem-studio-wrap .es-lead-synced  { background: var(--es-success-soft); color: var(--es-success); }
+.emblem-studio-wrap .es-lead-failed  { background: var(--es-danger-soft);  color: var(--es-danger); }
+.emblem-studio-wrap .es-lead-pending { background: var(--es-warning-soft); color: var(--es-warning); }
+.emblem-studio-wrap .es-lead-bot     { background: var(--es-gray-100); color: var(--es-text-muted); }
+
+/* Bot leads — soft warm tint on the row + a small "BOT" tag in the name
+ * cell so an at-a-glance scan separates them from human leads even when
+ * the Bots tab is mixed with humans in the All view. */
+.emblem-studio-wrap tr.es-lead-row-bot {
+	background-color: #fdf6ee;
+}
+.emblem-studio-wrap tr.es-lead-row-bot td {
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-bot-tag {
+	display: inline-block;
+	padding: 1px 7px;
+	margin-right: 6px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	background: var(--es-dusk-1);
+	color: #fff;
+	border-radius: var(--es-radius-pill);
+	vertical-align: middle;
+}
+.emblem-studio-wrap .es-lead-bot-note {
+	font-size: 11px;
+	color: var(--es-text-muted);
+	margin-top: 3px;
+}
+.emblem-studio-wrap .es-lead-bot-note code {
+	background: transparent;
+	padding: 0;
+	font-size: 10px;
+	color: var(--es-text-faint);
+}
+
+/* Humans / Bots / All tab strip — uses WP's stock .subsubsub markup
+ * for layout, just adds the count badge tone. */
+.emblem-studio-wrap .es-leads-tabs {
+	margin: 6px 0 12px;
+}
+/* Count bubble styling comes from .es-filter-pills (shared with the
+   Forms list); no per-tab overrides needed here. */
+
+/* Form column on the leads list — don't break form names onto two lines.
+ * The form-link can shrink/ellipsize but should never wrap. */
+.emblem-studio-wrap .es-leads-col-form {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ============================================================
+ * Forms list — drag-reorder handle column
+ * ============================================================ */
+.emblem-studio-wrap .wp-list-table.es-forms-table .col-drag {
+	width: 26px;
+	padding-left: 6px;
+	padding-right: 0;
+}
+/* Using ns-resize (vertical double-arrow ↕) over grab/grabbing because:
+ *   - Drag-reorder is constrained to the Y axis here, so the cursor
+ *     semantically matches what the user can actually do
+ *   - ns-resize renders with a visible outline on every browser/OS,
+ *     including the Chrome-on-Windows case where grab silently
+ *     dropped its stroke and went white-on-white
+ *   - Applied to all descendants so the cursor doesn't flicker as the
+ *     pointer crosses between the td and the inner dashicon span */
+.emblem-studio-wrap .es-form-drag-handle,
+.emblem-studio-wrap .es-form-drag-handle *,
+.emblem-studio-wrap .ui-sortable-helper .es-form-drag-handle,
+.emblem-studio-wrap .ui-sortable-helper .es-form-drag-handle * {
+	cursor: ns-resize;
+}
+.emblem-studio-wrap .es-form-drag-handle {
+	vertical-align: middle;
+	color: var(--es-text-faint);
+	user-select: none;
+	transition: color var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-form-drag-handle:hover {
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-form-drag-handle .dashicons {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+	line-height: 18px;
+}
+
+/* The placeholder tbody jQuery UI inserts during drag — a soft accent
+ * outline at the drop target. */
+.emblem-studio-wrap .es-form-group-placeholder {
+	background: var(--es-surface-hover);
+	outline: 2px dashed var(--es-accent, #2271b1);
+	outline-offset: -2px;
+}
+.emblem-studio-wrap .es-form-group-placeholder td { visibility: hidden; }
+
+/* While being dragged, the row floats with a soft shadow */
+.emblem-studio-wrap .es-form-group.ui-sortable-helper {
+	box-shadow: 0 14px 32px -10px rgba(15, 23, 42, 0.25);
+	opacity: 0.95;
+	background: var(--es-surface);
+}
+
+/* ============================================================
+ * Connect tab — destination cards (FunnelKit, Webhooks, ...)
+ * ============================================================ */
+.emblem-studio-wrap .es-connect-card {
+	margin: var(--es-space-4) 0;
+	padding: var(--es-space-5);
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg);
+	box-shadow: var(--es-shadow-xs);
+}
+.emblem-studio-wrap .es-connect-card-head {
+	display: flex;
+	align-items: center;
+	gap: var(--es-space-3);
+	margin: 0 0 var(--es-space-3);
+	padding-bottom: var(--es-space-3);
+	border-bottom: 1px solid var(--es-border);
+}
+/* Title + tag live in their OWN baseline-aligned flex container so the
+ * tag text sits on the same baseline as the title text. The toggle
+ * still centers against this whole title block via the head's
+ * align-items: center. */
+.emblem-studio-wrap .es-connect-card-titles {
+	display: flex;
+	align-items: baseline;
+	gap: var(--es-space-3);
+	flex: 1;
+	min-width: 0;
+}
+.emblem-studio-wrap .es-connect-card-title {
+	margin: 0;
+	font-size: var(--es-text-lg);
+	font-weight: 600;
+	color: var(--es-text-strong);
+	line-height: 1.2;
+}
+.emblem-studio-wrap .es-connect-card-tag {
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	letter-spacing: var(--es-tracking-wide);
+	text-transform: uppercase;
+	color: var(--es-text-muted);
+	line-height: 1.2;
+}
+.emblem-studio-wrap .es-connect-card-active {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+/* Disabled state — when a destination's active toggle is OFF, hide the
+ * entire config body. Header (with the active toggle) stays visible so
+ * the user can flip it back on. Config is preserved in the DB; just
+ * not rendered until the destination is re-activated. */
+.emblem-studio-wrap .es-connect-card.is-destination-off {
+	background: var(--es-surface-muted);
+	padding-bottom: var(--es-space-3);
+}
+.emblem-studio-wrap .es-connect-card.is-destination-off .es-connect-card-head {
+	margin-bottom: 0;
+	padding-bottom: 0;
+	border-bottom: 0;
+}
+.emblem-studio-wrap .es-connect-card.is-destination-off .es-connect-card-title {
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-connect-card.is-destination-off .es-connect-card-body {
+	display: none;
+}
+
+/* Inside the Connect tab, override the global es-tab-panel as the card
+ * itself — drop the tab-panel's own card-y treatment so we don't get
+ * card-in-card (the cards inside ARE the visible content surfaces). */
+.emblem-studio-wrap #es-tab-connect {
+	background: transparent;
+	border: 0;
+	box-shadow: none;
+	padding: var(--es-space-2) 0 0;
+}
+
+/* ============================================================
+ * Webhook repeater rows (Connect tab → Webhooks card)
+ * ============================================================ */
+.emblem-studio-wrap .es-webhook-list {
+	display: grid;
+	gap: var(--es-space-3);
+	margin: var(--es-space-3) 0;
+}
+.emblem-studio-wrap .es-webhook-row {
+	display: grid;
+	gap: var(--es-space-3);
+	padding: var(--es-space-4);
+	background: var(--es-surface-muted);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+}
+.emblem-studio-wrap .es-webhook-row-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--es-space-2);
+}
+.emblem-studio-wrap .es-webhook-active {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--es-space-2);
+	font-size: var(--es-text-sm);
+	color: var(--es-text-strong);
+	font-weight: 500;
+}
+.emblem-studio-wrap .es-webhook-remove {
+	color: var(--es-text-faint) !important;
+	text-decoration: none;
+	font-size: 18px;
+	line-height: 1;
+	padding: 4px 10px;
+	background: transparent !important;
+	border: 0 !important;
+	box-shadow: none !important;
+	cursor: pointer;
+	border-radius: var(--es-radius-md);
+	transition: color var(--es-duration-fast) var(--es-easing), background var(--es-duration-fast) var(--es-easing);
+}
+.emblem-studio-wrap .es-webhook-remove:hover {
+	color: var(--es-danger) !important;
+	background: var(--es-danger-soft) !important;
+}
+.emblem-studio-wrap .es-webhook-grid {
+	display: grid;
+	grid-template-columns: 1.6fr 1fr;
+	gap: var(--es-space-3);
+}
+@media (max-width: 768px) {
+	.emblem-studio-wrap .es-webhook-grid { grid-template-columns: 1fr; }
+}
+.emblem-studio-wrap .es-webhook-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.emblem-studio-wrap .es-webhook-field label {
+	font-size: var(--es-text-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: var(--es-tracking-wide);
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-webhook-opt {
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+	color: var(--es-text-faint);
+}
+.emblem-studio-wrap .es-webhook-field input,
+.emblem-studio-wrap .es-webhook-field textarea {
+	width: 100%;
+	font-family: var(--es-font-mono);
+	font-size: var(--es-text-sm);
+}
+.emblem-studio-wrap .es-webhook-field textarea {
+	resize: vertical;
+	min-height: 56px;
+}
+.emblem-studio-wrap .es-webhook-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--es-space-3);
+}
+.emblem-studio-wrap .es-webhook-test-result {
+	font-size: var(--es-text-sm);
+	font-family: var(--es-font-mono);
+	color: var(--es-text-muted);
+}
+.emblem-studio-wrap .es-webhook-test-result.is-success { color: var(--es-success); }
+.emblem-studio-wrap .es-webhook-test-result.is-error   { color: var(--es-danger); }
+.emblem-studio-wrap .es-webhook-test-result.is-warning { color: var(--es-warning); }
+.emblem-studio-wrap .es-webhook-test-result.is-pending { color: var(--es-info); }
+.emblem-studio-wrap .es-webhook-add {
+	margin-top: var(--es-space-2);
+}
+
+/* ── Authoring help — Design-tab "copy spec / pre-prompt" links ─── */
+.emblem-studio-wrap .es-authoring-help {
+	margin: 0 0 var(--es-space-4);
+	padding: 14px 16px;
+	background: var(--es-surface-muted);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+}
+.emblem-studio-wrap .es-authoring-help-intro {
+	margin: 0 0 4px;
+	font-weight: 600;
+}
+.emblem-studio-wrap .es-authoring-help .description {
+	margin: 0 0 10px;
+}
+.emblem-studio-wrap .es-authoring-help-actions {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.emblem-studio-wrap .es-authoring-link {
+	appearance: none;
+	background: none;
+	border: 0;
+	padding: 0;
+	font: inherit;
+	color: var(--es-accent, #2271b1);
+	font-weight: 600;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.emblem-studio-wrap .es-authoring-link:hover { color: var(--es-accent-hover, #135e96); }
+.emblem-studio-wrap .es-authoring-help-sep { color: var(--es-text-muted); }
+
+/* ── Forms list — row action icons ─────────────────────────────── */
+.emblem-studio-wrap .es-actions-icons {
+	display: flex;
+	gap: 0;
+}
+.emblem-studio-wrap .es-action-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: var(--es-radius-sm);
+	color: var(--es-accent, #2271b1);
+	text-decoration: none;
+}
+.emblem-studio-wrap .es-action-icon:hover {
+	background: var(--es-surface-hover);
+	color: var(--es-accent-hover, #135e96);
+}
+.emblem-studio-wrap .es-action-icon .dashicons {
+	font-size: 17px;
+	width: 17px;
+	height: 17px;
+}
+.emblem-studio-wrap .es-action-icon.es-action-danger { color: var(--es-danger); }
+.emblem-studio-wrap .es-action-icon.es-action-danger:hover { background: #fdecec; }
+
+/* ── Conversion vs click column tints (scanability) ─────────────── */
+/* Applied on the Forms & Assets list AND on each asset's Stats-tab
+   per-shell table, so the two metric groups read the same way in both
+   places. */
+.emblem-studio-wrap .es-forms-table thead th.es-col-conv,
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr > td.es-col-conv,
+.emblem-studio-wrap .es-stats-table thead th.es-col-conv,
+.emblem-studio-wrap .es-stats-table tbody tr > td.es-col-conv {
+	background-color: #fdf4e6;
+}
+.emblem-studio-wrap .es-forms-table thead th.es-col-click,
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr > td.es-col-click,
+.emblem-studio-wrap .es-stats-table thead th.es-col-click,
+.emblem-studio-wrap .es-stats-table tbody tr > td.es-col-click {
+	background-color: #fbeaf0;
+}
+
+/* Concurrent-edit lock — take-over modal + locked-out banner. */
+.es-lock-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100050;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(15, 23, 42, 0.5);
+}
+.es-lock-modal[hidden] { display: none; }
+.es-lock-card {
+	width: 380px;
+	max-width: 90%;
+	background: #fff;
+	border-radius: 10px;
+	padding: 22px;
+	box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.5);
+	font-family: var(--es-font-sans);
+}
+.es-lock-title { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: #0f172a; }
+.es-lock-text { margin: 0 0 18px; font-size: 13px; line-height: 1.55; color: #475569; }
+.es-lock-who { font-weight: 600; color: #0f172a; }
+.es-lock-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.es-lock-banner {
+	position: fixed;
+	top: 32px;
+	left: 0;
+	right: 0;
+	z-index: 100040;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 10px 16px;
+	background: #fef2f2;
+	border-bottom: 1px solid #fecaca;
+	color: #991b1b;
+	font-size: 13px;
+	font-weight: 600;
+}
+.es-lock-banner[hidden] { display: none; }
+@media screen and (max-width: 782px) { .es-lock-banner { top: 46px; } }
+
+/* "Edit lock" badge on the assets list — someone has the asset open. */
+.es-lock-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	margin-left: 6px;
+	padding: 1px 7px 1px 5px;
+	border-radius: 10px;
+	background: #fef3c7;
+	border: 1px solid #fde68a;
+	color: #92400e;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+/* Copy-down (Lite): shells / assets the SaaS uses that Lite can't run — shown
+   struck through so the user sees what Lite deactivated vs. inactive by choice. */
+.es-lite-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 6px;
+	padding: 1px 8px;
+	border-radius: 10px;
+	background: #f1f5f9;
+	border: 1px solid #e2e8f0;
+	color: #64748b;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+.es-lite-badge s { color: #94a3b8; }
+.es-lite-badge-off {
+	background: #fee2e2;
+	border-color: #fecaca;
+	color: #b91c1c;
+}
+.es-lite-off-name {
+	text-decoration: line-through;
+	text-decoration-color: #cbd5e1;
+	color: #94a3b8 !important;
+}
+.es-lock-badge .dashicons {
+	font-size: 13px;
+	width: 13px;
+	height: 13px;
+	line-height: 13px;
+}
+.es-lock-badge.is-you {
+	background: var(--es-dusk-soft);
+	border-color: #c9d0e6;
+	color: var(--es-dusk-1);
+}
+
+/* ── Preview-first Design tab (single-version, saved assets) ───────── */
+.es-design-preview {
+	border: 1px solid #e2e8f0;
+	border-radius: 10px;
+	overflow: hidden;
+	background: #fff;
+}
+.es-design-preview-bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	border-bottom: 1px solid #e2e8f0;
+	background: #f8fafc;
+}
+.es-design-preview-spacer { flex: 1 1 auto; }
+.es-design-shells { display: inline-flex; }
+.es-design-shell {
+	border: 1px solid #cbd5e1;
+	background: #fff;
+	color: #475569;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 5px 12px;
+	cursor: pointer;
+	border-left-width: 0;
+}
+.es-design-shell:first-child { border-left-width: 1px; border-radius: 6px 0 0 6px; }
+.es-design-shell:last-child { border-radius: 0 6px 6px 0; }
+.es-design-shell:only-child { border-radius: 6px; }
+.es-design-shell:hover { background: #f1f5f9; }
+.es-design-shell.is-active {
+	background: var(--es-accent, #4f46e5);
+	border-color: var(--es-accent, #4f46e5);
+	color: #fff;
+}
+.es-design-preview-stage {
+	position: relative;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	min-height: 520px;
+	background: #f1f5f9;
+	overflow: auto; /* fixed widths wider than the stage scroll horizontally */
+}
+/* "Preview" badge in the toolbar — makes it unmistakable this is a preview,
+   not the live page. Lives in the bar (above the stage) so it never overlaps
+   a ribbon or other shell pinned to the top of the viewport. */
+.es-design-preview-tag {
+	display: inline-flex;
+	align-items: center;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: rgba(15, 23, 42, 0.72);
+	color: #fff;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.es-design-preview-frame {
+	display: block;
+	width: 100%; /* fluid default; the width buttons/slider set a fixed px */
+	height: 520px;
+	flex: 0 0 auto;
+	border: 0;
+	background: #fff;
+	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 8px 28px rgba(15, 23, 42, 0.14);
+}
+
+/* Preview width controls (320 / 480 / 768 / 1024 / Fluid + slider). */
+.es-design-width { display: inline-flex; align-items: center; gap: 8px; }
+.es-design-width button {
+	border: 1px solid #cbd5e1;
+	background: #fff;
+	color: #475569;
+	font: inherit;
+	font-size: 11.5px;
+	font-weight: 600;
+	padding: 4px 9px;
+	cursor: pointer;
+	border-left-width: 0;
+}
+.es-design-width button:first-of-type { border-left-width: 1px; border-radius: 6px 0 0 6px; }
+.es-design-width button:nth-of-type(5) { border-radius: 0 6px 6px 0; }
+.es-design-width button:hover { background: #f1f5f9; }
+.es-design-width button.is-active {
+	background: var(--es-accent, #4f46e5);
+	border-color: var(--es-accent, #4f46e5);
+	color: #fff;
+}
+.es-design-width-slider { width: 120px; accent-color: var(--es-accent, #4f46e5); }
+.es-design-width-label {
+	font-size: 11.5px;
+	color: #64748b;
+	font-variant-numeric: tabular-nums;
+	min-width: 44px;
+}
+
+/* Preview testing toggles — enforce required / submit for real. */
+.es-design-test { display: inline-flex; align-items: center; gap: 12px; }
+.es-design-test-opt {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: #475569;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.es-design-test-opt input { margin: 0; accent-color: var(--es-accent, #4f46e5); cursor: pointer; }
+.es-design-test-opt input:disabled { cursor: not-allowed; }
+.es-design-test-opt:has(input:disabled) { color: #94a3b8; }
+
+/* Hint for easy-to-miss shells (e.g. a ribbon pinned to a viewport edge). */
+.es-design-shell-hint {
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 3;
+	color: #94a3b8;
+	font-size: 16px;
+	font-weight: 600;
+	white-space: nowrap;
+	pointer-events: none;
+}
+.es-design-shell-hint.is-bottom { bottom: 64px; }
+.es-design-shell-hint.is-top { top: 64px; }
+
+/* Loading overlay — centered on both axes until the preview asset renders. */
+.es-design-loader {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #f1f5f9;
+	pointer-events: none;
+}
+.es-design-loader[hidden] { display: none; }
+.es-design-spinner {
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	border: 3px solid #d7dee8;
+	border-top-color: var(--es-accent, #4f46e5);
+	animation: es-design-spin 0.7s linear infinite;
+}
+@keyframes es-design-spin { to { transform: rotate(360deg); } }
+
+/* Shell-aware empty-state placeholder (shown when the asset has no HTML). */
+.es-design-placeholder {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	padding: 28px;
+	box-sizing: border-box;
+}
+.es-design-placeholder[hidden] { display: none; }
+.es-design-placeholder.is-card   { align-items: center;     justify-content: center; }
+.es-design-placeholder.is-bar    { align-items: flex-start; justify-content: center; }
+.es-design-placeholder.is-corner { align-items: flex-end;   justify-content: flex-end; }
+
+.es-design-ph-box {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: 6px;
+	max-width: 360px;
+	padding: 28px 30px;
+	background: #fff;
+	border: 2px dashed #cbd5e1;
+	border-radius: 16px;
+	color: #475569;
+}
+/* Ribbon → horizontal bar across the top. */
+.es-design-placeholder.is-bar .es-design-ph-box {
+	flex-direction: row;
+	align-items: center;
+	text-align: left;
+	gap: 14px;
+	width: 100%;
+	max-width: none;
+	border-radius: 10px;
+	padding: 16px 22px;
+}
+/* Slide-in → smaller corner card. */
+.es-design-placeholder.is-corner .es-design-ph-box { max-width: 280px; }
+
+.es-design-ph-icon {
+	flex: 0 0 auto;
+	width: 40px;
+	height: 40px;
+	border-radius: 11px;
+	background: var(--es-dusk-soft);
+	color: var(--es-accent, #4f46e5);
+	font-size: 26px;
+	line-height: 40px;
+	font-weight: 300;
+	text-align: center;
+}
+.es-design-ph-title { margin: 0; font-size: 15px; font-weight: 700; color: #0f172a; }
+.es-design-ph-text { margin: 0; font-size: 13px; line-height: 1.5; }
+
+/* ── Tooltips ─────────────────────────────────────────────────────────────
+   Instant tooltips for data-es-tip are now rendered by a cursor-following bubble
+   at <body> level (admin.js), so they escape overflow:hidden/auto ancestors
+   (e.g. scrollable stats tables) and never clip. Only the hover affordance
+   remains here. */
+[data-es-tip] { cursor: help; }
+
+/* Rate numbers (the "X% / Y%" pair): each becomes a pill that fills in on hover
+   so it's obvious which number the tooltip is describing. Padding is always
+   present so hovering doesn't shift the layout. */
+.emblem-studio-wrap .es-rate-num {
+	display: inline-block;
+	padding: 1px 6px;
+	border-radius: 9999px;
+	transition: background-color 80ms ease, color 80ms ease;
+}
+.emblem-studio-wrap .es-rate-num:hover {
+	background: #181a2e;
+	color: #fff;
+}
+.emblem-studio-wrap .es-rate-sep { color: var(--es-text-faint); }
+
+/* ============================================================
+   Reports redesign — tier-aware, two layouts (Journey / Grid).
+   Mirrors the SaaS Reports page: same cards, funnel, bars, deltas,
+   locked teasers, and preview switcher.
+   ============================================================ */
+.emblem-studio-wrap .es-rep-switcher {
+	display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+	margin: 12px 0 4px; padding: 8px 14px;
+	border: 1px dashed var(--es-border-strong); border-radius: var(--es-radius-lg);
+	background: var(--es-surface-muted);
+}
+.emblem-studio-wrap .es-rep-switcher-eyebrow {
+	font-size: var(--es-text-sm); font-weight: 700; letter-spacing: 0.05em;
+	text-transform: uppercase; color: var(--es-text-faint);
+}
+.emblem-studio-wrap .es-rep-seg-label { font-size: var(--es-text-base); color: var(--es-text-muted); }
+.emblem-studio-wrap .es-rep-seg {
+	display: inline-flex; border: 1px solid var(--es-border); border-radius: var(--es-radius-md);
+	background: var(--es-surface); padding: 2px; gap: 2px;
+}
+.emblem-studio-wrap .es-rep-seg a {
+	display: inline-block; padding: 3px 10px; border-radius: var(--es-radius-sm);
+	font-size: var(--es-text-base); font-weight: 500; color: var(--es-text-muted);
+	text-decoration: none; line-height: 1.6;
+}
+.emblem-studio-wrap .es-rep-seg a:hover { color: var(--es-text-strong); }
+.emblem-studio-wrap .es-rep-seg a.is-active { background: var(--es-accent); color: #fff; }
+.emblem-studio-wrap .es-rep-switcher-now { margin-left: auto; font-size: var(--es-text-base); color: var(--es-text-faint); }
+
+/* Headline deltas + accent tile */
+.emblem-studio-wrap .es-rep-vs { color: var(--es-text-faint); font-weight: 400; }
+.emblem-studio-wrap .es-kpi-accent {
+	background: linear-gradient(160deg, var(--es-accent-soft), var(--es-surface));
+	box-shadow: inset 0 0 0 1px var(--es-accent-soft);
+}
+.emblem-studio-wrap .es-rep-kpi-locked { justify-content: center; text-align: center; }
+.emblem-studio-wrap .es-rep-kpi-lock { margin-top: 4px; font-size: var(--es-text-base); color: var(--es-info); }
+
+/* Cards (shared by funnel / chart / breakdowns) */
+.emblem-studio-wrap .es-rep-card {
+	background: var(--es-surface); border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-lg); box-shadow: var(--es-shadow-xs);
+	padding: 18px 20px; margin-top: 18px;
+}
+.emblem-studio-wrap .es-rep-card-head {
+	display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px;
+}
+.emblem-studio-wrap .es-rep-card-head h2 {
+	margin: 0; font-family: var(--es-font-display); font-size: var(--es-text-xl);
+	font-weight: 600; color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-rep-card-sub { font-size: var(--es-text-base); color: var(--es-text-faint); }
+.emblem-studio-wrap .es-rep-card-note { margin: 0 0 12px; font-size: var(--es-text-md); color: var(--es-text-muted); }
+.emblem-studio-wrap .es-rep-empty {
+	margin: 4px 0 0; padding: 22px; text-align: center; border-radius: var(--es-radius-md);
+	background: var(--es-surface-muted); color: var(--es-text-faint); font-size: var(--es-text-md);
+}
+
+/* Grids */
+.emblem-studio-wrap .es-rep-grid { display: grid; gap: 18px; margin-top: 18px; }
+.emblem-studio-wrap .es-rep-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.emblem-studio-wrap .es-rep-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.emblem-studio-wrap .es-rep-grid > .es-rep-card { margin-top: 0; }
+@media (max-width: 1100px) {
+	.emblem-studio-wrap .es-rep-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 782px) {
+	.emblem-studio-wrap .es-rep-grid-2,
+	.emblem-studio-wrap .es-rep-grid-3 { grid-template-columns: 1fr; }
+}
+
+/* Funnel */
+.emblem-studio-wrap .es-rep-funnel { display: flex; flex-direction: column; gap: 12px; }
+.emblem-studio-wrap .es-rep-funnel-top { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--es-text-md); margin-bottom: 5px; }
+.emblem-studio-wrap .es-rep-funnel-label { font-weight: 600; color: var(--es-text-strong); }
+.emblem-studio-wrap .es-rep-funnel-n { font-variant-numeric: tabular-nums; color: var(--es-text-muted); }
+.emblem-studio-wrap .es-rep-funnel-bar { height: 12px; border-radius: var(--es-radius-pill); background: var(--es-gray-100); overflow: hidden; }
+.emblem-studio-wrap .es-rep-fill { display: block; height: 100%; border-radius: var(--es-radius-pill); }
+.emblem-studio-wrap .es-rep-fill-r { background: var(--es-gray-300); }
+.emblem-studio-wrap .es-rep-fill-s { background: #f1a566; }
+.emblem-studio-wrap .es-rep-fill-e { background: #e98f54; }
+.emblem-studio-wrap .es-rep-fill-c { background: var(--es-accent); }
+
+/* Horizontal bar rows (device) */
+.emblem-studio-wrap .es-rep-bars { display: flex; flex-direction: column; gap: 11px; }
+.emblem-studio-wrap .es-rep-bar-top { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--es-text-md); margin-bottom: 4px; color: var(--es-text); }
+.emblem-studio-wrap .es-rep-bar { height: 6px; border-radius: var(--es-radius-pill); background: var(--es-gray-100); overflow: hidden; }
+.emblem-studio-wrap .es-rep-bar > span { display: block; height: 100%; border-radius: var(--es-radius-pill); background: #e98f54; }
+
+/* Simple rows (page) */
+.emblem-studio-wrap .es-rep-rows { display: flex; flex-direction: column; gap: 7px; }
+.emblem-studio-wrap .es-rep-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: var(--es-text-md); }
+.emblem-studio-wrap .es-rep-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--es-text); }
+.emblem-studio-wrap .es-rep-row .es-rep-vs { white-space: nowrap; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.emblem-studio-wrap .es-rep-row strong { color: var(--es-text-strong); }
+
+/* Locked teaser cards */
+.emblem-studio-wrap .es-rep-locked-title { color: var(--es-text-faint) !important; }
+.emblem-studio-wrap .es-rep-tier-badge {
+	font-size: var(--es-text-sm); font-weight: 700; padding: 2px 8px; border-radius: var(--es-radius-pill);
+}
+.emblem-studio-wrap .es-rep-tier-free { background: var(--es-info-soft); color: var(--es-info); }
+.emblem-studio-wrap .es-rep-tier-paid { background: var(--es-warning-soft); color: var(--es-warning); }
+.emblem-studio-wrap .es-rep-lock-body {
+	display: flex; flex-direction: column; align-items: center; gap: 4px;
+	padding: 26px 10px; text-align: center;
+}
+.emblem-studio-wrap .es-rep-lock-ico { font-size: 22px; }
+.emblem-studio-wrap .es-rep-lock-msg { font-size: var(--es-text-md); font-weight: 600; color: var(--es-text-muted); }
+
+/* Lite-edition upsell card — shown where an account-only feature would be. */
+.emblem-studio-wrap .es-lite-upsell {
+	border: 1px dashed var(--es-border, #d6d6e0);
+	border-radius: 12px;
+	padding: 16px 18px;
+	background: linear-gradient(135deg, rgba(226,125,64,0.06), rgba(210,86,126,0.06));
+}
+.emblem-studio-wrap .es-lite-upsell-eyebrow {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #cf6438;
+	margin-bottom: 6px;
+}
+.emblem-studio-wrap .es-lite-upsell strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.emblem-studio-wrap .es-lite-upsell p { margin: 0; font-size: 12px; color: var(--es-text-muted, #6c7180); line-height: 1.5; }

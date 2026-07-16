@@ -1,0 +1,373 @@
+<?php
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+class ES_Leads {
+
+	public const PER_PAGE = 20;
+
+	/**
+	 * Parse the filter set out of a request array (typically $_GET).
+	 * Single source of truth — both the list view and the CSV export
+	 * route through this so the filter shape is identical everywhere.
+	 *
+	 * Returns: [
+	 *   'form_id' => int|null,
+	 *   'from'    => string|null  (YYYY-MM-DD),
+	 *   'to'      => string|null  (YYYY-MM-DD),
+	 *   'status'  => 'all'|'synced'|'failed'|'pending',
+	 *   'email'   => string|null  (search term, partial match),
+	 *   'kind'    => 'humans'|'bots'|'all',  (default 'humans')
+	 * ]
+	 */
+	public static function parse_filters( array $request ): array {
+		$form_id = isset( $request['form_id'] ) && (int) $request['form_id'] > 0 ? (int) $request['form_id'] : null;
+
+		$from = isset( $request['from'] ) ? trim( (string) $request['from'] ) : '';
+		$to   = isset( $request['to'] )   ? trim( (string) $request['to'] )   : '';
+		// Validate YYYY-MM-DD shape — anything else gets dropped.
+		$from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $from ) ? $from : null;
+		$to   = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $to )   ? $to   : null;
+
+		$status_in = isset( $request['status'] ) ? sanitize_key( (string) $request['status'] ) : 'all';
+		$status    = in_array( $status_in, [ 'synced', 'failed', 'pending' ], true ) ? $status_in : 'all';
+
+		$email_raw = isset( $request['email'] ) ? trim( (string) $request['email'] ) : '';
+		$email     = $email_raw !== '' ? sanitize_text_field( $email_raw ) : null;
+
+		// Bot / human partition. Default = humans so the page never shows
+		// honeypot rows on first load; the user has to opt in.
+		$kind_in = isset( $request['kind'] ) ? sanitize_key( (string) $request['kind'] ) : 'humans';
+		$kind    = in_array( $kind_in, [ 'humans', 'bots', 'all' ], true ) ? $kind_in : 'humans';
+
+		return [
+			'form_id' => $form_id,
+			'from'    => $from,
+			'to'      => $to,
+			'status'  => $status,
+			'email'   => $email,
+			'kind'    => $kind,
+		];
+	}
+
+	/**
+	 * Build the WHERE clause + prepare-args for a given filter set.
+	 * Returns [ 'sql' => string, 'args' => array ] where sql is empty
+	 * or starts with "WHERE ...".
+	 */
+	private static function build_where( array $f ): array {
+		$clauses = [];
+		$args    = [];
+		if ( ! empty( $f['form_id'] ) ) {
+			$clauses[] = 'l.form_id = %d';
+			$args[]    = (int) $f['form_id'];
+		}
+		if ( ! empty( $f['from'] ) ) {
+			$clauses[] = 'l.created_at >= %s';
+			$args[]    = $f['from'] . ' 00:00:00';
+		}
+		if ( ! empty( $f['to'] ) ) {
+			$clauses[] = 'l.created_at <= %s';
+			$args[]    = $f['to'] . ' 23:59:59';
+		}
+		if ( ! empty( $f['status'] ) ) {
+			switch ( $f['status'] ) {
+				case 'synced':
+					$clauses[] = 'l.funnelkit_pushed = 1';
+					break;
+				case 'failed':
+					$clauses[] = '(l.error IS NOT NULL AND l.error <> %s)';
+					$args[]    = '';
+					break;
+				case 'pending':
+					$clauses[] = 'l.funnelkit_pushed = 0 AND (l.error IS NULL OR l.error = %s)';
+					$args[]    = '';
+					break;
+			}
+		}
+		if ( ! empty( $f['email'] ) ) {
+			global $wpdb;
+			$clauses[] = 'l.email LIKE %s';
+			$args[]    = '%' . $wpdb->esc_like( strtolower( $f['email'] ) ) . '%';
+		}
+		// Bot partition. 'all' means no clause; default ('humans') hides
+		// honeypot rows. 'bots' shows only them.
+		$kind = $f['kind'] ?? 'humans';
+		if ( $kind === 'humans' ) {
+			$clauses[] = 'l.is_bot = 0';
+		} elseif ( $kind === 'bots' ) {
+			$clauses[] = 'l.is_bot = 1';
+		}
+		$sql = $clauses ? 'WHERE ' . implode( ' AND ', $clauses ) : '';
+		return [ 'sql' => $sql, 'args' => $args ];
+	}
+
+	/**
+	 * Per-tab counts (humans / bots / all) for the segmented control on
+	 * the leads page. Honors every other active filter so the badge
+	 * reflects "if you switched, this is what you'd see". One query so
+	 * the page render doesn't pay three round-trips.
+	 */
+	public static function counts_by_kind( array $filters ): array {
+		global $wpdb;
+		$leads = ES_Install::table( 'leads' );
+		// Build a where clause that EXCLUDES the kind filter — we want
+		// counts split out by kind, not pre-filtered to one of them.
+		$f = $filters;
+		$f['kind'] = 'all';
+		$where = self::build_where( $f );
+		$sql = "SELECT
+			SUM(CASE WHEN l.is_bot = 0 THEN 1 ELSE 0 END) AS humans,
+			SUM(CASE WHEN l.is_bot = 1 THEN 1 ELSE 0 END) AS bots,
+			COUNT(*) AS total
+			FROM $leads l {$where['sql']}";
+		$row = $where['args']
+			? $wpdb->get_row( $wpdb->prepare( $sql, $where['args'] ) )
+			: $wpdb->get_row( $sql );
+		return [
+			'humans' => (int) ( $row->humans ?? 0 ),
+			'bots'   => (int) ( $row->bots ?? 0 ),
+			'all'    => (int) ( $row->total ?? 0 ),
+		];
+	}
+
+	/**
+	 * Returns [ 'rows' => array, 'total' => int ] for the leads list.
+	 * Accepts either a filter array (preferred) or — for backward compat
+	 * with the previous signature — an int form_id as the second arg.
+	 */
+	public static function paginated( int $page = 1, $filters = null ): array {
+		global $wpdb;
+		$leads = ES_Install::table( 'leads' );
+		$forms = ES_Install::table( 'forms' );
+
+		$page   = max( 1, $page );
+		$offset = ( $page - 1 ) * self::PER_PAGE;
+
+		// Backward-compat: callers passing just an int form_id still work.
+		if ( is_int( $filters ) ) {
+			$filters = [ 'form_id' => $filters ];
+		}
+		$filters = is_array( $filters ) ? $filters : [];
+
+		$where = self::build_where( $filters );
+
+		$count_sql = "SELECT COUNT(*) FROM $leads l {$where['sql']}";
+		$total     = (int) ( $where['args'] ? $wpdb->get_var( $wpdb->prepare( $count_sql, $where['args'] ) ) : $wpdb->get_var( $count_sql ) );
+
+		$rows_sql = "SELECT l.id, l.created_at, l.email, l.extra_fields,
+				l.funnelkit_pushed, l.funnelkit_contact_id, l.error,
+				l.is_bot, l.ip,
+				f.id AS form_id, f.name AS form_name, f.slug AS form_slug
+			FROM $leads l
+			LEFT JOIN $forms f ON f.id = l.form_id
+			{$where['sql']}
+			ORDER BY l.id DESC
+			LIMIT %d OFFSET %d";
+		$args = array_merge( $where['args'], [ self::PER_PAGE, $offset ] );
+		$rows = $wpdb->get_results( $wpdb->prepare( $rows_sql, $args ) );
+
+		return [ 'rows' => $rows ?: [], 'total' => $total ];
+	}
+
+	/**
+	 * Extract a displayable name from a lead's extra_fields JSON. Falls back to '—'.
+	 */
+	public static function display_name( ?string $extra_json ): string {
+		if ( ! $extra_json ) {
+			return '—';
+		}
+		$x = json_decode( $extra_json, true );
+		if ( ! is_array( $x ) ) {
+			return '—';
+		}
+		$parts = array_filter( [
+			$x['first_name'] ?? '',
+			$x['last_name']  ?? '',
+		], fn( $v ) => $v !== '' );
+		if ( ! $parts ) {
+			return $x['name'] ?? '—';
+		}
+		return implode( ' ', $parts );
+	}
+
+	public static function delete( int $id ): bool {
+		global $wpdb;
+		return (bool) $wpdb->delete( ES_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] );
+	}
+
+	/**
+	 * Reclassify a bot lead as a human (flips is_bot to 0). Optional
+	 * second arg controls whether the saved fields get pushed to
+	 * FunnelKit + per-form webhooks retroactively — that's the whole
+	 * reason for the button (deliver the freebie a real visitor missed).
+	 *
+	 * Returns: [ 'ok' => bool, 'message' => string|null ]
+	 */
+	public static function move_to_humans( int $lead_id, bool $push = true ): array {
+		global $wpdb;
+		$leads_table = ES_Install::table( 'leads' );
+
+		$lead = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $leads_table WHERE id = %d", $lead_id ) );
+		if ( ! $lead ) {
+			return [ 'ok' => false, 'message' => __( 'Lead not found.', 'emblem-studio' ) ];
+		}
+		if ( (int) $lead->is_bot !== 1 ) {
+			return [ 'ok' => false, 'message' => __( 'Lead is already a human.', 'emblem-studio' ) ];
+		}
+
+		$wpdb->update( $leads_table, [ 'is_bot' => 0 ], [ 'id' => $lead_id ] );
+
+		if ( ! $push ) {
+			return [ 'ok' => true, 'message' => null ];
+		}
+
+		// Best-effort retroactive push. If the form is gone or its FK
+		// destination is disabled, we silently leave the lead as a human
+		// and the user can deal with it manually.
+		$form = ES_Form_Repo::find( (int) $lead->form_id );
+		if ( ! $form ) {
+			return [ 'ok' => true, 'message' => __( 'Moved to Humans. Source form is gone — nothing was pushed.', 'emblem-studio' ) ];
+		}
+		$extra = $lead->extra_fields ? json_decode( (string) $lead->extra_fields, true ) : [];
+		$extra = is_array( $extra ) ? $extra : [];
+		$first = (string) ( $extra['first_name'] ?? '' );
+		$last  = (string) ( $extra['last_name']  ?? '' );
+		$phone = (string) ( $extra['phone']      ?? '' );
+
+		$fk_enabled = ! isset( $form->funnelkit_enabled ) || ! empty( $form->funnelkit_enabled );
+		if ( $fk_enabled ) {
+			$push_res = ES_FunnelKit::push( [
+				'email'         => (string) $lead->email,
+				'first_name'    => $first,
+				'last_name'     => $last,
+				'phone'         => $phone,
+				'custom_fields' => $extra,
+			] );
+			$wpdb->update( $leads_table, [
+				'funnelkit_pushed'     => $push_res['ok'] ? 1 : 0,
+				'funnelkit_contact_id' => $push_res['contact_id'] ?? null,
+				'error'                => $push_res['ok'] ? null : ( $push_res['error'] ?? 'Unknown' ),
+			], [ 'id' => $lead_id ] );
+		}
+
+		// Per-form webhook fan-out.
+		if ( class_exists( 'ES_Webhooks' ) ) {
+			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, null );
+			ES_Webhooks::send_for_form( $form, $payload );
+		}
+
+		return [ 'ok' => true, 'message' => null ];
+	}
+
+	public static function delete_by_email( string $email ): int {
+		global $wpdb;
+		$normalized = strtolower( trim( $email ) );
+		return (int) $wpdb->delete( ES_Install::table( 'leads' ), [ 'email' => $normalized ], [ '%s' ] );
+	}
+
+	public static function find_by_email( string $email ): array {
+		global $wpdb;
+		$t = ES_Install::table( 'leads' );
+		$normalized = strtolower( trim( $email ) );
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE email = %s ORDER BY id DESC", $normalized ) );
+	}
+
+	/**
+	 * Stream a CSV of leads filtered by the same shape `paginated()` uses.
+	 * Accepts either a filter array (preferred) or an int form_id for
+	 * backward compat with the v0.x-era export handler.
+	 */
+	public static function stream_csv( $filters = null ): void {
+		global $wpdb;
+		$leads = ES_Install::table( 'leads' );
+		$forms = ES_Install::table( 'forms' );
+
+		if ( is_int( $filters ) ) {
+			$filters = [ 'form_id' => $filters ];
+		}
+		$filters = is_array( $filters ) ? $filters : [];
+
+		$where = self::build_where( $filters );
+
+		$sql = "SELECT l.id, l.created_at, l.email, l.extra_fields,
+				l.funnelkit_pushed, l.funnelkit_contact_id, l.error,
+				f.name AS form_name, f.slug AS form_slug
+			FROM $leads l LEFT JOIN $forms f ON f.id = l.form_id
+			{$where['sql']}
+			ORDER BY l.id DESC";
+		$rows = $where['args']
+			? $wpdb->get_results( $wpdb->prepare( $sql, $where['args'] ), ARRAY_A )
+			: $wpdb->get_results( $sql, ARRAY_A );
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="' . self::csv_filename( $filters ) . '"' );
+
+		$out = fopen( 'php://output', 'w' );
+		fputs( $out, "\xEF\xBB\xBF" );
+		fputcsv( $out, [ 'id', 'created_at', 'form', 'form_slug', 'email', 'first_name', 'last_name', 'phone', 'tags', 'custom_fields', 'funnelkit_pushed', 'funnelkit_contact_id', 'error' ] );
+
+		foreach ( (array) $rows as $r ) {
+			$extra = $r['extra_fields'] ? json_decode( $r['extra_fields'], true ) : [];
+			$extra = is_array( $extra ) ? $extra : [];
+			$first = $extra['first_name'] ?? '';
+			$last  = $extra['last_name']  ?? '';
+			$phone = $extra['phone']      ?? '';
+			$tags  = isset( $extra['tags'] ) ? ( is_array( $extra['tags'] ) ? implode( '|', $extra['tags'] ) : (string) $extra['tags'] ) : '';
+			unset( $extra['first_name'], $extra['last_name'], $extra['phone'], $extra['tags'] );
+
+			$row = [
+				$r['id'], $r['created_at'], $r['form_name'], $r['form_slug'], $r['email'],
+				$first, $last, $phone, $tags,
+				$extra ? wp_json_encode( $extra ) : '',
+				$r['funnelkit_pushed'], $r['funnelkit_contact_id'], $r['error'],
+			];
+			fputcsv( $out, array_map( [ self::class, 'neutralize_formula' ], $row ) );
+		}
+		fclose( $out );
+		exit;
+	}
+
+	/**
+	 * Build a CSV filename that reflects the active filter so the user
+	 * can tell which file is which when they've exported multiple. Falls
+	 * back to a plain dated filename when no filter is active.
+	 */
+	private static function csv_filename( array $filters ): string {
+		$parts = [ 'emblem-studio-leads' ];
+		if ( ! empty( $filters['form_id'] ) ) {
+			$parts[] = 'form-' . (int) $filters['form_id'];
+		}
+		if ( ! empty( $filters['from'] ) ) {
+			$parts[] = 'from-' . $filters['from'];
+		}
+		if ( ! empty( $filters['to'] ) ) {
+			$parts[] = 'to-' . $filters['to'];
+		}
+		if ( ! empty( $filters['status'] ) && $filters['status'] !== 'all' ) {
+			$parts[] = $filters['status'];
+		}
+		$parts[] = gmdate( 'Y-m-d' );
+		return implode( '-', $parts ) . '.csv';
+	}
+
+	/**
+	 * Defend against CSV formula injection: when Excel/Sheets opens a CSV cell that
+	 * starts with =, +, -, @, tab, or CR, it interprets the cell as a formula.
+	 * A submitted name like `=cmd|'/c calc.exe'!A1` would execute on open.
+	 * Prefix any such cell with a single quote so it's treated as text.
+	 */
+	private static function neutralize_formula( $value ): string {
+		$value = (string) $value;
+		if ( $value === '' ) {
+			return $value;
+		}
+		$first = $value[0];
+		if ( $first === '=' || $first === '+' || $first === '-' || $first === '@' || $first === "\t" || $first === "\r" ) {
+			return "'" . $value;
+		}
+		return $value;
+	}
+}
