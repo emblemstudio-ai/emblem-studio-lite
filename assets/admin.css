@@ -2746,6 +2746,73 @@
 	table-layout: auto;
 	min-width: 1700px;
 }
+
+/* ── Sticky identity lane (drag · checkbox · name) ─────────────────
+   The table is 1700px+ across 16 columns, so scrolling out to Drop-off rate
+   leaves the row anonymous — you can read the numbers but not whose they are.
+   Pin the identity cells; the stats scroll underneath them.
+
+   The offsets must be EXACT: a `left` that disagrees with the real column width
+   by a pixel reads as a seam or an overlap. So the checkbox column is pinned to
+   a px width here rather than the 2.4em it carries above — an em resolves
+   against whatever font-size wins the cascade, which is not something a `left`
+   can be computed from. The drag column exists only on the All tab
+   (.es-forms-reorderable), so every offset after it shifts with it: hence the
+   variable rather than three hardcoded numbers.
+
+   No background is declared here on purpose. These cells are already opaque
+   (#fff, further down) and the group-hover rule repaints them #fff7ef — a
+   background here would beat the hover and freeze the lane white while the rest
+   of the card lit up. */
+.emblem-studio-wrap .es-forms-table {
+	--es-lane-drag: 0px;
+	--es-lane-cb: 34px;
+}
+.emblem-studio-wrap .es-forms-table.es-forms-reorderable { --es-lane-drag: 26px; }
+
+.emblem-studio-wrap .es-forms-table .col-drag,
+.emblem-studio-wrap .es-forms-table .col-cb,
+.emblem-studio-wrap .es-forms-table .col-name {
+	position: sticky;
+	z-index: 2;
+}
+/* Where the pinned lane crosses the header, the header wins. */
+.emblem-studio-wrap .es-forms-table thead th.col-drag,
+.emblem-studio-wrap .es-forms-table thead th.col-cb,
+.emblem-studio-wrap .es-forms-table thead th.col-name { z-index: 3; }
+
+.emblem-studio-wrap .es-forms-table .col-drag { left: 0; }
+.emblem-studio-wrap .es-forms-table .col-cb {
+	left: var(--es-lane-drag);
+	width: var(--es-lane-cb);
+	min-width: var(--es-lane-cb);
+	max-width: var(--es-lane-cb);
+}
+.emblem-studio-wrap .es-forms-table .col-name { left: calc(var(--es-lane-drag) + var(--es-lane-cb)); }
+
+/* border-collapse: collapse (further down) hands the card's left border to the
+   table's border grid rather than to the cell — so it stays behind at the
+   table's real edge and slides out of view the moment the lane is pinned. An
+   inset shadow belongs to the cell and travels with it. Unscrolled the two sit
+   exactly on top of each other, so this costs nothing when it isn't needed. */
+.emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td:first-child {
+	box-shadow: inset 1px 0 0 var(--es-border-strong);
+}
+
+/* The lane's trailing edge, so a pinned column reads as pinned rather than as a
+   column that happens to be sitting there. */
+.emblem-studio-wrap .es-forms-table .col-name::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 0;
+	width: 6px;
+	transform: translateX(100%);
+	pointer-events: none;
+	background: linear-gradient(to right, rgba(0, 0, 0, 0.07), transparent);
+}
+
 .emblem-studio-wrap .es-forms-table .col-name        { width: 13%; text-align: left; }
 .emblem-studio-wrap .es-forms-table .col-shell       { width: 9%;  text-align: center; }
 .emblem-studio-wrap .es-forms-table .col-shortcode   { width: 10%; text-align: left; }
