@@ -537,6 +537,11 @@ final class Emblem_Studio_SaaS_Connector
                 'grant'    => $grant,
                 'name'     => get_bloginfo('name'),
                 'platform' => 'wp',
+                // Hand over WordPress's OWN timezone so the user never has to retype
+                // something this site already knows (the SaaS uses it for scheduling
+                // + report days). An IANA name, or a "+03:00" offset on sites that
+                // use a manual offset; the SaaS validates and falls back to UTC.
+                'timezone' => function_exists('wp_timezone_string') ? wp_timezone_string() : '',
             ],
         ]);
 
