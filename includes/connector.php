@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 0.8.2
+ * Version: 0.8.3
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -282,7 +282,8 @@ final class Emblem_Studio_SaaS_Connector
             <div class="es-import-card">
                 <div class="es-import-spinner"></div>
                 <h2><?php esc_html_e('Setting up your account…', 'emblem-studio'); ?></h2>
-                <p><?php esc_html_e('Importing your assets, stats and leads from this site. This can take a moment on larger sites. You can leave this page — the import keeps running without you, and it’ll be done when you come back.', 'emblem-studio'); ?></p>
+                <p><?php esc_html_e('Importing your assets, stats and leads from this site. This can take a while on sites with a lot of history. You can leave this page — the import keeps running without you, and it’ll be done when you come back.', 'emblem-studio'); ?></p>
+                <p id="es-import-progress" style="font-variant-numeric:tabular-nums;color:#50575e;font-size:13px;min-height:18px;margin:8px 0 0;"></p>
             </div>
         </div>
         <script>
@@ -292,24 +293,51 @@ final class Emblem_Studio_SaaS_Connector
             var ajax  = <?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>;
             var nonce = <?php echo wp_json_encode(wp_create_nonce('es_import_status')); ?>;
             var frame = document.getElementById('es-embed-frame');
-            var tries = 0;
+            var out   = document.getElementById('es-import-progress');
+            var I18N  = <?php echo wp_json_encode([
+                'counting' => __('Working…', 'emblem-studio'),
+                /* translators: 1: rows imported so far, 2: total rows. */
+                'progress' => __('%1$s of %2$s records imported', 'emblem-studio'),
+                'finishing' => __('Finishing up…', 'emblem-studio'),
+                'waiting'  => __('Emblem Studio is busy — waiting to retry. Nothing is lost; this picks up where it left off.', 'emblem-studio'),
+            ]); ?>;
+
+            function num(n) { try { return n.toLocaleString(); } catch (e) { return String(n); } }
+
             function finish() {
                 overlay.classList.add('es-hide');
                 if (frame) { frame.src = frame.src; } // reload so the imported data shows
                 setTimeout(function () { if (overlay.parentNode) { overlay.parentNode.removeChild(overlay); } }, 450);
             }
+
+            function paint(d) {
+                if (!out) { return; }
+                if (d.stalled) { out.textContent = I18N.waiting; return; }
+                if (d.stage === 'pull') { out.textContent = I18N.finishing; return; }
+                if (d.total > 0) {
+                    out.textContent = I18N.progress
+                        .replace('%1$s', num(Math.min(d.done, d.total)))
+                        .replace('%2$s', num(d.total));
+                } else {
+                    out.textContent = I18N.counting;
+                }
+            }
+
+            // Each request also DRIVES a slice of the import server-side, so this
+            // finishes even on hosts where WP-Cron never fires. Sequential by design:
+            // the next call goes out only once the last one returns.
             function poll() {
-                // Safety: give up after ~90s so the screen never sticks (e.g. if WP-cron is off).
-                if (tries++ > 45) { finish(); return; }
                 fetch(ajax + '?action=es_import_status&nonce=' + encodeURIComponent(nonce), { credentials: 'same-origin' })
                     .then(function (r) { return r.json(); })
                     .then(function (j) {
-                        if (j && j.success && j.data && j.data.status === 'done') { finish(); }
-                        else { setTimeout(poll, 2000); }
+                        if (!j || !j.success || !j.data) { setTimeout(poll, 3000); return; }
+                        if (j.data.status === 'done') { finish(); return; }
+                        paint(j.data);
+                        setTimeout(poll, j.data.stalled ? 5000 : 250);
                     })
                     .catch(function () { setTimeout(poll, 3000); });
             }
-            setTimeout(poll, 1500);
+            poll();
         })();
         </script>
         <?php endif; ?>
@@ -571,10 +599,10 @@ final class Emblem_Studio_SaaS_Connector
         ]);
         delete_transient(self::FORMS_TRANSIENT);
 
-        // Import (mirror up + copy down) runs in the background so the dashboard
-        // shows a loading screen instead of blocking (see run_import + render_embed).
-        update_option('es_import_status', 'running');
-        wp_schedule_single_event(time(), 'es_saas_import');
+        // Import (mirror up + copy down) runs in bounded background passes so the
+        // dashboard shows a progress screen instead of blocking (see start_import +
+        // run_import_pass + render_embed).
+        self::start_import();
 
         wp_send_json_success(['redirect' => admin_url('admin.php?page=emblem-studio')]);
     }
@@ -611,129 +639,132 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
 
-        wp_remote_post(rtrim($cfg['api_base'], '/').'/v1/embed/mirror', [
-            'timeout' => 30,
-            'headers' => ['Content-Type' => 'application/json'],
-            'body'    => wp_json_encode([
-                'site_id' => $cfg['site_id'],
-                'token'   => $cfg['site_token'],
-                'forms'   => $forms,
-            ]),
+        self::mirror_post(rtrim($cfg['api_base'], '/').'/v1/embed/mirror', [
+            'site_id' => $cfg['site_id'],
+            'token'   => $cfg['site_token'],
+            'forms'   => $forms,
         ]);
     }
 
-    /**
-     * Stream this site's analytics events to the SaaS in id-ordered batches
-     * (mirror-on-connect). Idempotent server-side by (form_id, wp_event_id), so a
-     * re-connect is safe. Best-effort — a failure never blocks connecting, and a
-     * timeout just leaves a gap the next connect / periodic sync fills.
-     */
-    private static function mirror_stats(array $cfg): void
+    /** The wpdb table for a mirror kind, or '' when it doesn't exist. */
+    private static function mirror_table(string $kind): string
     {
         global $wpdb;
-        $table = $wpdb->prefix . 'emblemstudio_events';
-        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
-            return;
+        $table = $wpdb->prefix . ($kind === 'events' ? 'emblemstudio_events' : 'emblemstudio_leads');
+
+        return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table ? $table : '';
+    }
+
+    /** Rows still to mirror for a kind (id > cursor). Drives the progress figure. */
+    private static function mirror_remaining(string $kind, int $after = 0): int
+    {
+        global $wpdb;
+        $table = self::mirror_table($kind);
+        if ($table === '') {
+            return 0;
         }
 
-        $last = 0;
-        do {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is a prefixed constant name.
-            $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, form_id, event_type, type, click_target, variant, post_id, ua, ip, visitor, created_at
-                 FROM {$table} WHERE id > %d ORDER BY id ASC LIMIT 500",
-                $last
-            ));
-            if (empty($rows)) {
-                return;
-            }
-
-            $events = [];
-            $batch_last = $last;
-            foreach ($rows as $row) {
-                $events[] = [
-                    'wp_event_id'  => (int) $row->id,
-                    'wp_form_id'   => (int) $row->form_id,
-                    'event_type'   => $row->event_type,
-                    'type'         => $row->type,
-                    'click_target' => $row->click_target,
-                    'variant'      => $row->variant,
-                    'post_id'      => $row->post_id !== null ? (int) $row->post_id : null,
-                    'ua'           => $row->ua,
-                    'ip'           => $row->ip,
-                    'visitor'      => $row->visitor,
-                    'created_at'   => $row->created_at,
-                ];
-                $batch_last = (int) $row->id;
-            }
-
-            $ok = self::mirror_post(rtrim($cfg['api_base'], '/') . '/v1/embed/stats', [
-                'site_id' => $cfg['site_id'],
-                'token'   => $cfg['site_token'],
-                'events'  => $events,
-            ]);
-            // Stop rather than skip: advancing past a refused batch would leave a
-            // permanent hole. The next connect resumes from the start (idempotent).
-            if (! $ok) {
-                return;
-            }
-            $last = $batch_last;
-        } while (count($rows) === 500);
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is a prefixed constant name.
+        return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE id > %d", $after));
     }
 
     /**
-     * Stream this site's captured leads to the SaaS in id-ordered batches
-     * (mirror-on-connect). Idempotent server-side by (form_id, wp_lead_id).
-     * Best-effort, same as mirror_stats().
+     * Mirror ONE id-ordered batch of a kind ('events' | 'leads') and return the
+     * advanced state; or null when the batch was refused (caller stops and retries
+     * this same cursor on a later pass — never skips, so no holes).
+     *
+     * Idempotent server-side by (form_id, wp_event_id / wp_lead_id), so replaying a
+     * batch after a crash is harmless.
+     *
+     * @param  array<string,mixed>  $state
+     * @return array<string,mixed>|null
      */
-    private static function mirror_leads(array $cfg): void
+    private static function mirror_batch(array $cfg, array $state, string $kind, string $path, string $next_stage): ?array
     {
         global $wpdb;
-        $table = $wpdb->prefix . 'emblemstudio_leads';
-        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
-            return;
+
+        $table = self::mirror_table($kind);
+        if ($table === '') {
+            $state['stage']   = $next_stage;
+            $state['last_id'] = 0;
+
+            return $state;
         }
 
-        $last = 0;
-        do {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is a prefixed constant name.
-            $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, form_id, email, extra_fields, funnelkit_contact_id, funnelkit_pushed, error, is_bot, ip, created_at
-                 FROM {$table} WHERE id > %d ORDER BY id ASC LIMIT 500",
-                $last
-            ));
-            if (empty($rows)) {
-                return;
-            }
+        $cols = $kind === 'events'
+            ? 'id, form_id, event_type, type, click_target, variant, post_id, ua, ip, visitor, created_at'
+            : 'id, form_id, email, extra_fields, funnelkit_contact_id, funnelkit_pushed, error, is_bot, ip, created_at';
 
-            $leads = [];
-            $batch_last = $last;
-            foreach ($rows as $row) {
-                $leads[] = [
-                    'wp_lead_id'           => (int) $row->id,
-                    'wp_form_id'           => (int) $row->form_id,
-                    'email'                => $row->email,
-                    'extra_fields'         => $row->extra_fields,
-                    'funnelkit_contact_id' => $row->funnelkit_contact_id !== null ? (int) $row->funnelkit_contact_id : null,
-                    'funnelkit_pushed'     => (int) $row->funnelkit_pushed,
-                    'error'                => $row->error,
-                    'is_bot'               => (int) $row->is_bot,
-                    'ip'                   => $row->ip,
-                    'created_at'           => $row->created_at,
-                ];
-                $batch_last = (int) $row->id;
-            }
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table/$cols are constant names.
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT {$cols} FROM {$table} WHERE id > %d ORDER BY id ASC LIMIT %d",
+            (int) $state['last_id'],
+            self::IMPORT_BATCH
+        ));
 
-            $ok = self::mirror_post(rtrim($cfg['api_base'], '/') . '/v1/embed/leads', [
-                'site_id' => $cfg['site_id'],
-                'token'   => $cfg['site_token'],
-                'leads'   => $leads,
-            ]);
-            if (! $ok) {
-                return;
-            }
-            $last = $batch_last;
-        } while (count($rows) === 500);
+        if (empty($rows)) {
+            $state['stage']   = $next_stage;
+            $state['last_id'] = 0;
+
+            return $state;
+        }
+
+        $items = [];
+        $last  = (int) $state['last_id'];
+        foreach ($rows as $row) {
+            $items[] = $kind === 'events' ? self::map_event($row) : self::map_lead($row);
+            $last    = (int) $row->id;
+        }
+
+        $ok = self::mirror_post(rtrim($cfg['api_base'], '/') . $path, [
+            'site_id'                            => $cfg['site_id'],
+            'token'                              => $cfg['site_token'],
+            ($kind === 'events' ? 'events' : 'leads') => $items,
+        ]);
+        if (! $ok) {
+            return null;
+        }
+
+        // Cursor advances ONLY after the batch actually landed.
+        $state['last_id'] = $last;
+        $state['done']    = (int) $state['done'] + count($items);
+
+        return $state;
+    }
+
+    /** @return array<string,mixed> */
+    private static function map_event(object $row): array
+    {
+        return [
+            'wp_event_id'  => (int) $row->id,
+            'wp_form_id'   => (int) $row->form_id,
+            'event_type'   => $row->event_type,
+            'type'         => $row->type,
+            'click_target' => $row->click_target,
+            'variant'      => $row->variant,
+            'post_id'      => $row->post_id !== null ? (int) $row->post_id : null,
+            'ua'           => $row->ua,
+            'ip'           => $row->ip,
+            'visitor'      => $row->visitor,
+            'created_at'   => $row->created_at,
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private static function map_lead(object $row): array
+    {
+        return [
+            'wp_lead_id'           => (int) $row->id,
+            'wp_form_id'           => (int) $row->form_id,
+            'email'                => $row->email,
+            'extra_fields'         => $row->extra_fields,
+            'funnelkit_contact_id' => $row->funnelkit_contact_id !== null ? (int) $row->funnelkit_contact_id : null,
+            'funnelkit_pushed'     => (int) $row->funnelkit_pushed,
+            'error'                => $row->error,
+            'is_bot'               => (int) $row->is_bot,
+            'ip'                   => $row->ip,
+            'created_at'           => $row->created_at,
+        ];
     }
 
     /* ── Copy-down (Phase 2): pull the SaaS state back into WordPress ──────── */
@@ -762,38 +793,212 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
-    /**
-     * The connect-time import, run in the background (es_saas_import single event):
-     * mirror this site's forms + stats + leads UP, pull the SaaS state back DOWN,
-     * arm the periodic refresh, then flag the import done so the loading screen lifts.
+    /* ── The connect-time import: resumable, chunked, cron-independent ────────
+     *
+     * A real site's history is tens of thousands of rows, so this CANNOT be one
+     * long job:
+     *   - PHP's max_execution_time kills a long run mid-way, and a run that
+     *     restarts from zero each time may never finish on a big enough table.
+     *   - It was queued behind WP-Cron with no fallback. On a cached / CDN-fronted
+     *     host (DISABLE_WP_CRON, or blocked loopback) nothing spawns it, so connect
+     *     looked like a hang for minutes.
+     *
+     * So: state lives in an option (`es_import_state`) and every pass does a
+     * bounded slice of work, then reschedules while work remains. A killed pass
+     * costs at most one batch — the next resumes from the stored cursor.
+     *
+     * TWO drivers, either alone is enough, and a transient lock keeps them from
+     * overlapping:
+     *   1. the `es_saas_import` cron event (works with the tab closed), and
+     *   2. the dashboard overlay, which drives passes over AJAX while it's open —
+     *      so the import runs even where WP-Cron never fires.
      */
-    public static function run_import(): void
+
+    /** Rows per mirror batch (one HTTP POST). */
+    const IMPORT_BATCH = 500;
+
+    /** Work budget for a single pass — comfortably inside a default max_execution_time. */
+    const IMPORT_PASS_SECONDS = 15;
+
+    /** Only one import worker at a time (cron vs the overlay's AJAX ticks). */
+    const IMPORT_LOCK = 'es_import_lock';
+
+    /** Resumable cursor + progress. @return array<string,mixed> */
+    private static function import_state(): array
     {
-        $cfg = self::config();
-        try {
-            if ($cfg) {
-                self::mirror_forms($cfg);
-                self::mirror_stats($cfg);
-                self::mirror_leads($cfg);
-                self::pull_all($cfg);
-                if (! wp_next_scheduled('es_saas_pull')) {
-                    wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'es_saas_pull');
-                }
-            }
-        } finally {
-            // Always resolve, even if a mirror threw — a stuck 'running' would
-            // show the setup overlay on every dashboard load with no way out.
-            update_option('es_import_status', 'done');
+        $state = get_option('es_import_state', []);
+        if (! is_array($state) || empty($state['stage'])) {
+            return ['stage' => 'forms', 'last_id' => 0, 'done' => 0, 'total' => 0, 'stalled' => 0];
+        }
+
+        return $state + ['stage' => 'forms', 'last_id' => 0, 'done' => 0, 'total' => 0, 'stalled' => 0];
+    }
+
+    /** @param array<string,mixed> $state */
+    private static function save_import_state(array $state): void
+    {
+        update_option('es_import_state', $state, false);
+    }
+
+    /**
+     * Arm a fresh import and kick the first pass immediately (don't just queue it
+     * and hope something triggers WP-Cron). Called right after a successful pair.
+     */
+    private static function start_import(): void
+    {
+        update_option('es_import_status', 'running');
+        self::save_import_state([
+            'stage'   => 'forms',
+            'last_id' => 0,
+            'done'    => 0,
+            // Best-effort total for the progress line; the overlay copes if it's off.
+            'total'   => self::mirror_remaining('events') + self::mirror_remaining('leads'),
+            'stalled' => 0,
+        ]);
+
+        wp_schedule_single_event(time(), 'es_saas_import');
+        // Best-effort nudge; the overlay drives passes itself if this never fires.
+        if (function_exists('spawn_cron')) {
+            spawn_cron();
         }
     }
 
-    /** Poll target for the dashboard loading screen: is the connect import done? */
+    /** WP-cron entry (`es_saas_import`): run one pass, reschedule while work remains. */
+    public static function run_import(): void
+    {
+        $progress = self::run_import_pass();
+        if ($progress['status'] === 'done') {
+            return;
+        }
+        // Stalled (rate-limited / server down) → wait before leaning on it again.
+        $delay = ! empty($progress['stalled']) ? 60 : 1;
+        if (! wp_next_scheduled('es_saas_import')) {
+            wp_schedule_single_event(time() + $delay, 'es_saas_import');
+        }
+    }
+
+    /**
+     * One bounded slice of the import. Safe to call from cron OR from the overlay's
+     * AJAX tick — the lock means whoever gets there first does the work and the
+     * other just reads progress.
+     *
+     * @return array<string,mixed>
+     */
+    public static function run_import_pass(): array
+    {
+        if (get_transient(self::IMPORT_LOCK)) {
+            return self::import_progress(); // another worker is mid-pass
+        }
+        set_transient(self::IMPORT_LOCK, 1, 120);
+
+        try {
+            $cfg = self::config();
+            if (! $cfg) {
+                self::finish_import();
+
+                return self::import_progress();
+            }
+
+            $state    = self::import_state();
+            $deadline = time() + self::IMPORT_PASS_SECONDS;
+
+            while ($state['stage'] !== 'done' && time() < $deadline) {
+                $next = self::import_step($cfg, $state);
+                if ($next === null) { // batch refused — keep the cursor, retry later
+                    $state['stalled'] = time();
+                    self::save_import_state($state);
+                    break;
+                }
+                $state            = $next;
+                $state['stalled'] = 0;
+                self::save_import_state($state);
+            }
+
+            if ($state['stage'] === 'done') {
+                self::finish_import($cfg);
+            }
+        } catch (\Throwable $e) {
+            // Never let a thrown pass wedge the import: the cursor is already saved,
+            // so the next pass resumes. Fall through and report progress.
+        } finally {
+            delete_transient(self::IMPORT_LOCK);
+        }
+
+        return self::import_progress();
+    }
+
+    /**
+     * Advance the import by one unit of work. Returns the new state, or null when a
+     * batch was refused (cursor unchanged so the next pass retries it).
+     *
+     * @param  array<string,mixed>  $state
+     * @return array<string,mixed>|null
+     */
+    private static function import_step(array $cfg, array $state): ?array
+    {
+        switch ($state['stage']) {
+            case 'forms':
+                self::mirror_forms($cfg);
+                $state['stage']   = 'stats';
+                $state['last_id'] = 0;
+
+                return $state;
+
+            case 'stats':
+                return self::mirror_batch($cfg, $state, 'events', '/v1/embed/stats', 'leads');
+
+            case 'leads':
+                return self::mirror_batch($cfg, $state, 'leads', '/v1/embed/leads', 'pull');
+
+            case 'pull':
+                self::pull_all($cfg);
+                $state['stage'] = 'done';
+
+                return $state;
+        }
+
+        $state['stage'] = 'done';
+
+        return $state;
+    }
+
+    /** Import finished: arm the periodic refresh and lift the overlay. */
+    private static function finish_import(?array $cfg = null): void
+    {
+        if ($cfg && ! wp_next_scheduled('es_saas_pull')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'es_saas_pull');
+        }
+        $state          = self::import_state();
+        $state['stage'] = 'done';
+        self::save_import_state($state);
+        update_option('es_import_status', 'done');
+    }
+
+    /** What the overlay shows. @return array<string,mixed> */
+    private static function import_progress(): array
+    {
+        $state = self::import_state();
+
+        return [
+            'status'  => (string) get_option('es_import_status', 'done'),
+            'stage'   => (string) $state['stage'],
+            'done'    => (int) $state['done'],
+            'total'   => (int) $state['total'],
+            'stalled' => (int) $state['stalled'],
+        ];
+    }
+
+    /**
+     * Poll target for the setup overlay. Also DRIVES a pass, so the import proceeds
+     * while the page is open even if WP-Cron never fires on this host. Returns real
+     * progress (done/total), not just a running/done flag.
+     */
     public static function ajax_import_status(): void
     {
         if (! current_user_can('manage_options') || ! check_ajax_referer('es_import_status', 'nonce', false)) {
             wp_send_json_error(['status' => 'forbidden'], 403);
         }
-        wp_send_json_success(['status' => (string) get_option('es_import_status', 'done')]);
+        wp_send_json_success(self::run_import_pass());
     }
 
     /**
@@ -802,13 +1007,16 @@ final class Emblem_Studio_SaaS_Connector
      * The caller advances its id cursor only when this returns true, so a refused
      * batch is retried instead of leaving a permanent hole in the imported history.
      * Retries on 429 (rate limited) and on transport/5xx errors, honouring
-     * Retry-After when the server sends it. Returns false once retries run out —
-     * the caller then stops, and the next connect resumes from id 0 (the upserts
-     * are idempotent, so re-running is safe and fills any gap).
+     * Retry-After when the server sends it.
+     *
+     * Retries are deliberately few and short: they must fit inside one import pass
+     * (IMPORT_PASS_SECONDS). Returning false doesn't lose anything — the pass marks
+     * the import stalled, keeps the cursor, and a later pass retries the SAME batch.
+     * Long waits belong to the scheduler, not to a blocking sleep here.
      */
     private static function mirror_post(string $url, array $payload): bool
     {
-        for ($attempt = 0; $attempt < 5; $attempt++) {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
             $res = wp_remote_post($url, [
                 'timeout' => 30,
                 'headers' => ['Content-Type' => 'application/json'],
@@ -829,9 +1037,14 @@ final class Emblem_Studio_SaaS_Connector
                 $retry_after = 0;
             }
 
-            // Server's Retry-After wins; otherwise back off 2s, 4s, 8s, 16s.
-            $wait = $retry_after > 0 ? min($retry_after, 60) : (2 ** ($attempt + 1));
-            sleep($wait);
+            // Don't sleep after the final attempt — the pass reschedules instead.
+            if ($attempt === 2) {
+                break;
+            }
+            // Server's Retry-After wins; otherwise back off 2s then 4s. Capped so a
+            // long Retry-After can't blow the pass budget — that's the scheduler's job.
+            $wait = $retry_after > 0 ? $retry_after : (2 ** ($attempt + 1));
+            sleep(min($wait, 5));
         }
 
         return false;
@@ -1118,13 +1331,19 @@ final class Emblem_Studio_SaaS_Connector
         // current set of assets, stats and leads locally.
         self::pull_all($cfg);
         wp_clear_scheduled_hook('es_saas_pull');
+        // Stop any in-flight import and forget its cursor, so a later reconnect
+        // starts a clean run instead of resuming into a severed connection.
+        wp_clear_scheduled_hook('es_saas_import');
 
         // Tell the SaaS to sever the connection (rotate the site secret) so this
         // site can't sign in again without reconnecting. Best-effort.
         self::revoke_connection($cfg);
 
         delete_option(self::OPTION);
+        delete_option('es_import_state');
+        delete_option('es_import_status');
         delete_transient(self::FORMS_TRANSIENT);
+        delete_transient(self::IMPORT_LOCK);
 
         wp_safe_redirect(add_query_arg('es_decoupled', '1', admin_url('admin.php?page=emblem-studio')));
         exit;
