@@ -2164,6 +2164,41 @@
 	var HTML_VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
 	var HTML_RAW = { pre: 1, textarea: 1, script: 1, style: 1 };
 
+	// Inline elements whose text must NOT be broken onto its own line.
+	//
+	// Indenting <span>20% OFF</span> into
+	//     <span>
+	//       20% OFF
+	//     </span>
+	// puts whitespace inside the span. Whitespace collapses — it does not vanish
+	// — so the span renders as " 20% OFF ", one real space at each end, and its
+	// inline box is two spaces wider than its text. Anything sized to that box
+	// (a highlight drawn with an absolutely-positioned ::before, say) overshoots
+	// the words it was meant to sit behind. Hitting Format was enough to do it.
+	//
+	// So an inline element holding nothing but text is emitted on ONE line, text
+	// collapsed but not padded. Inline elements with child tags still nest —
+	// their children are usually laid out with flex, where whitespace is ignored.
+	var HTML_INLINE_TEXT = {
+		a: 1, abbr: 1, b: 1, cite: 1, code: 1, em: 1, i: 1, kbd: 1, label: 1,
+		mark: 1, q: 1, s: 1, samp: 1, small: 1, span: 1, strong: 1, sub: 1,
+		sup: 1, time: 1, u: 1, 'var': 1
+	};
+
+	// Index just past </name> for the element opening at openGt, or -1 when it
+	// nests a same-name tag or holds any child tag (then: let the normal
+	// indenting path handle it).
+	function simpleInlineClose(s, name, openGt) {
+		var lower = s.toLowerCase();
+		var close = lower.indexOf('</' + name, openGt + 1);
+		if (close < 0) return -1;
+		var nested = lower.indexOf('<' + name, openGt + 1);
+		if (nested !== -1 && nested < close) return -1;
+		if (s.slice(openGt + 1, close).indexOf('<') !== -1) return -1;
+		var gt = s.indexOf('>', close);
+		return gt < 0 ? -1 : gt + 1;
+	}
+
 	function htmlTagEnd(s, i) {
 		var q = null;
 		for (var k = i + 1; k < s.length; k++) {
@@ -2207,6 +2242,17 @@
 					depth--;
 					if (close >= 0) emit('</' + name + '>');
 					i = closeGt < 0 ? n : closeGt + 1; continue;
+				}
+				// Inline element wrapping plain text stays on one line — see
+				// HTML_INLINE_TEXT for why breaking it changes what renders.
+				if (HTML_INLINE_TEXT[name] && !selfClose && !HTML_VOID[name]) {
+					var iEnd = simpleInlineClose(s, name, gt);
+					if (iEnd > 0) {
+						var iClose = s.toLowerCase().indexOf("</" + name, gt + 1);
+						var inner = s.slice(gt + 1, iClose).replace(/\s+/g, " ").trim();
+						emit(tag.trim() + inner + "</" + name + ">");
+						i = iEnd; continue;
+					}
 				}
 				emit(tag.trim());
 				if (!HTML_VOID[name] && !selfClose) depth++;
