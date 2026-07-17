@@ -1574,6 +1574,14 @@ final class Emblem_Studio_SaaS_Connector
             'permission_callback' => [__CLASS__, 'authorize'],
             'callback'            => [__CLASS__, 'receive_lead'],
         ]);
+
+        // Read this site's own content (post types, terms, pages) for the SaaS's
+        // display-rule pickers and strategist. See read_wp() for why this exists.
+        register_rest_route('emblem-studio-saas/v1', '/wp/(?P<path>[a-z]+(?:/\d+)?)', [
+            'methods'             => 'GET',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'read_wp'],
+        ]);
     }
 
     /** Authenticate the SaaS by the shared site token (constant-time compare). */
@@ -1586,6 +1594,64 @@ final class Emblem_Studio_SaaS_Connector
         $token = (string) $request->get_header('x_ess_token');
 
         return $token !== '' && hash_equals($cfg['site_token'], $token);
+    }
+
+    /* ── Inbound content read → this site's own wp/v2 ──────────────────── */
+
+    /**
+     * The only wp/v2 routes the SaaS reads, and the only ones this will serve.
+     * An allowlist, not a proxy: the site token authenticates Emblem Studio, and
+     * Emblem Studio has no business reading anything else through it.
+     */
+    private const WP_READ_PATHS = [ 'types', 'categories', 'tags', 'pages', 'posts' ];
+
+    /**
+     * Serve this site's own content to the SaaS, authenticated by the site token.
+     *
+     * Why this route exists at all, when wp/v2 already exists: the SaaS used to
+     * read wp/v2 over HTTP with a WordPress Application Password, which meant a
+     * paired site STILL had to be handed a password before its display-rule
+     * pickers or the strategist could see a single page. That is a credential the
+     * plugin makes unnecessary — it is already inside WordPress, already
+     * authenticated by the site token it was paired with.
+     *
+     * So: dispatch to wp/v2 IN-PROCESS via rest_do_request() and hand back its
+     * response verbatim. No password, and the SaaS keeps parsing the exact wp/v2
+     * shapes it always did — the transport changes, the contract doesn't. Reading
+     * internally also survives the security plugins that block /wp-json to the
+     * outside world, which is the other half of why the password was there.
+     *
+     * Runs as no user, so WordPress applies public visibility: published content
+     * only. That is all the SaaS ever asked for (every call passes status=publish)
+     * and it means this route cannot leak a draft.
+     */
+    public static function read_wp(WP_REST_Request $request)
+    {
+        $path = (string) $request->get_param('path');
+        $base = strtok($path, '/'); // 'pages/12' → 'pages'
+
+        if (! in_array($base, self::WP_READ_PATHS, true)) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'Unsupported path'], 404);
+        }
+
+        $sub = new WP_REST_Request('GET', '/wp/v2/' . $path);
+        foreach ((array) $request->get_query_params() as $k => $v) {
+            if ($k !== 'path') {
+                $sub->set_param($k, $v);
+            }
+        }
+
+        $res = rest_do_request($sub);
+        if ($res->is_error()) {
+            $err = $res->as_error();
+
+            return new WP_REST_Response(
+                ['ok' => false, 'error' => $err->get_error_message()],
+                (int) ($res->get_status() ?: 500)
+            );
+        }
+
+        return new WP_REST_Response($res->get_data(), (int) $res->get_status());
     }
 
     /**
