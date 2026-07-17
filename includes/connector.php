@@ -695,9 +695,24 @@ final class Emblem_Studio_SaaS_Connector
             ? 'id, form_id, event_type, type, click_target, variant, post_id, ua, ip, visitor, created_at'
             : 'id, form_id, email, extra_fields, funnelkit_contact_id, funnelkit_pushed, error, is_bot, ip, created_at';
 
-        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table/$cols are constant names.
+        // NEVER mirror a SaaS-origin row back up — the same rule mirror_forms()
+        // applies to assets, which this had been missing.
+        //
+        // These tables hold BOTH our own history and the copies pull_stats() /
+        // pull_leads() bring DOWN from the SaaS. Sending a pulled row back up
+        // hands it over as WP-authored: it arrives under a fresh wp_event_id, so
+        // the SaaS's insert-or-ignore (keyed on form_id + wp_event_id) cannot
+        // recognise it as the row it sent us, and stores it a second time. Every
+        // re-connect inflated the stats a little more.
+        //
+        // The SaaS already guards the other direction — its export sends only
+        // rows with no wp_event_id, precisely so nothing round-trips. This is the
+        // matching half. Only rows we originated travel up.
+        $origin_col = $kind === 'events' ? 'saas_event_id' : 'saas_lead_id';
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table/$cols/$origin_col are constant names.
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT {$cols} FROM {$table} WHERE id > %d ORDER BY id ASC LIMIT %d",
+            "SELECT {$cols} FROM {$table} WHERE id > %d AND {$origin_col} IS NULL ORDER BY id ASC LIMIT %d",
             (int) $state['last_id'],
             self::IMPORT_BATCH
         ));
@@ -1168,6 +1183,47 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Honour a stats wipe performed in the SaaS.
+     *
+     * The SaaS stamps `reset_at` when someone wipes a site's stats, and hands it
+     * back on every stats export. If it is newer than the one we last acted on,
+     * the wipe has not reached us yet: drop our events, rewind the pull cursor to
+     * zero so anything recorded AFTER the wipe comes back down, and record the
+     * mark so we only ever do this once per wipe.
+     *
+     * We clear the whole table, not just the rows we pulled. A reset means the
+     * numbers start again on both sides; keeping our own pre-connect history here
+     * would leave WordPress reporting figures the SaaS no longer has, which is the
+     * disagreement the wipe was meant to end. (The SaaS deletes its copy of that
+     * same history in the same operation.)
+     *
+     * Returns the cursor to continue from — rewound to 0 on a fresh wipe.
+     */
+    private static function apply_stats_reset(array $data, int $after): int
+    {
+        $mark = isset($data['reset_at']) && is_string($data['reset_at']) ? $data['reset_at'] : '';
+        if ($mark === '' || $mark === (string) get_option('es_saas_stats_reset_at', '')) {
+            return $after;
+        }
+
+        // The same call the plugin's own "reset stats" button makes — one wipe
+        // path, not two that could drift.
+        if (class_exists('ES_Reports')) {
+            ES_Reports::reset_stats();
+        } else {
+            global $wpdb;
+            $events = $wpdb->prefix . 'emblemstudio_events';
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- constant table name.
+            $wpdb->query("TRUNCATE TABLE {$events}");
+        }
+
+        update_option('es_saas_stats_reset_at', $mark, false);
+        update_option('es_saas_pull_stats_after', 0, false);
+
+        return 0;
+    }
+
     /** Pull SaaS-native events down, mapped by saas_form_id; dedupe by saas_event_id. */
     private static function pull_stats(array $cfg): void
     {
@@ -1180,6 +1236,14 @@ final class Emblem_Studio_SaaS_Connector
         $after = (int) get_option('es_saas_pull_stats_after', 0);
         do {
             $data = self::pull_post($cfg, '/v1/embed/export/stats', ['after_id' => $after]);
+
+            // A wipe over there cannot reach us as rows — this pull only ever
+            // inserts, so an emptied SaaS and a SaaS with nothing new look exactly
+            // the same from here. The mark is what tells them apart, and it has to
+            // be read BEFORE the empty-events return below: after a wipe, the
+            // empty response is the only response there is.
+            $after = self::apply_stats_reset($data, $after);
+
             if (empty($data['events']) || ! is_array($data['events'])) {
                 return;
             }
