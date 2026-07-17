@@ -395,6 +395,13 @@ class ES_Form_Repo {
 	 * are intentionally excluded — only the fields that DEFINE the
 	 * form's design + behavior travel. JSON arrays/objects stored as
 	 * strings in the DB get decoded so the export is clean to read.
+	 *
+	 * display_order travels too. It is not design, but it IS the setup:
+	 * without it the receiver has to re-derive the order from the arrival
+	 * sequence, and since exports are emitted newest-first while ids ascend
+	 * oldest-first, that re-derivation lands on exactly the reverse of the
+	 * list it was copied from. The value is relative — a receiver rebases it
+	 * onto its own list rather than trusting the number.
 	 */
 	public static function to_export_array( object $form ): array {
 		$decode = function ( $raw ) {
@@ -410,6 +417,7 @@ class ES_Form_Repo {
 			'html'                 => (string) ( $form->html ?? '' ),
 			'css'                  => (string) ( $form->css ?? '' ),
 			'status'               => (string) ( $form->status ?? 'inactive' ),
+			'display_order'        => (int) ( $form->display_order ?? 0 ),
 			'success_mode'         => (string) ( $form->success_mode ?? 'inline_state' ),
 			'success_message'      => (string) ( $form->success_message ?? '' ),
 			'success_redirect_url' => (string) ( $form->success_redirect_url ?? '' ),
@@ -889,13 +897,51 @@ class ES_Form_Repo {
 	}
 
 	/**
-	 * Default metric for an asset: 'conversions' when its HTML contains a
-	 * <form>, else 'clicks'. A pure heuristic shared by the editor, the Forms
-	 * list and the A/B engine. Lives here (core) so the Lite build keeps it
-	 * without the account-gated A/B module.
+	 * Does this asset actually capture input?
+	 *
+	 * Not the same question as "is there a <form> tag". The authoring spec puts
+	 * a <form class="esf-form"> root on EVERY asset — form-less announcements
+	 * included — so the tag says nothing about whether there is anything to fill
+	 * in. Only a real field does. Reading the tag instead scored pure-CTA assets
+	 * on conversions that can never happen.
+	 *
+	 * The honeypot is injected at render time, never authored, so it cannot make
+	 * a form-less asset look like a form here.
+	 */
+	public static function has_fields( string $html ): bool {
+		if ( preg_match( '/<(?:textarea|select)[\s>]/i', $html ) ) {
+			return true;
+		}
+
+		if ( ! preg_match_all( '/<input\b[^>]*>/i', $html, $matches ) ) {
+			return false;
+		}
+
+		// <input> types that capture nothing a visitor typed or chose.
+		$non_fields = array( 'hidden', 'submit', 'button', 'image', 'reset' );
+
+		foreach ( $matches[0] as $tag ) {
+			// An <input> with no type= is a text field.
+			$type = preg_match( '/\btype\s*=\s*("|\'|)([a-zA-Z-]+)\1/i', $tag, $m )
+				? strtolower( $m[2] )
+				: 'text';
+
+			if ( ! in_array( $type, $non_fields, true ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Default metric for an asset: 'conversions' when it has fields to fill in,
+	 * else 'clicks'. A pure heuristic shared by the editor, the Forms list and
+	 * the A/B engine. Lives here (core) so the Lite build keeps it without the
+	 * account-gated A/B module.
 	 */
 	public static function primary_metric( string $html ): string {
-		return preg_match( '/<form[\s>]/i', $html ) ? 'conversions' : 'clicks';
+		return self::has_fields( $html ) ? 'conversions' : 'clicks';
 	}
 
 	public static function types_for( object $form ): array {

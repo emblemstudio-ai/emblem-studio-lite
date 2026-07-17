@@ -545,13 +545,29 @@
 					shellHint.hidden = true;
 				}
 			});
-			function hasForm() {
+			// The client-side mirror of ES_Form_Repo::has_fields() — the editor needs
+			// the answer live, as the user types. Keep the two in sync. A <form> tag
+			// is NOT the test: the authoring spec puts one on every asset, form-less
+			// announcements included; only a real field means there is data to capture.
+			function hasFields() {
 				var ta = document.getElementById(htmlFieldId());
-				return !!ta && /<form[\s>]/i.test(ta.value);
+				if (!ta) return false;
+				var html = ta.value;
+				if (/<(?:textarea|select)[\s>]/i.test(html)) return true;
+				var inputs = html.match(/<input\b[^>]*>/gi);
+				if (!inputs) return false;
+				// <input> types that capture nothing a visitor typed or chose.
+				var nonFields = ['hidden', 'submit', 'button', 'image', 'reset'];
+				return inputs.some(function (tag) {
+					// An <input> with no type= is a text field.
+					var m = tag.match(/\btype\s*=\s*("|'|)([a-zA-Z-]+)\1/i);
+					var type = m ? m[2].toLowerCase() : 'text';
+					return nonFields.indexOf(type) === -1;
+				});
 			}
 			function syncTestVisibility() {
-				// Only relevant when the asset has a <form> to submit.
-				if (testGroup) testGroup.hidden = !hasForm();
+				// Only relevant when the asset has fields to submit.
+				if (testGroup) testGroup.hidden = !hasFields();
 			}
 			function sendPreviewConfig() {
 				if (!iframe.contentWindow) return;

@@ -35,9 +35,23 @@ TWO KINDS OF ASSET
 - Form asset (default): captures leads — has the email input, a submit
   button, and (optionally) the thank-you state below.
 - Form-less asset: an announcement / CTA (ribbon, slide-in, popup) that
-  just presents an offer and links out — no inputs, no submit, no
-  thank-you. The action is a tracked link: <a data-es-track="..." href="...">.
-  The root is still one <form class="esf-form">, just with no fields.
+  just presents an offer and links out. The action is a tracked link:
+  <a data-es-track="..." href="...">. The root is still one
+  <form class="esf-form"> — that never changes — just with no fields.
+
+Which kind is it? Emblem Studio decides by looking for FIELDS, not for the
+<form> tag (every asset has that tag). It counts as a form only if it has a
+real field: an <input> (any type except hidden / submit / button / image /
+reset), a <select>, or a <textarea>. That decides what your reports show and
+how an A/B test is scored — a form is scored on conversions, a form-less
+asset on clicks. So keep a form-less asset genuinely empty of fields:
+- No <input>, <select> or <textarea> — not even a decorative or disabled
+  one, and not an email box you mean to wire up later.
+- No <button type="submit"> — nothing is submitted. Style a link as a
+  button instead: <a class="esf-cta" data-es-track="..." href="...">.
+- No data-esf-thankyou element — nothing can reveal it.
+- No GDPR consent checkbox (that is an <input>).
+A form-less asset is just: the root, your copy, and tracked links.
 
 HTML
 - Root element: one <form class="esf-form" novalidate>.
@@ -98,10 +112,31 @@ ASSET TYPES — two kinds
 - FORM asset (the default): captures leads. Has the email input + submit
   button + (optionally) the thank-you state below.
 - FORM-LESS asset: an announcement / CTA (ribbon, slide-in, popup) that
-  just presents an offer and links out — NO inputs, NO submit, NO
-  thank-you. The action is a tracked link: <a data-es-track="..."
-  href="...">. The root is still one <form class="esf-form">, just with
-  no fields.
+  just presents an offer and links out. The action is a tracked link:
+  <a data-es-track="..." href="...">. The root is still one
+  <form class="esf-form"> — that never changes — just with no fields.
+
+WHICH KIND IS IT? — the platform decides by FIELDS, not by the <form> tag
+Every asset has the <form class="esf-form"> root, so the tag proves
+nothing. An asset counts as a FORM only if it contains a real field: an
+<input> (any type except hidden / submit / button / image / reset), a
+<select>, or a <textarea>. That single answer drives what the reports show
+and how an A/B test is scored — a form asset is scored on conversions, a
+form-less asset on clicks. Get it wrong and the asset is measured on a
+metric it can never move.
+
+A FORM-LESS ASSET MUST NOT CONTAIN — each one makes it read as a form:
+- NO <input> of any visible type, NO <select>, NO <textarea>. Not even a
+  decorative or disabled one, and not an email box you "leave for later".
+- NO <button type="submit"> — there is nothing to submit. If you want a
+  button-shaped CTA, use a link styled as a button:
+  <a class="esf-cta" data-es-track="..." href="...">.
+- NO data-esf-thankyou element — nothing can ever reveal it, and it makes
+  the asset look like it captures leads.
+- NO GDPR consent checkbox (it is an <input>), and no honeypot (never
+  author one anyway — Emblem Studio injects its own).
+A form-less asset is therefore: the <form class="esf-form"> root, your
+copy, and one or more tracked links. Nothing a visitor could fill in.
 
 HTML — STRUCTURE
 - Include exactly one <form> element, wrapped as
