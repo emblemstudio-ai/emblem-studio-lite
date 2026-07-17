@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 0.8.0
+ * Version: 0.8.2
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -27,8 +27,14 @@ final class Emblem_Studio_SaaS_Connector
     /** Stored connection written by the Connect button. */
     const OPTION = 'ess_connection';
 
-    /** Default SaaS base used to prefill the Connect screen when nothing is set. */
-    const DEFAULT_API_BASE = 'http://127.0.0.1:8000';
+    /**
+     * Default SaaS base used to prefill the Connect screen when nothing is set.
+     * This is what every shipped copy connects to, so it must stay production.
+     * For local development, define ESS_API_BASE in wp-config.php instead — the
+     * constant wins over this, and on its own only changes the prefill (a manual
+     * connection needs ESS_SITE_ID and ESS_SITE_TOKEN too).
+     */
+    const DEFAULT_API_BASE = 'https://emblem-studio-beta.serenichron.agency';
 
     /** WP admin page slug → embedded SaaS path (under /app/s/<code>/…). */
     const PAGE_MAP = [
@@ -276,7 +282,7 @@ final class Emblem_Studio_SaaS_Connector
             <div class="es-import-card">
                 <div class="es-import-spinner"></div>
                 <h2><?php esc_html_e('Setting up your account…', 'emblem-studio'); ?></h2>
-                <p><?php esc_html_e('Importing your assets, stats and leads from this site. This can take a moment on larger sites — it finishes on its own.', 'emblem-studio'); ?></p>
+                <p><?php esc_html_e('Importing your assets, stats and leads from this site. This can take a moment on larger sites. You can leave this page — the import keeps running without you, and it’ll be done when you come back.', 'emblem-studio'); ?></p>
             </div>
         </div>
         <script>
@@ -643,6 +649,7 @@ final class Emblem_Studio_SaaS_Connector
             }
 
             $events = [];
+            $batch_last = $last;
             foreach ($rows as $row) {
                 $events[] = [
                     'wp_event_id'  => (int) $row->id,
@@ -657,18 +664,20 @@ final class Emblem_Studio_SaaS_Connector
                     'visitor'      => $row->visitor,
                     'created_at'   => $row->created_at,
                 ];
-                $last = (int) $row->id;
+                $batch_last = (int) $row->id;
             }
 
-            wp_remote_post(rtrim($cfg['api_base'], '/') . '/v1/embed/stats', [
-                'timeout' => 30,
-                'headers' => ['Content-Type' => 'application/json'],
-                'body'    => wp_json_encode([
-                    'site_id' => $cfg['site_id'],
-                    'token'   => $cfg['site_token'],
-                    'events'  => $events,
-                ]),
+            $ok = self::mirror_post(rtrim($cfg['api_base'], '/') . '/v1/embed/stats', [
+                'site_id' => $cfg['site_id'],
+                'token'   => $cfg['site_token'],
+                'events'  => $events,
             ]);
+            // Stop rather than skip: advancing past a refused batch would leave a
+            // permanent hole. The next connect resumes from the start (idempotent).
+            if (! $ok) {
+                return;
+            }
+            $last = $batch_last;
         } while (count($rows) === 500);
     }
 
@@ -698,6 +707,7 @@ final class Emblem_Studio_SaaS_Connector
             }
 
             $leads = [];
+            $batch_last = $last;
             foreach ($rows as $row) {
                 $leads[] = [
                     'wp_lead_id'           => (int) $row->id,
@@ -711,18 +721,18 @@ final class Emblem_Studio_SaaS_Connector
                     'ip'                   => $row->ip,
                     'created_at'           => $row->created_at,
                 ];
-                $last = (int) $row->id;
+                $batch_last = (int) $row->id;
             }
 
-            wp_remote_post(rtrim($cfg['api_base'], '/') . '/v1/embed/leads', [
-                'timeout' => 30,
-                'headers' => ['Content-Type' => 'application/json'],
-                'body'    => wp_json_encode([
-                    'site_id' => $cfg['site_id'],
-                    'token'   => $cfg['site_token'],
-                    'leads'   => $leads,
-                ]),
+            $ok = self::mirror_post(rtrim($cfg['api_base'], '/') . '/v1/embed/leads', [
+                'site_id' => $cfg['site_id'],
+                'token'   => $cfg['site_token'],
+                'leads'   => $leads,
             ]);
+            if (! $ok) {
+                return;
+            }
+            $last = $batch_last;
         } while (count($rows) === 500);
     }
 
@@ -760,16 +770,21 @@ final class Emblem_Studio_SaaS_Connector
     public static function run_import(): void
     {
         $cfg = self::config();
-        if ($cfg) {
-            self::mirror_forms($cfg);
-            self::mirror_stats($cfg);
-            self::mirror_leads($cfg);
-            self::pull_all($cfg);
-            if (! wp_next_scheduled('es_saas_pull')) {
-                wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'es_saas_pull');
+        try {
+            if ($cfg) {
+                self::mirror_forms($cfg);
+                self::mirror_stats($cfg);
+                self::mirror_leads($cfg);
+                self::pull_all($cfg);
+                if (! wp_next_scheduled('es_saas_pull')) {
+                    wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'es_saas_pull');
+                }
             }
+        } finally {
+            // Always resolve, even if a mirror threw — a stuck 'running' would
+            // show the setup overlay on every dashboard load with no way out.
+            update_option('es_import_status', 'done');
         }
-        update_option('es_import_status', 'done');
     }
 
     /** Poll target for the dashboard loading screen: is the connect import done? */
@@ -779,6 +794,47 @@ final class Emblem_Studio_SaaS_Connector
             wp_send_json_error(['status' => 'forbidden'], 403);
         }
         wp_send_json_success(['status' => (string) get_option('es_import_status', 'done')]);
+    }
+
+    /**
+     * POST one mirror batch, with backoff so a batch is never silently dropped.
+     *
+     * The caller advances its id cursor only when this returns true, so a refused
+     * batch is retried instead of leaving a permanent hole in the imported history.
+     * Retries on 429 (rate limited) and on transport/5xx errors, honouring
+     * Retry-After when the server sends it. Returns false once retries run out —
+     * the caller then stops, and the next connect resumes from id 0 (the upserts
+     * are idempotent, so re-running is safe and fills any gap).
+     */
+    private static function mirror_post(string $url, array $payload): bool
+    {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $res = wp_remote_post($url, [
+                'timeout' => 30,
+                'headers' => ['Content-Type' => 'application/json'],
+                'body'    => wp_json_encode($payload),
+            ]);
+
+            if (! is_wp_error($res)) {
+                $code = (int) wp_remote_retrieve_response_code($res);
+                if ($code >= 200 && $code < 300) {
+                    return true;
+                }
+                // 4xx other than 429 is a permanent refusal — retrying won't help.
+                if ($code !== 429 && $code < 500) {
+                    return false;
+                }
+                $retry_after = (int) wp_remote_retrieve_header($res, 'retry-after');
+            } else {
+                $retry_after = 0;
+            }
+
+            // Server's Retry-After wins; otherwise back off 2s, 4s, 8s, 16s.
+            $wait = $retry_after > 0 ? min($retry_after, 60) : (2 ** ($attempt + 1));
+            sleep($wait);
+        }
+
+        return false;
     }
 
     /** POST a proven request to a SaaS export endpoint; decoded body or null. */
