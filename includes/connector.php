@@ -179,8 +179,21 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         $path = self::PAGE_MAP[$slug] ?? 'assets';
+
+        // Deep-link into a specific asset from the native ?action=edit&id=N (the
+        // same URL the built-in editor uses — parity, so a shared link opens the
+        // same place whether the site runs the plugin or the embedded dashboard).
+        // A GET navigation, not a mutation, so no nonce. The tab lives in the URL
+        // #hash, which the server can't see — render_embed reads it client-side.
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended
+        if ($slug === 'emblem-studio' && ($_GET['action'] ?? '') === 'edit' && ! empty($_GET['id'])) {
+            $path = 'assets/'.(int) $_GET['id'];
+        }
+        $editor = ($_GET['es-inspect'] ?? '') === 'open';
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
+
         $code = $session['code'] ?: ($cfg['code'] ?: '');
-        self::render_embed($cfg['api_base'], $code, $path, (string) $session['embed_token']);
+        self::render_embed($cfg['api_base'], $code, $path, (string) $session['embed_token'], $editor);
 
         return true;
     }
@@ -231,15 +244,20 @@ final class Emblem_Studio_SaaS_Connector
     }
 
     /** Full-bleed iframe of the embedded SaaS page, chrome-less + auto sign-in. */
-    private static function render_embed(string $api, string $code, string $path, string $token): void
+    private static function render_embed(string $api, string $code, string $path, string $token, bool $editor = false): void
     {
-        // Token rides the URL fragment (#est=…) — never sent to a server or logged;
-        // the SaaS reads it, stores it in the iframe's sessionStorage, scrubs it.
-        $src = $api.'/app/s/'.rawurlencode($code).'/'.$path.'?embed=1#est='.rawurlencode($token);
         // The SaaS origin we accept fullscreen messages from.
         $p = wp_parse_url($api);
         $origin = (isset($p['scheme']) ? $p['scheme'] : 'https').'://'.(isset($p['host']) ? $p['host'] : '')
             .(isset($p['port']) ? ':'.$p['port'] : '');
+
+        // The iframe src is assembled in JS, not here, for one reason: the active
+        // editor TAB lives in the WP page's URL #hash (e.g. …&action=edit&id=7#stats),
+        // and a #fragment is never sent to the server — PHP can't see it. The inline
+        // builder reads location.hash, so a shared tab-deep-link actually opens that
+        // tab. The pieces PHP knows (base path, editor) are handed over as data; the
+        // sign-in token rides the src fragment (#est=…), never logged.
+        $embed_base = $api.'/app/s/'.rawurlencode($code).'/'.$path;
         // Let WordPress position the content column (it already sits right of the
         // admin menu and auto-adjusts for folded/responsive states). We just strip
         // the column's padding so the iframe is flush, and fill the height. This
@@ -264,16 +282,68 @@ final class Emblem_Studio_SaaS_Connector
             .es-import-spinner { width: 42px; height: 42px; margin: 0 auto; border-radius: 50%; border: 3px solid #e2e8f0; border-top-color: #e27d40; animation: es-import-spin .8s linear infinite; }
             @keyframes es-import-spin { to { transform: rotate(360deg); } }
         </style>
-        <iframe id="es-embed-frame" class="es-embed-frame" src="<?php echo esc_url($src); ?>" title="Emblem Studio" allow="clipboard-write"></iframe>
+        <iframe id="es-embed-frame" class="es-embed-frame" title="Emblem Studio" allow="clipboard-write"></iframe>
         <script>
         (function () {
-            var ORIGIN = <?php echo wp_json_encode($origin); ?>;
-            var frame = document.getElementById('es-embed-frame');
+            var ORIGIN   = <?php echo wp_json_encode($origin); ?>;
+            var BASE     = <?php echo wp_json_encode($embed_base); ?>;
+            var TOKEN    = <?php echo wp_json_encode($token); ?>;
+            var EDITOR   = <?php echo $editor ? 'true' : 'false'; ?>;
+            var frame    = document.getElementById('es-embed-frame');
+
+            // The SaaS asset-editor tabs. The tab travels as ?tab= (not a fragment)
+            // because the iframe's own #fragment already carries the sign-in token.
+            var TABS = ['design', 'shells', 'stats', 'connect', 'revisions', 'settings'];
+
+            // SaaS view -> WP admin page slug. The inverse of the connector's
+            // PAGE_MAP; used to rewrite the WP address bar as the SPA navigates.
+            var VIEW_SLUG = {
+                'assets': 'emblem-studio',
+                'assets-new': 'emblem-studio-new',
+                'tests': 'emblem-studio-tests',
+                'leads': 'emblem-studio-leads',
+                'reports': 'emblem-studio-reports',
+                'integrations': 'emblem-studio-integrations',
+                'design-system': 'emblem-studio-design-system',
+                'settings': 'emblem-studio-settings'
+            };
+
+            // Build the src from what PHP knew (base path, editor) plus the tab read
+            // from THIS page's #hash, then load the iframe once.
+            (function boot() {
+                var hash = (window.location.hash || '').replace(/^#/, '');
+                var tab  = TABS.indexOf(hash) !== -1 ? hash : '';
+                var q = '?embed=1';
+                if (EDITOR) { q += '&editor=open'; }
+                if (tab)    { q += '&tab=' + encodeURIComponent(tab); }
+                frame.src = BASE + q + '#est=' + encodeURIComponent(TOKEN);
+            })();
+
+            // Rewrite the WP address bar to a native-looking URL as the SPA moves,
+            // so refresh / bookmark / share / Back all land on the same place.
+            function syncWpUrl(d) {
+                var slug = VIEW_SLUG[d.view];
+                if (!slug) {
+                    // SaaS-only view (team/account/…): no native page to name; leave
+                    // the address bar as-is rather than fake one.
+                    return;
+                }
+                var url = window.location.pathname + '?page=' + slug;
+                if (d.assetId) { url += '&action=edit&id=' + encodeURIComponent(d.assetId); }
+                if (d.editor)  { url += '&es-inspect=open'; }
+                if (d.tab && TABS.indexOf(d.tab) !== -1) { url += '#' + d.tab; }
+                try { history.replaceState(null, '', url); } catch (err) {}
+            }
+
             window.addEventListener('message', function (e) {
                 if (e.origin !== ORIGIN || !frame) { return; }
                 var d = e.data || {};
-                if (d.source !== 'emblem-studio' || d.type !== 'chrome') { return; }
-                frame.classList.toggle('es-embed-fullscreen', !!d.fullscreen);
+                if (d.source !== 'emblem-studio') { return; }
+                if (d.type === 'chrome') {
+                    frame.classList.toggle('es-embed-fullscreen', !!d.fullscreen);
+                } else if (d.type === 'route') {
+                    syncWpUrl(d);
+                }
             });
         })();
         </script>
