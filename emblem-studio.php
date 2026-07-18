@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.0.11-beta
+ * Version:           1.0.12-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.0.11-beta' );
+define( 'EMBLEM_STUDIO_VERSION', '1.0.12-beta' );
 define( 'EMBLEM_STUDIO_DB_VERSION', '31' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );

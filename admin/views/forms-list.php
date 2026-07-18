@@ -373,16 +373,24 @@ function es_delta_line( int $current, int $prior ): string {
 					$row_class = $row_will_render ? '' : 'es-shell-row-inactive';
 				?>
 					<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?>>
-						<?php if ( $first_row && $filter === 'all' ) : ?>
-							<td class="col-drag es-form-drag-handle" rowspan="<?php echo (int) $row_count; ?>" aria-label="<?php esc_attr_e( 'Drag to reorder', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Drag to reorder', 'emblem-studio' ); ?>">
-								<span class="dashicons dashicons-menu" aria-hidden="true"></span>
+						<?php
+						// Pinned identity lane (drag / checkbox / name): a cell on EVERY shell row,
+						// content on the first only — NOT one rowspanned cell. A sticky + rowspan
+						// cell does not stay opaque over the rows it spans when the table scrolls
+						// sideways, so an asset's extra shell rows would show through the pinned
+						// column. A real cell per row can't. (Empty sub-row cells keep the lane
+						// opaque; border-collapse hides their seams so it still reads as one block.)
+						?>
+						<?php if ( $filter === 'all' ) : ?>
+							<td class="col-drag es-form-drag-handle" aria-label="<?php esc_attr_e( 'Drag to reorder', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Drag to reorder', 'emblem-studio' ); ?>">
+								<?php if ( $first_row ) : ?><span class="dashicons dashicons-menu" aria-hidden="true"></span><?php endif; ?>
 							</td>
 						<?php endif; ?>
 						<?php if ( $first_row ) : ?>
-							<td class="col-cb" rowspan="<?php echo (int) $row_count; ?>">
+							<td class="col-cb">
 								<input type="checkbox" name="form_ids[]" value="<?php echo (int) $f->id; ?>" aria-label="<?php echo esc_attr( sprintf( __( 'Select %s', 'emblem-studio' ), $f->name ) ); ?>">
 							</td>
-							<td class="col-name" rowspan="<?php echo (int) $row_count; ?>">
+							<td class="col-name">
 								<strong>
 									<?php if ( $is_trash ) : ?>
 										<?php echo esc_html( $f->name ); ?>
@@ -419,6 +427,9 @@ function es_delta_line( int $current, int $prior ): string {
 									</span>
 								<?php endif; ?>
 							</td>
+						<?php else : ?>
+							<td class="col-cb" aria-hidden="true"></td>
+							<td class="col-name" aria-hidden="true"></td>
 						<?php endif; ?>
 						<td class="col-shell">
 							<?php if ( $row_blank ) : ?>
