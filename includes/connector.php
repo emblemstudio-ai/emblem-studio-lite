@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.0.13-beta
+ * Version: 1.0.14-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
