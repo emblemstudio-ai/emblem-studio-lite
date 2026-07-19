@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 0.8.3
+ * Version: 1.0.13-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -13,8 +13,16 @@
  *        define('ESS_SITE_TOKEN','xxxxxxxxxxxxxxxxxxxx');
  *   2. Option `ess_connection` — set by Emblem Studio → Connect (one-click pairing).
  *
- * This file is maintained in the SaaS repo (wp-connector/) and folded into the
- * Lite build as includes/connector.php by bin/build-lite.sh.
+ * WHERE THIS FILE LIVES: right here, in the PLUGIN repo, at connector/. There is no
+ * copy in the SaaS repo and no cross-repo path — an older header here claimed it was
+ * maintained in the SaaS repo under wp-connector/, which was never true. It is
+ * export-ignored from the full plugin release and folded into the Lite build as
+ * includes/connector.php by bin/build-lite.sh.
+ *
+ * VERSION: tracks the PLUGIN version — bump both together. (It sat at 0.8.3 through
+ * four connector-touching releases, which made it useless for support and debugging.)
+ * Once folded into Lite this header is informational; Lite's real version comes from
+ * the plugin header.
  */
 
 if (! defined('ABSPATH')) {
