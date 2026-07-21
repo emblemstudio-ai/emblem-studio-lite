@@ -953,7 +953,13 @@
 			'.esf-popup-close:hover{background:var(--esf-close-hover-bg,rgba(255,255,255,0.18))!important;color:var(--esf-close-hover-fg,#fff)!important;transform:rotate(90deg)!important;}' +
 			'.esf-popup-close:focus-visible{outline:2px solid #2271b1!important;outline-offset:2px!important;}' +
 			'.esf-popup-overlay[data-esf-close-theme="dark"]{--esf-close-fg:rgba(0,0,0,0.55);--esf-close-bg:rgba(0,0,0,0.06);--esf-close-border:rgba(0,0,0,0.12);--esf-close-hover-fg:#1d2327;--esf-close-hover-bg:rgba(0,0,0,0.10);}' +
-			'.esf-popup-content .esf-host{display:block;}' +
+			// isolation:isolate walls off the authored form's own stacking context —
+			// without it, a z-index the author sets on their own content (even just to
+			// layer two of their own elements) competes directly with the close
+			// button's z-index one level up, and a high enough one paints over the
+			// button and silently swallows its clicks/taps. Isolating means the
+			// button can never be out-stacked no matter what z-index authored CSS uses.
+			'.esf-popup-content .esf-host{display:block;isolation:isolate;}' +
 			'html.esf-popup-open,body.esf-popup-open{overflow:hidden;}' +
 			'@keyframes esf-popup-fade{from{opacity:0}to{opacity:1}}' +
 			'@keyframes esf-popup-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}';
@@ -1209,7 +1215,12 @@
 			// not fixed. No body padding push needed — it takes its own space.
 			'.esf-ribbon[data-sticky="0"]{position:relative;top:auto;bottom:auto;' +
 			'animation-name:esf-ribbon-fade;}' +
-			'.esf-ribbon .esf-host{display:block;}' +
+			// isolation:isolate — see the identical comment on the popup's .esf-host
+			// rule. This is what was actually letting Ribbon 2026's own z-index:10
+			// content (.ribbon-inner) paint over and eat clicks on the close button
+			// (z-index:2) on narrow viewports, where the authored content spans the
+			// full ribbon width and reaches the corner the button lives in.
+			'.esf-ribbon .esf-host{display:block;isolation:isolate;}' +
 			// Close button: floats over the ribbon at top-right of the viewport.
 			// all:revert + !important neutralises theme button styles.
 			'.esf-ribbon-close{all:revert!important;' +
@@ -1448,7 +1459,8 @@
 			'box-sizing:border-box;animation:0.5s ease-out both;}' +
 			'.esf-slide-in[data-corner="bottom-right"]{right:20px;animation-name:esf-slide-in-from-right;}' +
 			'.esf-slide-in[data-corner="bottom-left"]{left:20px;animation-name:esf-slide-in-from-left;}' +
-			'.esf-slide-in .esf-host{display:block;}' +
+			// isolation:isolate — see the identical comment on the popup's .esf-host rule.
+			'.esf-slide-in .esf-host{display:block;isolation:isolate;}' +
 			// Close button — mirrored: card at right → close at left, and vice versa.
 			'.esf-slide-in-close{all:revert!important;' +
 			'position:absolute!important;top:12px!important;z-index:2!important;' +
