@@ -20,9 +20,20 @@
 	//   - `box-sizing` → `content-box`. Any host-level padding or
 	//     border the author adds would push the host past 100% and
 	//     cause overflow. Fixed with `box-sizing: border-box`.
-	// All three carry `!important` so they outlive the `all: initial`
+	//   - `isolation` → `auto`. Without it, a z-index the author sets on their
+	//     OWN content (e.g. a layered banner design) escapes the shadow tree
+	//     and competes directly with platform chrome layered outside the host,
+	//     like a popup/ribbon/slide-in's close button — and can paint over it,
+	//     silently swallowing its clicks/taps. `isolation: isolate` seals the
+	//     shadow tree into its own stacking context so no z-index inside it can
+	//     ever climb out. (This is the actual fix; an earlier attempt set
+	//     `isolation: isolate` on the LIGHT-DOM `.esf-host` rule instead, which
+	//     `all: initial !important` here silently overrides — `!important`
+	//     always beats a non-`!important` declaration regardless of which side
+	//     of the shadow boundary it's on.)
+	// All four carry `!important` so they outlive the `all: initial`
 	// reset above them in the same rule.
-	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;}';
+	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;isolation:isolate!important;}';
 
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
@@ -953,12 +964,11 @@
 			'.esf-popup-close:hover{background:var(--esf-close-hover-bg,rgba(255,255,255,0.18))!important;color:var(--esf-close-hover-fg,#fff)!important;transform:rotate(90deg)!important;}' +
 			'.esf-popup-close:focus-visible{outline:2px solid #2271b1!important;outline-offset:2px!important;}' +
 			'.esf-popup-overlay[data-esf-close-theme="dark"]{--esf-close-fg:rgba(0,0,0,0.55);--esf-close-bg:rgba(0,0,0,0.06);--esf-close-border:rgba(0,0,0,0.12);--esf-close-hover-fg:#1d2327;--esf-close-hover-bg:rgba(0,0,0,0.10);}' +
-			// isolation:isolate walls off the authored form's own stacking context —
-			// without it, a z-index the author sets on their own content (even just to
-			// layer two of their own elements) competes directly with the close
-			// button's z-index one level up, and a high enough one paints over the
-			// button and silently swallows its clicks/taps. Isolating means the
-			// button can never be out-stacked no matter what z-index authored CSS uses.
+			// isolation:isolate covers a LIGHT-DOM form (use_shadow_dom off): its
+			// content sits as a plain descendant of .esf-host with no shadow
+			// boundary, so without this an author's own z-index can climb up and
+			// paint over the close button. (A shadow-DOM form gets the same
+			// protection from BOOT_CSS's :host rule instead — see its comment.)
 			'.esf-popup-content .esf-host{display:block;isolation:isolate;}' +
 			'html.esf-popup-open,body.esf-popup-open{overflow:hidden;}' +
 			'@keyframes esf-popup-fade{from{opacity:0}to{opacity:1}}' +
@@ -1215,11 +1225,7 @@
 			// not fixed. No body padding push needed — it takes its own space.
 			'.esf-ribbon[data-sticky="0"]{position:relative;top:auto;bottom:auto;' +
 			'animation-name:esf-ribbon-fade;}' +
-			// isolation:isolate — see the identical comment on the popup's .esf-host
-			// rule. This is what was actually letting Ribbon 2026's own z-index:10
-			// content (.ribbon-inner) paint over and eat clicks on the close button
-			// (z-index:2) on narrow viewports, where the authored content spans the
-			// full ribbon width and reaches the corner the button lives in.
+			// isolation:isolate — see the identical comment on the popup's .esf-host rule.
 			'.esf-ribbon .esf-host{display:block;isolation:isolate;}' +
 			// Close button: floats over the ribbon at top-right of the viewport.
 			// all:revert + !important neutralises theme button styles.
