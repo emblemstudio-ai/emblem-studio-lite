@@ -431,10 +431,18 @@ class ES_Ajax {
 			'form_id', 'esf_hp', 'esf_tag', 'esf_list',
 			'action', '_wpnonce', '_wp_http_referer',
 		];
+		// Only keep fields that actually exist on the form (SER-872). Without this
+		// the public endpoint stored any posted field. `email`/`first_name`/etc are
+		// handled on their own paths above and stay reserved; everything else must
+		// be a real form field to be kept.
+		$allowed       = $this->allowed_field_names( $form );
 		$custom_fields = [];
 		foreach ( $fields as $k => $v ) {
 			if ( in_array( $k, $reserved, true ) ) {
 				continue;
+			}
+			if ( ! isset( $allowed[ $k ] ) ) {
+				continue; // not a field on this form — drop it silently
 			}
 			$custom_fields[ sanitize_key( $k ) ] = is_scalar( $v ) ? sanitize_text_field( (string) $v ) : '';
 		}
@@ -586,6 +594,44 @@ class ES_Ajax {
 	}
 
 	/**
+	 * The set of field names a form legitimately offers, as a lookup keyed by
+	 * name. Read from the form's own authored HTML (and, in the Full edition, its
+	 * live A/B variant HTML), via ES_Form_Parser.
+	 *
+	 * The submit endpoint is public and used to store EVERY posted field, so
+	 * anyone could POST arbitrary fields — no browser needed — and have them saved
+	 * onto the customer's lead and pushed to their CRM. A visitor can only fill a
+	 * field that exists in the rendered HTML, so the markup is a complete allowlist
+	 * by construction. Matches the SaaS App\Support\FormFields (SER-872).
+	 *
+	 * `interests[]` submits as `interests`, so the trailing `[]` is stripped to
+	 * match how the value actually arrives.
+	 *
+	 * @return array<string, true>
+	 */
+	private function allowed_field_names( object $form ): array {
+		$html = (string) ( $form->html ?? '' );
+
+		// A/B variants can add a field the parent form doesn't have. class_exists
+		// because ES_Ab is stripped from the Lite build (which has no A/B).
+		if ( class_exists( 'ES_AB' ) && ! empty( $form->id ) ) {
+			foreach ( ES_AB::live_variants_for_form( (int) $form->id ) as $variant ) {
+				$html .= "\n" . (string) ( $variant->html ?? '' );
+			}
+		}
+
+		$allowed = [];
+		foreach ( ES_Form_Parser::extract_fields( $html ) as $field ) {
+			$name = preg_replace( '/\[\]$/', '', (string) $field['name'] );
+			if ( $name !== '' ) {
+				$allowed[ $name ] = true;
+			}
+		}
+
+		return $allowed;
+	}
+
+	/**
 	 * Parse the form's HTML and find names of inputs that MUST be checked
 	 * (any `<input type="checkbox" required>` or any input with `data-esf-consent`).
 	 * Returns the list of those field names that are missing from the submission.
@@ -731,12 +777,18 @@ class ES_Ajax {
 			$last  = sanitize_text_field( $parts[1] ?? '' );
 		}
 
-		// Captured text-ish inputs (everything left) — kept verbatim so a
-		// human can read what the bot submitted. Cap length per value so
-		// a single huge field can't bloat the row.
+		// Captured text-ish inputs — but only fields that exist on the form, same
+		// rule as a real submission (SER-872). We don't warehouse arbitrary
+		// attacker-controlled fields even on a bot row: a bot could POST hundreds
+		// of junk fields to bloat the row, and it's data we were never asked to
+		// hold. The honeypot catch itself is the signal, not the payload. Matches
+		// the SaaS, which applies the same allowlist to bot leads. Length still
+		// capped per value.
+		$form     = ES_Form_Repo::find( $form_id );
+		$allowed  = $form ? $this->allowed_field_names( $form ) : [];
 		$captured = [];
 		foreach ( $fields as $k => $v ) {
-			if ( ! is_string( $k ) || $k === 'email' ) {
+			if ( ! is_string( $k ) || $k === 'email' || ! isset( $allowed[ $k ] ) ) {
 				continue;
 			}
 			if ( is_array( $v ) ) {
