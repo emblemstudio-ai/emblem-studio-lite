@@ -104,11 +104,12 @@
 		else document.addEventListener('DOMContentLoaded', fn);
 	}
 
-	// --- Silent geo auto-fill --------------------------------------------------
-	// One fetch per page load, cached. Visible form inputs always win — we only
-	// append a value if FormData doesn't already carry that key. If the visitor
-	// has a same-named visible <input>, their typed value is in FormData and we
-	// skip the auto-fill for that key.
+	// --- Client hint (local only) ----------------------------------------------
+	// No third-party call. This once fetched IP-derived location from ipapi.co;
+	// that's removed (see below). All it does now is pass the browser's own
+	// timezone (from Intl, no network) plus anything window.EmblemStudio.autofill
+	// injects. Visible form inputs always win — we only append a value if
+	// FormData doesn't already carry that key.
 	let geoPromise = null;
 	function fetchGeo() {
 		if (geoPromise) return geoPromise;
@@ -125,44 +126,20 @@
 				try {
 					const ov = await window.EmblemStudio.autofill();
 					if (ov && typeof ov === 'object') return Object.assign(data, ov);
-				} catch (e) { /* fall through to ipapi */ }
+				} catch (e) { /* keep the local-only data below */ }
 			}
 
-			// Default: ipapi.co (no auth, free for low volume)
-			try {
-				const ctl = new AbortController();
-				const tid = setTimeout(() => ctl.abort(), 2500);
-				const r = await fetch('https://ipapi.co/json/', { signal: ctl.signal, credentials: 'omit' });
-				clearTimeout(tid);
-				if (r.ok) {
-					const j = await r.json();
-					if (j && !j.error) {
-						// FunnelKit's `country` column expects an ISO 2-letter code (e.g. "RO"),
-						// not the full name. ipapi's `country` field is already the code.
-						if (j.country) data.country = j.country;
-						if (j.country_name) data.country_name = j.country_name;
-						// Prefer ISO subdivision code for state (e.g. "CJ") when ipapi provides it.
-						if (j.region_code) data.state = j.region_code;
-						else if (j.region) data.state = j.region;
-						if (j.region) data.state_name = j.region;
-						if (j.city) data.city = j.city;
-						if (j.postal) data.postcode = j.postal;
-						if (j.timezone) data.timezone = j.timezone;
-					}
-				}
-			} catch (e) {
-				// Fallback when ipapi is unreachable: derive country ISO code from navigator.language
-				try {
-					const lang = navigator.language || '';
-					const code = (lang.split('-')[1] || '').toUpperCase();
-					if (code) {
-						data.country = code;
-						if (typeof Intl.DisplayNames === 'function') {
-							try { data.country_name = new Intl.DisplayNames([lang], { type: 'region' }).of(code); } catch (_) {}
-						}
-					}
-				} catch (_) {}
-			}
+			// NO third-party geo call. The plugin used to fetch the visitor's
+			// country/city from ipapi.co on every page load — which sent their IP
+			// to an outside company before they'd done anything, and brushes
+			// against WordPress.org's "no external requests without consent" rule.
+			// It's gone. IP-derived location is a hosted-Emblem-Studio feature
+			// (Free tier onwards, and on connected sites); standalone Lite does not
+			// guess a visitor's location. A country/state field the visitor
+			// actually fills in still works through explicit Field Mapping.
+			//
+			// We still pass the browser's own timezone (from Intl, above — no
+			// network), plus anything the autofill override injected.
 			return data;
 		})();
 		return geoPromise;
@@ -177,9 +154,10 @@
 			]);
 		} catch (e) { return; }
 		if (!geo) return;
-		// Geo lands in a separate namespace so it never collides with user-named
-		// inputs. The server routes these to FK's country/state/etc. by default;
-		// an explicit Field Mapping (col:country → some form input) overrides.
+		// Hints land in a separate namespace so they never collide with user-named
+		// inputs. Country / region / city are NOT sent from here any more (no
+		// third-party lookup). Timezone (local) and any autofill override still
+		// ride along; a mapped country/state field the visitor fills is unaffected.
 		const autoKeys = ['country', 'country_name', 'state', 'state_name', 'city', 'postcode', 'timezone'];
 		for (const k of autoKeys) {
 			if (geo[k]) formData.append('__es_geo_' + k, geo[k]);

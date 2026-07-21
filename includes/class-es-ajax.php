@@ -292,10 +292,13 @@ class ES_Ajax {
 
 		$fields = $this->collect_fields();
 
-		// Pull out silent geo values (frontend.js writes them to __es_geo_* keys
-		// so they never collide with user-named inputs). These are the default
-		// values for FK's country/state/city/postcode/timezone when no mapping
-		// is set. An explicit Field Mapping always wins.
+		// Pull out any silent hints frontend.js wrote to __es_geo_* keys (so they
+		// never collide with user-named inputs). As of the ipapi.co removal the
+		// only hint left is the browser's local timezone — IP-derived country /
+		// state / city are no longer looked up here (that's a hosted-Emblem-Studio
+		// feature, Free tier onwards / connected sites). So these keys are mostly
+		// empty now; an explicit Field Mapping still fills any FK field the visitor
+		// actually types, which always wins.
 		$geo = [];
 		foreach ( $fields as $k => $v ) {
 			if ( is_string( $k ) && strpos( $k, '__es_geo_' ) === 0 ) {
