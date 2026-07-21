@@ -56,9 +56,6 @@ final class Emblem_Studio_SaaS_Connector
         'emblem-studio-settings'     => 'settings',
     ];
 
-    /** Set true when a shortcode places a SaaS slot, so render() loads embed.js. */
-    private static $embed_requested = false;
-
     public static function init(): void
     {
         // Front-end: inject context + place form slots + load embed.js (no-ops
@@ -469,13 +466,16 @@ final class Emblem_Studio_SaaS_Connector
                     );
                     ?>
                 </p>
+                <p style="color:#646970;font-size:12px;margin:0 0 16px;">
+                    <?php esc_html_e('Your leads, subscribers and stats stay in sync with your Emblem Studio account for as long as this site is connected.', 'emblem-studio'); ?>
+                </p>
                 <?php if (self::connected_via() === 'constants') : ?>
                     <p style="color:#646970;font-size:12px;margin:0 0 4px;">
                         <?php esc_html_e('This connection is set in wp-config.php (ESS_API_BASE / ESS_SITE_ID / ESS_SITE_TOKEN). To disconnect, remove those constants.', 'emblem-studio'); ?>
                     </p>
                 <?php else : ?>
                     <p style="color:#646970;font-size:12px;margin:0 0 20px;">
-                        <?php esc_html_e('Decoupling disconnects this site and reverts the dashboard to the built-in Lite plugin. Your account and its assets stay safe in Emblem Studio — you can reconnect anytime.', 'emblem-studio'); ?>
+                        <?php esc_html_e('Decoupling disconnects this site and reverts the dashboard to the built-in Lite plugin. The leads, subscribers and stats already synced stay in your Emblem Studio account — disconnecting does not delete them there. You can reconnect anytime.', 'emblem-studio'); ?>
                     </p>
                     <?php echo self::decouple_form_html(); // phpcs:ignore ?>
                 <?php endif; ?>
@@ -520,8 +520,11 @@ final class Emblem_Studio_SaaS_Connector
                     <?php esc_html_e('Sign in to your Emblem Studio account to manage this site’s forms, popups and reports right here in WordPress.', 'emblem-studio'); ?>
                 </p>
                 <?php // TODO (Multica SER-749): once the beta landing page is live, link "ask for beta access" to it (jump to the signup form) for people without an account. ?>
-                <p style="color:#646970;font-size:12px;margin:0 0 22px;">
+                <p style="color:#646970;font-size:12px;margin:0 0 8px;">
                     <?php esc_html_e('A secure Emblem Studio sign-in window will open. The beta is invite-only.', 'emblem-studio'); ?>
+                </p>
+                <p style="color:#646970;font-size:12px;margin:0 0 22px;">
+                    <?php esc_html_e('Connecting copies this site’s existing leads, subscribers and stats into your Emblem Studio account, and keeps them in sync from then on. You’ll confirm this on the next screen.', 'emblem-studio'); ?>
                 </p>
                 <p>
                     <button id="es-connect-btn" type="button" class="button button-primary button-hero">
@@ -590,7 +593,7 @@ final class Emblem_Studio_SaaS_Connector
     /** A Decouple form with a JS confirm that spells out the revert-to-Lite effect. */
     private static function decouple_form_html(): string
     {
-        $confirm = esc_js(__('Decouple this site? The dashboard will switch back to the WordPress Lite plugin. Your Emblem Studio account and assets are kept — you can reconnect anytime.', 'emblem-studio'));
+        $confirm = esc_js(__('Decouple this site? The dashboard will switch back to the WordPress Lite plugin. The leads, subscribers and stats already synced stay in your Emblem Studio account — decoupling does not delete them there. You can reconnect anytime.', 'emblem-studio'));
 
         return '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin:0;" onsubmit="return confirm(\''.$confirm.'\');">'
             .'<input type="hidden" name="action" value="es_decouple" />'
@@ -1562,11 +1565,6 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         $forms = self::forms($cfg);
-        // Load the embed runtime when there are auto-shells to place OR a shortcode
-        // on this page placed a SaaS slot (inline / click) that embed.js must fill.
-        if (empty($forms) && ! self::$embed_requested) {
-            return;
-        }
 
         $config = [
             'api'       => $cfg['api_base'].'/v1',
@@ -1695,16 +1693,6 @@ final class Emblem_Studio_SaaS_Connector
         $map = self::fetch_embed($cfg)['wp_map'];
 
         return isset($map[$wp_id]) ? (int) $map[$wp_id] : 0;
-    }
-
-    /**
-     * A shortcode calls this when it places a SaaS slot, so render() loads the
-     * embed runtime (window.EmblemStudio + embed.js) even on a page that has no
-     * auto-shell forms of its own.
-     */
-    public static function request_embed_runtime(): void
-    {
-        self::$embed_requested = true;
     }
 
     /* ── Inbound lead relay → local FunnelKit ──────────────────────────── */

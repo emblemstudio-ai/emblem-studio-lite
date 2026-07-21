@@ -138,7 +138,6 @@ class ES_Shortcode {
 		if ( $saas_id <= 0 ) {
 			return null; // not mirrored/mapped yet — fall back to local
 		}
-		Emblem_Studio_SaaS_Connector::request_embed_runtime();
 
 		if ( $shell === 'popup-click' ) {
 			return '<div data-es-form="' . $saas_id . '" data-es-shell="popup-click">' . wp_kses_post( $label ) . '</div>';
