@@ -169,6 +169,16 @@ class ES_Preview {
 	 * thumbnail templates without rebuilding the doc each time.
 	 */
 	public static function position_css( string $position ): string {
+		// align-items:flex-end/center (a "self-position" value) is UNSAFE by
+		// default: when the aligned child is taller than the body, the browser
+		// pushes its overflow off the far edge with no way to scroll to it —
+		// not merely uncentered, genuinely unreachable. `safe` falls back to
+		// start-alignment only once/where it would otherwise overflow, so a
+		// short card still docks to its corner exactly as before, and a card
+		// taller than the viewport (a long slide-in form, a tall popup) is
+		// simply reachable by scrolling instead of clipped. justify-content
+		// doesn't need the same fix — it's a content-distribution property,
+		// safe by default per spec.
 		switch ( $position ) {
 			case 'top':
 				return 'body{display:block;}.esf-host{width:100%;}';
@@ -178,14 +188,14 @@ class ES_Preview {
 				// bottom-anchored close button). Without it the body collapses to
 				// the ribbon's height and the ribbon floats to the top while the
 				// fixed close button stays pinned at the iframe's bottom.
-				return 'body{display:flex;align-items:flex-end;justify-content:stretch;min-height:100vh;}.esf-host{width:100%;}';
+				return 'body{display:flex;align-items:safe flex-end;justify-content:stretch;min-height:100vh;}.esf-host{width:100%;}';
 			case 'bottom-right':
-				return 'body{display:flex;align-items:flex-end;justify-content:flex-end;padding:20px;min-height:100vh;}';
+				return 'body{display:flex;align-items:safe flex-end;justify-content:flex-end;padding:20px;min-height:100vh;}';
 			case 'bottom-left':
-				return 'body{display:flex;align-items:flex-end;justify-content:flex-start;padding:20px;min-height:100vh;}';
+				return 'body{display:flex;align-items:safe flex-end;justify-content:flex-start;padding:20px;min-height:100vh;}';
 			case 'center':
 			default:
-				return 'body{display:flex;align-items:center;justify-content:center;padding:24px;min-height:100vh;}.esf-host{max-width:100%;}';
+				return 'body{display:flex;align-items:safe center;justify-content:center;padding:24px;min-height:100vh;}.esf-host{max-width:100%;}';
 		}
 	}
 
@@ -488,12 +498,15 @@ try { window.parent.postMessage({ type: 'es-inspector:shell-info', shell: <?php 
 <?php endif; ?>
 <script>
 // Report the asset height so the Design tab can grow the preview iframe (520px
-// floor + ~150px above/below a taller asset). Ribbon / slide-in are edge-anchored
-// and fullscreen popups fill the frame, so they report 0 and the parent keeps the
-// minimum. Popups cap at 90vh, so measure scrollHeight (natural content height).
+// floor + ~150px above/below a taller asset). Ribbon is a full-width edge bar
+// that never needs more room, and fullscreen popups fill the frame — both report
+// 0 and the parent keeps the minimum. Slide-in DOES grow: its .esf-inspect-shell
+// wrapper is position:relative + sized to the form here (unlike the live front
+// end's position:fixed corner card), so it measures and grows exactly like a
+// popup. Popups cap at 90vh, so measure scrollHeight (natural content height).
 (function () {
 	var SHELL = <?php echo wp_json_encode( $shell ); ?>;
-	var noGrow = <?php echo ( $is_fullscreen || in_array( $shell, [ 'ribbon', 'slide-in' ], true ) ) ? 'true' : 'false'; ?>;
+	var noGrow = <?php echo ( $is_fullscreen || $shell === 'ribbon' ) ? 'true' : 'false'; ?>;
 	var ro = null, target = null, lastH = -1;
 	function findTarget() { return document.querySelector('.esf-inspect-shell') || document.querySelector('.esf-host[data-esf-id]'); }
 	function report() {
