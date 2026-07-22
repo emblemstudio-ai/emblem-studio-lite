@@ -437,6 +437,17 @@ class ES_Admin {
 			'emblem-studio-settings',
 			[ $this, 'route_settings' ]
 		);
+		// Plugin-local explainer, deliberately NEVER routed through maybe_embed()
+		// (see route_privacy()) — it has no SaaS twin, so it renders identically
+		// whether the site is standalone, Lite, or connected.
+		add_submenu_page(
+			'emblem-studio',
+			__( 'Privacy & Cookies', 'emblem-studio' ),
+			__( 'Privacy & Cookies', 'emblem-studio' ),
+			'manage_options',
+			'emblem-studio-privacy',
+			[ $this, 'route_privacy' ]
+		);
 		// The Connect / Account screen (Lite + connector only). Label reflects
 		// state — "Connect" when not yet paired, "Account" once connected.
 		if ( $connector ) {
@@ -615,6 +626,16 @@ class ES_Admin {
 			return;
 		}
 		include EMBLEM_STUDIO_PATH . 'admin/views/settings.php';
+	}
+
+	/** Plugin-local — deliberately skips maybe_embed(). This is static explainer
+	 *  copy with no SaaS twin; an unmapped slug through maybe_embed() would
+	 *  silently fall back to embedding the Assets page on a connected site. */
+	public function route_privacy(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		include EMBLEM_STUDIO_PATH . 'admin/views/privacy.php';
 	}
 
 	/** Design System editor: connected Lite embeds the account's (SaaS) page; the

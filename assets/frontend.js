@@ -422,6 +422,49 @@
 		return m ? decodeURIComponent(m[1]) : '';
 	}
 
+	// ── Cookie-consent gating (SER-901) ──────────────────────────────────
+	// Only esf_visitor is gated — everything else in this file (A/B cookie,
+	// esf_sub/esf_dismissed, the honeypot) fires unconditionally, unaffected.
+	// Fail-open: a site with no consent mechanism at all behaves exactly as
+	// before (cookie sets normally). We only hold the write back once we can
+	// see a real "declined", so this can only reduce today's gating, never add risk.
+	let _esAnalyticsConsent = true;
+	let _esPendingVisitorWrite = null;
+	function esWriteVisitorCookie(value) {
+		if (_esAnalyticsConsent) {
+			try { document.cookie = 'esf_visitor=' + value + '; max-age=2592000; path=/; samesite=lax'; } catch (e) { /* ignore */ }
+		} else {
+			_esPendingVisitorWrite = value;
+		}
+	}
+	function esApplyAnalyticsConsent(granted) {
+		_esAnalyticsConsent = !!granted;
+		if (_esAnalyticsConsent && _esPendingVisitorWrite) {
+			esWriteVisitorCookie(_esPendingVisitorWrite);
+			_esPendingVisitorWrite = null;
+		}
+	}
+	// Public hook for any consent-banner setup that doesn't speak the WP
+	// Consent API — paste `EmblemStudio.setAnalyticsConsent(true)` into the
+	// banner's own "run this when a category is accepted" script slot, once.
+	window.EmblemStudio = window.EmblemStudio || {};
+	window.EmblemStudio.setAnalyticsConsent = esApplyAnalyticsConsent;
+	// Auto-detect the WP Consent API (wordpress.org/plugins/wp-consent-api/) —
+	// most serious WP consent-banner plugins implement it, so this needs zero
+	// setup from the client.
+	(function () {
+		if (typeof window.wp_has_consent !== 'function') return;
+		const granted = function () {
+			try { return !!(window.wp_has_consent('statistics') || window.wp_has_consent('statistics-anonymous')); }
+			catch (e) { return true; } // fail open on a broken integration too
+		};
+		esApplyAnalyticsConsent(granted());
+		document.addEventListener('wp_listen_for_consent_change', function (e) {
+			const changed = (e && e.detail) || {};
+			if ('statistics' in changed || 'statistics-anonymous' in changed) esApplyAnalyticsConsent(granted());
+		});
+	})();
+
 	// Anonymous, first-party per-visitor id (a random value — no PII, no IP) so
 	// reports can count unique visitors + new-vs-returning. Reuses the esf_visitor
 	// cookie the new/returning display gate already reads; a legacy '1' flag is
@@ -435,7 +478,7 @@
 			v = (window.crypto && crypto.randomUUID)
 				? crypto.randomUUID()
 				: (Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
-			try { document.cookie = 'esf_visitor=' + v + '; max-age=2592000; path=/; samesite=lax'; } catch (e) { /* ignore */ }
+			esWriteVisitorCookie(v);
 		}
 		_esVid = v;
 		return v;
