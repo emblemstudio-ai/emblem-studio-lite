@@ -8,43 +8,41 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<div class="es-page-header-main">
 			<span class="es-eyebrow"><span class="es-eyebrow-dot" aria-hidden="true"></span><?php esc_html_e( 'Privacy', 'emblem-studio' ); ?></span>
 			<h1 class="es-page-title"><?php esc_html_e( 'Privacy & Cookies', 'emblem-studio' ); ?></h1>
-			<p class="es-page-subtitle"><?php esc_html_e( 'What Emblem Studio stores in a visitor\'s browser, and what you need to tell your own cookie banner about it.', 'emblem-studio' ); ?></p>
+			<p class="es-page-subtitle"><?php esc_html_e( 'One cookie worth mentioning in your cookie banner — here\'s exactly what to say.', 'emblem-studio' ); ?></p>
 		</div>
 	</div>
 	<hr class="es-horizon" aria-hidden="true">
 
-	<h2><?php esc_html_e( 'The one cookie that might need disclosing', 'emblem-studio' ); ?></h2>
+	<h2><?php esc_html_e( 'The cookie in question', 'emblem-studio' ); ?></h2>
 	<p>
-		<?php esc_html_e( 'Your forms and popups set a small anonymous cookie called esf_visitor. It holds a random id — no name, no email, no IP address — so your stats can tell a new visitor from a returning one. It never leaves your own site.', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'Your forms and popups set one cookie worth mentioning: esf_visitor. It\'s a random, anonymous id — no name, no email, no IP — that just tells your stats a new visitor from a returning one, and it never leaves your site.', 'emblem-studio' ); ?>
 	</p>
 	<p>
-		<?php esc_html_e( 'Everything else Emblem Studio sets — the A/B testing cookie, "already subscribed" memory, a closed popup remembering not to reopen — only happens after a visitor has already acted, so none of it needs a separate mention here.', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'Everything else we set — the A/B cookie, "already subscribed" memory, our spam trap — only starts after a visitor has already acted, so none of it needs mentioning.', 'emblem-studio' ); ?>
 	</p>
-
-	<h2><?php esc_html_e( 'Whose job this is', 'emblem-studio' ); ?></h2>
 	<p>
-		<?php esc_html_e( 'This is your site, so disclosing this cookie and getting consent for it is your call — the same as the consent checkbox on your own forms. We can\'t reach into your cookie banner and add anything for you. What we can do is tell you exactly what to add, and make sure our code respects whatever your visitors decide.', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'It\'s your site and your banner, so the call is yours. We just make sure our code follows whatever your visitors decide.', 'emblem-studio' ); ?>
 	</p>
 
-	<h2><?php esc_html_e( 'If you already run a cookie banner', 'emblem-studio' ); ?></h2>
+	<h2><?php esc_html_e( 'Already have a cookie banner?', 'emblem-studio' ); ?></h2>
 	<p>
-		<?php esc_html_e( 'Paste this into the description for whichever category on your banner covers analytics or performance cookies:', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'Paste this into whichever category covers analytics or performance:', 'emblem-studio' ); ?>
 	</p>
 	<p>
 		<textarea readonly rows="3" class="large-text code" onclick="this.select();"><?php echo esc_textarea( __( 'esf_visitor — an anonymous, first-party cookie (about 30 days) that lets us count unique visitors and tell new visitors from returning ones. No personal data.', 'emblem-studio' ) ); ?></textarea>
 	</p>
 	<p>
-		<?php esc_html_e( 'Most WordPress consent-banner plugins already speak a shared standard called the WP Consent API. If yours does, this cookie now automatically waits for a visitor to accept analytics cookies — there is nothing else to set up.', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'Most WordPress banners already speak a shared standard (the WP Consent API) — if yours does, this is handled automatically, nothing else to do.', 'emblem-studio' ); ?>
 	</p>
 	<p>
-		<?php esc_html_e( 'If your banner doesn\'t support that standard, paste this one line wherever your banner lets you run a script "when this category is accepted":', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'If not, paste this one line into your banner\'s "on accept" script instead:', 'emblem-studio' ); ?>
 	</p>
 	<p>
 		<textarea readonly rows="1" class="large-text code" onclick="this.select();">EmblemStudio.setAnalyticsConsent(true);</textarea>
 	</p>
 
-	<h2><?php esc_html_e( "If you don't run a cookie banner at all", 'emblem-studio' ); ?></h2>
+	<h2><?php esc_html_e( 'No banner yet?', 'emblem-studio' ); ?></h2>
 	<p>
-		<?php esc_html_e( 'Nothing to do. The cookie behaves exactly as it always has.', 'emblem-studio' ); ?>
+		<?php esc_html_e( "Then there's nothing to change — the cookie works exactly as it does today.", 'emblem-studio' ); ?>
 	</p>
 </div>
