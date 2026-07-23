@@ -465,12 +465,19 @@ class ES_Ajax {
 		] );
 		$lead_id = (int) $wpdb->insert_id;
 
-		// Push to FunnelKit (skipped when the per-form FunnelKit
-		// destination toggle is OFF — in that case the lead still saves
-		// to wp_emblemstudio_leads and any active webhooks still fire).
+		// An active FunnelKit Form Feed is authoritative. Otherwise the direct
+		// destination toggle decides whether the corrected direct upsert runs.
+		// Webhooks remain independent in either case.
 		$fk_enabled = ! isset( $form->funnelkit_enabled ) || ! empty( $form->funnelkit_enabled );
-		if ( $fk_enabled ) {
-			$push = ES_FunnelKit::push( [
+		$feed_fields = $fields;
+		$feed_fields['email'] = $email;
+		$fk_asset_key = ! empty( $form->saas_form_id )
+			? 'saas:' . (int) $form->saas_form_id
+			: 'wp:' . $form_id;
+		$push = ES_FunnelKit_Delivery::dispatch(
+			$fk_asset_key,
+			$feed_fields,
+			[
 				'email'         => $email,
 				'first_name'    => $first_name,
 				'last_name'     => $last_name,
@@ -482,18 +489,16 @@ class ES_Ajax {
 				'tags'          => $tags,
 				'lists'         => $lists,
 				'custom_fields' => $custom_fields,
-			] );
+			],
+			$fk_enabled
+		);
 
+		if ( $push['mode'] !== 'disabled' ) {
 			$wpdb->update( ES_Install::table( 'leads' ), [
 				'funnelkit_pushed'     => $push['ok'] ? 1 : 0,
 				'funnelkit_contact_id' => $push['contact_id'] ?? null,
 				'error'                => $push['ok'] ? null : ( $push['error'] ?? 'Unknown' ),
 			], [ 'id' => $lead_id ] );
-		} else {
-			// FK disabled for this form — synthesize a "not pushed" result
-			// so the rest of the flow (webhook payload, response) sees a
-			// consistent shape without sprinkling conditionals everywhere.
-			$push = [ 'ok' => false, 'contact_id' => null, 'error' => null ];
 		}
 
 		// Always record the conversion locally even if FK fails (lead is saved).

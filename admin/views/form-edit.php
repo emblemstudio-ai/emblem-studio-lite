@@ -945,19 +945,53 @@ $ab_archive_ct = count( $ab_archived );
 	<section id="es-tab-connect" class="es-tab-panel" data-panel="connect">
 		<p class="description" style="max-width:680px;"><?php esc_html_e( 'Pick which destinations receive this form\'s leads. Each destination has its own active toggle — enable any combination. When FunnelKit is active, it pushes first and its contact ID is included in any webhook payload that fires after.', 'emblem-studio' ); ?></p>
 
-		<?php $fk_enabled = ! empty( $f->funnelkit_enabled ); ?>
-		<div class="es-connect-card <?php echo $fk_enabled ? '' : 'is-destination-off'; ?>">
+		<?php
+		$fk_enabled    = ! empty( $f->funnelkit_enabled );
+		$fk_asset_key  = ! empty( $f->saas_form_id ) ? 'saas:' . (int) $f->saas_form_id : 'wp:' . (int) ( $f->id ?? 0 );
+		$fk_feed_state = class_exists( 'ES_FunnelKit_Form_Feed' )
+			? ES_FunnelKit_Form_Feed::status( $fk_asset_key )
+			: [ 'available' => false, 'managed' => false, 'feeds' => [] ];
+		$fk_managed    = ! empty( $fk_feed_state['managed'] );
+		$fk_pro        = defined( 'BWFAN_PRO_VERSION' ) || class_exists( 'BWFAN_Pro' );
+		?>
+		<div class="es-connect-card <?php echo ! $fk_managed && ! $fk_enabled ? 'is-destination-off' : ''; ?>">
 			<header class="es-connect-card-head">
+				<?php if ( ! $fk_managed ) : ?>
 				<label class="es-connect-card-active">
 					<input type="checkbox" class="es-toggle-input es-destination-toggle" name="funnelkit_enabled" value="1" <?php checked( $fk_enabled ); ?>>
 					<span class="screen-reader-text"><?php esc_html_e( 'FunnelKit Automations active', 'emblem-studio' ); ?></span>
 				</label>
+				<?php endif; ?>
 				<div class="es-connect-card-titles">
 					<h2 class="es-connect-card-title"><?php esc_html_e( 'FunnelKit Automations', 'emblem-studio' ); ?></h2>
-					<span class="es-connect-card-tag"><?php esc_html_e( 'Direct PHP integration', 'emblem-studio' ); ?></span>
+					<span class="es-connect-card-tag"><?php echo esc_html( $fk_managed ? __( 'Managed by FunnelKit Forms', 'emblem-studio' ) : __( 'Direct integration', 'emblem-studio' ) ); ?></span>
 				</div>
 			</header>
 			<div class="es-connect-card-body">
+		<?php if ( $fk_managed ) : ?>
+			<?php if ( $fk_enabled ) : ?><input type="hidden" name="funnelkit_enabled" value="1"><?php endif; ?>
+			<?php foreach ( (array) $f->funnelkit_lists as $preserved_list_id ) : ?>
+				<input type="hidden" name="funnelkit_lists[]" value="<?php echo (int) $preserved_list_id; ?>">
+			<?php endforeach; ?>
+			<input type="hidden" name="funnelkit_tags_csv" value="<?php echo esc_attr( implode( ',', (array) $f->funnelkit_tags ) ); ?>">
+			<input type="hidden" name="field_mapping_json" value="<?php echo esc_attr( wp_json_encode( (object) $f->field_mapping ) ); ?>">
+			<div class="notice notice-info inline" style="margin:0;">
+				<p><strong><?php esc_html_e( 'This asset is managed by FunnelKit Forms.', 'emblem-studio' ); ?></strong></p>
+				<p><?php esc_html_e( 'FunnelKit owns its field mapping, contact status, lists and tags, automations, and any confirmation email. The direct settings are preserved and return if every matching feed is deactivated.', 'emblem-studio' ); ?></p>
+				<?php foreach ( (array) ( $fk_feed_state['feeds'] ?? [] ) as $feed ) : ?>
+					<?php if ( ! empty( $feed['edit_url'] ) ) : ?>
+						<p><a class="button button-secondary" href="<?php echo esc_url( $feed['edit_url'] ); ?>"><?php echo esc_html( sprintf( __( 'Edit %s in FunnelKit', 'emblem-studio' ), $feed['title'] ?? __( 'Form Feed', 'emblem-studio' ) ) ); ?></a></p>
+					<?php endif; ?>
+				<?php endforeach; ?>
+			</div>
+		<?php else : ?>
+			<div class="notice inline <?php echo ES_FunnelKit::is_active() ? 'notice-success' : 'notice-warning'; ?>" style="margin:0 0 16px;">
+				<p><strong><?php echo esc_html( ES_FunnelKit::is_active() ? __( 'Direct integration', 'emblem-studio' ) : __( 'FunnelKit not connected', 'emblem-studio' ) ); ?></strong></p>
+				<p><?php esc_html_e( 'Emblem Studio creates, updates, and subscribes eligible contacts directly on this WordPress site.', 'emblem-studio' ); ?></p>
+			</div>
+			<?php if ( $fk_pro ) : ?>
+				<div class="notice notice-warning inline" style="margin:0 0 16px;"><p><?php esc_html_e( 'FunnelKit Pro is available, but no active Form Feed manages this asset. Direct sync still works. Use FunnelKit Automations > Forms when you want FunnelKit-owned double opt-in.', 'emblem-studio' ); ?></p></div>
+			<?php endif; ?>
 		<?php
 		$fk_lists = ES_FunnelKit::get_lists();
 		$fk_tags  = ES_FunnelKit::get_tags();
@@ -1023,6 +1057,7 @@ $ab_archive_ct = count( $ab_archived );
 			</div>
 			<input type="hidden" name="field_mapping_json" value="<?php echo esc_attr( wp_json_encode( (object) $f->field_mapping ) ); ?>">
 			</div>
+			<?php endif; ?>
 			</div><!-- /.es-connect-card-body -->
 
 		</div><!-- /.es-connect-card (FunnelKit) -->

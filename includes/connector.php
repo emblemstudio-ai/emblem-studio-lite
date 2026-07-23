@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.0.15-beta
+ * Version: 1.0.24-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -1705,6 +1705,18 @@ final class Emblem_Studio_SaaS_Connector
             'callback'            => [__CLASS__, 'receive_lead'],
         ]);
 
+        register_rest_route('emblem-studio-saas/v1', '/funnelkit/meta', [
+            'methods'             => 'GET',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'funnelkit_meta'],
+        ]);
+
+        register_rest_route('emblem-studio-saas/v1', '/funnelkit/dispatch', [
+            'methods'             => 'POST',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'dispatch_funnelkit'],
+        ]);
+
         // Read this site's own content (post types, terms, pages) for the SaaS's
         // display-rule pickers and strategist. See read_wp() for why this exists.
         register_rest_route('emblem-studio-saas/v1', '/wp/(?P<path>[a-z]+(?:/\d+)?)', [
@@ -1784,13 +1796,164 @@ final class Emblem_Studio_SaaS_Connector
         return new WP_REST_Response($res->get_data(), (int) $res->get_status());
     }
 
+    /** Versioned local FunnelKit capabilities and runtime Form Feed state. */
+    public static function funnelkit_meta(WP_REST_Request $request)
+    {
+        $catalog = class_exists('ES_FunnelKit_Form_Feed') ? ES_FunnelKit_Form_Feed::catalog() : [];
+        $assets  = [];
+        foreach ($catalog as $asset) {
+            $key = (string) ($asset['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $assets[] = array_merge($asset, [
+                'feed' => ES_FunnelKit_Form_Feed::status($key),
+            ]);
+        }
+        $fields = [];
+        foreach (ES_FunnelKit::get_all_fields_grouped() as $group) {
+            foreach ((array) ($group['fields'] ?? []) as $field) {
+                $fields[] = $field;
+            }
+        }
+
+        return new WP_REST_Response([
+            'ok'               => true,
+            'contract_version' => 1,
+            'connector_version'=> '1.0.24-beta',
+            'funnelkit'        => [
+                'available' => self::funnelkit_available(),
+                'pro'       => defined('BWFAN_PRO_VERSION') || class_exists('BWFAN_Pro'),
+            ],
+            'capabilities'     => [
+                'direct_upsert' => class_exists('ES_FunnelKit_Upsert'),
+                'form_feeds'    => class_exists('ES_FunnelKit_Form_Feed'),
+                'idempotency'   => true,
+            ],
+            'lists'            => ES_FunnelKit::get_lists(),
+            'tags'             => ES_FunnelKit::get_tags(),
+            'fields'           => $fields,
+            'assets'           => $assets,
+        ], 200);
+    }
+
+    /** Unified local dispatch: an active native feed wins; direct sync is fallback. */
+    public static function dispatch_funnelkit(WP_REST_Request $request)
+    {
+        if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Delivery')) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'FunnelKit not installed'], 503);
+        }
+
+        $p             = (array) $request->get_json_params();
+        $submission_id = sanitize_key((string) ($p['submission_id'] ?? ''));
+        $asset_key     = sanitize_text_field((string) ($p['asset_key'] ?? ''));
+        if ($submission_id === '' || ! preg_match('/^(?:saas|wp):\d+$/', $asset_key)) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'Invalid dispatch identity'], 400);
+        }
+
+        $idempotency_key = 'ess_fk_' . md5($submission_id . '|' . $asset_key);
+        $cached = get_transient($idempotency_key);
+        if (is_array($cached)) {
+            $cached['idempotent_replay'] = true;
+            $cached_status = ! empty($cached['ok']) || ($cached['mode'] ?? '') === 'disabled' ? 200 : 500;
+            return new WP_REST_Response($cached, $cached_status);
+        }
+
+        $direct = self::normalize_direct_lead((array) ($p['direct'] ?? []));
+        if (empty($direct['email']) || ! is_email($direct['email'])) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'Invalid email'], 400);
+        }
+        $fields = self::sanitize_submission_fields((array) ($p['fields'] ?? []));
+        if (! isset($fields['email'])) {
+            $fields['email'] = $direct['email'];
+        }
+
+        $lock_key = 'ess_fk_lock_' . md5($submission_id . '|' . $asset_key);
+        $locked = add_option($lock_key, time(), '', false);
+        if (! $locked && time() - (int) get_option($lock_key, 0) > 120) {
+            delete_option($lock_key);
+            $locked = add_option($lock_key, time(), '', false);
+        }
+        if (! $locked) {
+            $cached = get_transient($idempotency_key);
+            if (is_array($cached)) {
+                $cached['idempotent_replay'] = true;
+                $cached_status = ! empty($cached['ok']) || ($cached['mode'] ?? '') === 'disabled' ? 200 : 500;
+                return new WP_REST_Response($cached, $cached_status);
+            }
+            return new WP_REST_Response([
+                'ok' => false,
+                'mode' => 'in_progress',
+                'contact_id' => null,
+                'error' => 'This submission is already being processed. Retry shortly.',
+            ], 409);
+        }
+
+        try {
+            $result = ES_FunnelKit_Delivery::dispatch(
+                $asset_key,
+                $fields,
+                $direct,
+                ! empty($p['direct_enabled'])
+            );
+            $result['contract_version'] = 1;
+            $result['submission_id']    = $submission_id;
+            $result['asset_key']        = $asset_key;
+            $result['idempotent_replay']= false;
+            set_transient($idempotency_key, $result, DAY_IN_SECONDS);
+
+            return new WP_REST_Response($result, ! empty($result['ok']) || $result['mode'] === 'disabled' ? 200 : 500);
+        } finally {
+            delete_option($lock_key);
+        }
+    }
+
+    private static function sanitize_submission_fields(array $fields): array
+    {
+        $clean = [];
+        foreach ($fields as $key => $value) {
+            $key = sanitize_text_field((string) $key);
+            if ($key === '') {
+                continue;
+            }
+            $clean[$key] = is_array($value)
+                ? array_values(array_map('sanitize_text_field', $value))
+                : sanitize_text_field((string) $value);
+        }
+        return $clean;
+    }
+
+    private static function normalize_direct_lead(array $p): array
+    {
+        $custom = [];
+        foreach ((array) ($p['custom'] ?? $p['custom_fields'] ?? []) as $key => $value) {
+            if (is_numeric($key) && $value !== '' && $value !== null) {
+                $custom[(int) $key] = is_array($value) ? $value : sanitize_text_field((string) $value);
+            }
+        }
+
+        return [
+            'email'      => sanitize_email($p['email'] ?? ''),
+            'first_name' => sanitize_text_field($p['first_name'] ?? $p['f_name'] ?? ''),
+            'last_name'  => sanitize_text_field($p['last_name'] ?? $p['l_name'] ?? ''),
+            'phone'      => sanitize_text_field($p['phone'] ?? $p['contact_no'] ?? ''),
+            'country'    => sanitize_text_field($p['country'] ?? ''),
+            'state'      => sanitize_text_field($p['state'] ?? ''),
+            'timezone'   => sanitize_text_field($p['timezone'] ?? ''),
+            'tags'       => array_values(array_filter(array_map('sanitize_text_field', (array) ($p['tags'] ?? [])))),
+            'lists'      => array_values(array_filter(array_map('absint', (array) ($p['lists'] ?? [])))),
+            'slugs'      => self::sanitize_submission_fields((array) ($p['slugs'] ?? [])),
+            'custom'     => $custom,
+        ];
+    }
+
     /**
      * Create the contact in FunnelKit in-process — mirrors the autonami-app
      * create-contact route, so the payload is identical to the SaaS REST push.
      */
     public static function receive_lead(WP_REST_Request $request)
     {
-        if (! self::funnelkit_available()) {
+        if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Upsert')) {
             return new WP_REST_Response(['ok' => false, 'error' => 'FunnelKit not installed'], 503);
         }
 
@@ -1800,38 +1963,24 @@ final class Emblem_Studio_SaaS_Connector
             return new WP_REST_Response(['ok' => false, 'error' => 'Invalid email'], 400);
         }
 
-        $params = [
-            'f_name'     => sanitize_text_field($p['f_name'] ?? ''),
-            'l_name'     => sanitize_text_field($p['l_name'] ?? ''),
-            'contact_no' => sanitize_text_field($p['contact_no'] ?? ''),
-            'source'     => sanitize_text_field($p['source'] ?? 'emblem-studio'),
-            'status'     => sanitize_text_field((string) ($p['status'] ?? '1')),
-        ];
+        $custom = [];
         foreach ($p as $k => $v) {
             if (is_numeric($k)) {
-                $params[$k] = $v;
+                $custom[(int) $k] = is_array($v) ? $v : sanitize_text_field((string) $v);
             }
         }
 
-        $contact = new BWFCRM_Contact($email, true, $params);
-        if (! empty($p['tags'])) {
-            $contact->set_tags((array) $p['tags'], true, false);
-        }
-        if (! empty($p['lists'])) {
-            $contact->set_lists(array_map('intval', (array) $p['lists']), true, false);
-        }
-        $contact->save();
+        $result = ES_FunnelKit_Upsert::run([
+            'email'      => $email,
+            'first_name' => sanitize_text_field($p['f_name'] ?? ''),
+            'last_name'  => sanitize_text_field($p['l_name'] ?? ''),
+            'phone'      => sanitize_text_field($p['contact_no'] ?? ''),
+            'tags'       => array_values(array_filter(array_map('sanitize_text_field', (array) ($p['tags'] ?? [])))),
+            'lists'      => array_values(array_filter(array_map('absint', (array) ($p['lists'] ?? [])))),
+            'custom'     => $custom,
+        ]);
 
-        $id = method_exists($contact, 'get_id') ? (int) $contact->get_id() : null;
-
-        if (! empty($contact->already_exists)) {
-            return new WP_REST_Response(['ok' => true, 'already_exists' => true, 'contact_id' => $id], 422);
-        }
-        if ($contact->is_contact_exists()) {
-            return new WP_REST_Response(['ok' => true, 'contact_id' => $id], 200);
-        }
-
-        return new WP_REST_Response(['ok' => false, 'error' => 'Unable to create contact'], 500);
+        return new WP_REST_Response($result, ! empty($result['ok']) ? 200 : 500);
     }
 }
 

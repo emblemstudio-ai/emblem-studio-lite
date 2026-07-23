@@ -995,7 +995,10 @@ class ES_Admin {
 		}
 		check_admin_referer( 'es_save_settings' );
 		update_option( ES_FunnelKit::OPT_API_KEY,    sanitize_text_field( wp_unslash( $_POST['fk_api_key'] ?? '' ) ) );
-		update_option( ES_FunnelKit::OPT_API_SECRET, sanitize_text_field( wp_unslash( $_POST['fk_api_secret'] ?? '' ) ) );
+		$fk_secret = sanitize_text_field( wp_unslash( $_POST['fk_api_secret'] ?? '' ) );
+		if ( $fk_secret !== '' ) {
+			update_option( ES_FunnelKit::OPT_API_SECRET, $fk_secret );
+		}
 		update_option( ES_FunnelKit::OPT_API_BASE,   esc_url_raw( wp_unslash( $_POST['fk_api_base'] ?? home_url() ) ) );
 		// Bot filtering is always on (no toggle) — known bots are always counted
 		// separately so they never pollute real visitor metrics. Checkbox arrives

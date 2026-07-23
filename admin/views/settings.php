@@ -58,7 +58,7 @@ $logs   = ES_Logger::recent( 50 );
 			</tr>
 			<tr>
 				<th><label for="es-fk-secret"><?php esc_html_e( 'API Secret', 'emblem-studio' ); ?></label></th>
-				<td><input id="es-fk-secret" name="fk_api_secret" type="password" class="regular-text" value="<?php echo esc_attr( get_option( ES_FunnelKit::OPT_API_SECRET, '' ) ); ?>" autocomplete="off"></td>
+				<td><input id="es-fk-secret" name="fk_api_secret" type="password" class="regular-text" value="" placeholder="<?php echo get_option( ES_FunnelKit::OPT_API_SECRET, '' ) ? esc_attr__( 'Leave blank to keep saved secret', 'emblem-studio' ) : ''; ?>" autocomplete="new-password"></td>
 			</tr>
 			<tr>
 				<th><label for="es-fk-base"><?php esc_html_e( 'API Base URL', 'emblem-studio' ); ?></label></th>

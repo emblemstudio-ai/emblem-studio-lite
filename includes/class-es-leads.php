@@ -237,24 +237,41 @@ class ES_Leads {
 		$phone = (string) ( $extra['phone']      ?? '' );
 
 		$fk_enabled = ! isset( $form->funnelkit_enabled ) || ! empty( $form->funnelkit_enabled );
-		if ( $fk_enabled ) {
-			$push_res = ES_FunnelKit::push( [
+		$lists = is_array( $form->funnelkit_lists ?? null )
+			? $form->funnelkit_lists
+			: json_decode( (string) ( $form->funnelkit_lists ?? '[]' ), true );
+		$tags = is_array( $form->funnelkit_tags ?? null )
+			? $form->funnelkit_tags
+			: json_decode( (string) ( $form->funnelkit_tags ?? '[]' ), true );
+		$asset_key = ! empty( $form->saas_form_id )
+			? 'saas:' . (int) $form->saas_form_id
+			: 'wp:' . (int) $form->id;
+		$push_res = ES_FunnelKit_Delivery::dispatch(
+			$asset_key,
+			array_merge( [ 'email' => (string) $lead->email ], $extra ),
+			[
 				'email'         => (string) $lead->email,
 				'first_name'    => $first,
 				'last_name'     => $last,
 				'phone'         => $phone,
+				'lists'         => is_array( $lists ) ? $lists : [],
+				'tags'          => is_array( $tags ) ? $tags : [],
 				'custom_fields' => $extra,
-			] );
+			],
+			$fk_enabled
+		);
+		$contact_id = $push_res['contact_id'] ?? null;
+		if ( ( $push_res['mode'] ?? '' ) !== 'disabled' ) {
 			$wpdb->update( $leads_table, [
 				'funnelkit_pushed'     => $push_res['ok'] ? 1 : 0,
-				'funnelkit_contact_id' => $push_res['contact_id'] ?? null,
+				'funnelkit_contact_id' => $contact_id,
 				'error'                => $push_res['ok'] ? null : ( $push_res['error'] ?? 'Unknown' ),
 			], [ 'id' => $lead_id ] );
 		}
 
 		// Per-form webhook fan-out.
 		if ( class_exists( 'ES_Webhooks' ) ) {
-			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, null );
+			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null );
 			ES_Webhooks::send_for_form( $form, $payload );
 		}
 
