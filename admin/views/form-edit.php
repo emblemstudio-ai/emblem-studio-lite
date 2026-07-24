@@ -1226,7 +1226,8 @@ $ab_archive_ct = count( $ab_archived );
 							<th scope="row"><?php esc_html_e( 'When already subscribed, this form', 'emblem-studio' ); ?></th>
 							<td>
 								<label style="display:block; margin-bottom:4px;"><input type="radio" name="connections[behavior]" value="hide" <?php checked( $conn_cfg['behavior'], 'hide' ); ?>> <?php esc_html_e( 'Hides — doesn\'t render at all', 'emblem-studio' ); ?></label>
-								<label style="display:block;"><input type="radio" name="connections[behavior]" value="replace" <?php checked( $conn_cfg['behavior'], 'replace' ); ?>> <?php esc_html_e( 'Shows its “already subscribed” block instead', 'emblem-studio' ); ?></label>
+								<label style="display:block; margin-bottom:4px;"><input type="radio" name="connections[behavior]" value="replace" <?php checked( $conn_cfg['behavior'], 'replace' ); ?>> <?php esc_html_e( 'Shows its “already subscribed” block instead', 'emblem-studio' ); ?></label>
+								<label style="display:block;"><input type="radio" name="connections[behavior]" value="nothing" <?php checked( $conn_cfg['behavior'], 'nothing' ); ?>> <?php esc_html_e( 'Nothing — renders normally, so the visitor can submit again', 'emblem-studio' ); ?></label>
 								<p class="description" style="margin:8px 0 0;">
 									<?php
 									printf(

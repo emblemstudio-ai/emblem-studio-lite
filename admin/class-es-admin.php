@@ -1570,7 +1570,7 @@ class ES_Admin {
 				'suppress'      => isset( $conn['suppress'] ) && is_array( $conn['suppress'] ) ? array_map( 'intval', $conn['suppress'] ) : [],
 				'mutual'        => ! empty( $conn['mutual'] ),
 				'duration_days' => isset( $conn['duration_days'] ) ? (int) $conn['duration_days'] : ES_Connections::DEFAULT_DAYS,
-				'behavior'      => ( ( $conn['behavior'] ?? 'hide' ) === 'replace' ) ? 'replace' : 'hide',
+				'behavior'      => in_array( ( $conn['behavior'] ?? 'nothing' ), [ 'hide', 'replace', 'nothing' ], true ) ? $conn['behavior'] : 'nothing',
 				'self_suppress' => ! empty( $conn['self_suppress'] ),
 			];
 		} else {
