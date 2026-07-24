@@ -1177,6 +1177,7 @@ $ab_archive_ct = count( $ab_archived );
 					return (int) $o->id !== (int) ( $f->id ?? 0 );
 				}
 			);
+			$has_fields  = count( ES_Form_Parser::extract_fields( (string) ( $f->html ?? '' ) ) ) > 0;
 			?>
 			<div class="es-connect-card">
 				<h3 class="es-connect-card-title"><?php esc_html_e( 'Linked forms', 'emblem-studio' ); ?></h3>
@@ -1184,10 +1185,22 @@ $ab_archive_ct = count( $ab_archived );
 					<?php esc_html_e( 'Connect this form to others so that once a visitor subscribes here, the connected forms stop appearing — or show a different message instead. Works for anonymous visitors via a cookie, and for logged-in users via their saved lead.', 'emblem-studio' ); ?>
 				</p>
 
-				<?php if ( empty( $other_forms ) ) : ?>
+				<?php if ( ! $has_fields && empty( $other_forms ) ) : ?>
 					<p><em><?php esc_html_e( 'No other forms yet. Create another form and it will appear here to connect.', 'emblem-studio' ); ?></em></p>
 				<?php else : ?>
 					<table class="form-table"><tbody>
+						<?php if ( $has_fields ) : ?>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Self', 'emblem-studio' ); ?></th>
+							<td>
+								<label style="display:inline-flex; align-items:center; gap:.5rem;">
+									<input type="checkbox" name="connections[self_suppress]" value="1" <?php checked( ! empty( $conn_cfg['self_suppress'] ) ); ?>>
+									<?php esc_html_e( "Don't show this form again once this visitor has submitted it — no other form needed.", 'emblem-studio' ); ?>
+								</label>
+							</td>
+						</tr>
+						<?php endif; ?>
+						<?php if ( ! empty( $other_forms ) ) : ?>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'When this form is submitted, also silence:', 'emblem-studio' ); ?></th>
 							<td>
@@ -1208,6 +1221,7 @@ $ab_archive_ct = count( $ab_archived );
 								</label>
 							</td>
 						</tr>
+						<?php endif; ?>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'When already subscribed, this form', 'emblem-studio' ); ?></th>
 							<td>

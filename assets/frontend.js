@@ -962,11 +962,11 @@
 			'.esf-popup-modal[data-fullscreen="1"]{max-width:100vw;width:100vw;height:100vh;border-radius:0;margin:0;}' +
 			// The overlay (not modal/content) is the scroll container for a form
 			// taller than the viewport, so modal/content stay overflow:visible and
-			// a rounded asset's drop-shadow is never clipped. The close button
-			// lives in a sticky, zero-height, float:right wrapper: it's still a
-			// normal child of modal (part of the card, scrolls with it) but can
-			// never scroll out of view while any part of the card is still on
-			// screen — see esf-popup-close-wrap below.
+			// a rounded asset's drop-shadow is never clipped. The close button is
+			// pinned to the modal's top-right corner via absolute positioning —
+			// simple and reliable (an earlier sticky/float/height:0 wrapper scheme,
+			// meant to keep it reachable on very tall forms, instead left it
+			// floating below the card on short ones; reverted).
 			//
 			// min-width: the overlay→modal→content→host chain is all shrink-to-fit,
 			// so it has no definite width of its own. A form whose root CSS uses
@@ -990,14 +990,10 @@
 			'.esf-popup-overlay::-webkit-scrollbar-button{display:none;width:0;height:0;}' +
 			'.esf-popup-overlay::-webkit-scrollbar-corner{background:transparent;}' +
 			'.esf-popup-content[data-fullscreen="1"]{height:100vh;overflow:auto;-webkit-overflow-scrolling:touch;}' +
-			// Sticky + float:right + height:0 keeps the wrapper out of the modal's
-			// normal flow (it doesn't push the form down) while sticking the close
-			// button to the top of the nearest scrolling ancestor (the overlay).
-			'.esf-popup-close-wrap{position:sticky!important;top:12px!important;float:right!important;height:0!important;z-index:10!important;}' +
 			'.esf-popup-close{all:revert!important;' +
-			'position:relative!important;margin-right:12px!important;z-index:10!important;' +
+			'position:absolute!important;top:12px!important;right:12px!important;z-index:10!important;' +
 			'width:26px!important;height:26px!important;min-width:0!important;min-height:0!important;' +
-			'padding:0!important;margin-top:0!important;margin-bottom:0!important;margin-left:0!important;' +
+			'padding:0!important;margin:0!important;' +
 			'display:inline-flex!important;align-items:center!important;justify-content:center!important;' +
 			'border:1px solid var(--esf-close-border,rgba(255,255,255,0.15))!important;border-radius:50%!important;' +
 			'background:var(--esf-close-bg,rgba(255,255,255,0.10))!important;color:var(--esf-close-fg,rgba(255,255,255,0.7))!important;cursor:pointer!important;' +
@@ -1071,23 +1067,19 @@
 		}
 
 		let closeBtn = null;
-		let closeWrap = null;
 		if (showClose) {
-			closeWrap = document.createElement('div');
-			closeWrap.className = 'esf-popup-close-wrap';
 			closeBtn = document.createElement('button');
 			closeBtn.type = 'button';
 			closeBtn.className = 'esf-popup-close';
 			closeBtn.setAttribute('aria-label', 'Close');
 			closeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12"/></svg>';
-			closeWrap.appendChild(closeBtn);
 		}
 
-		// Close-wrap is a sibling of content (direct child of modal), not a
-		// child of content — still part of the card, but sticky (see CSS) so
-		// it can't scroll out of view while the card is taller than the screen.
+		// Close is a sibling of content (direct child of modal), not a child of
+		// content — it stays pinned to the modal's top-right corner via absolute
+		// positioning regardless of what's underneath it.
 		modal.appendChild(content);
-		if (closeWrap) modal.appendChild(closeWrap);
+		if (closeBtn) modal.appendChild(closeBtn);
 		overlay.appendChild(modal);
 		document.body.appendChild(overlay);
 		document.documentElement.classList.add('esf-popup-open');
@@ -1100,13 +1092,13 @@
 		// state) makes the scrollbar appear or disappear.
 		let closeObserver = null;
 		const syncCloseOffset = () => {
-			if (!closeWrap) return;
+			if (!closeBtn) return;
 			// content.offsetWidth includes the scrollbar; clientWidth doesn't.
 			const sbw = Math.max(0, content.offsetWidth - content.clientWidth);
 			// setProperty with 'important' is required — the .esf-popup-close
-			// rule sets margin-right:12px!important (theme-proofing), which a
-			// plain inline style cannot override.
-			closeWrap.style.setProperty('margin-right', ( 12 + sbw ) + 'px', 'important');
+			// rule sets right:12px!important (theme-proofing), which a plain
+			// inline style cannot override.
+			closeBtn.style.setProperty('right', ( 12 + sbw ) + 'px', 'important');
 		};
 		if (closeBtn && window.ResizeObserver) {
 			// Observe `content`: its width changes precisely when the
