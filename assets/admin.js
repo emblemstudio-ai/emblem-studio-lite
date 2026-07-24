@@ -1928,23 +1928,59 @@
 			return null;
 		}
 
-		// Server-side auto-detection rules (mirrors class-es-ajax.php):
-		// when no explicit mapping is set, certain FK columns automatically
-		// pick up form inputs by conventional name.
-		function autoDetected(fkKey) {
-			if (fkKey === 'col:email')      return formFieldExists('email')      ? { name: 'email' }      : null;
-			if (fkKey === 'col:contact_no') return formFieldExists('phone')      ? { name: 'phone' }      : null;
-			if (fkKey === 'col:f_name') {
-				if (formFieldExists('first_name')) return { name: 'first_name' };
-				if (formFieldExists('name'))       return { name: 'name', split: 'first' };
-				return null;
-			}
-			if (fkKey === 'col:l_name') {
-				if (formFieldExists('last_name')) return { name: 'last_name' };
-				if (formFieldExists('name'))      return { name: 'name', split: 'last' };
-				return null;
+		// Case-insensitive lookup by any of several candidate names — for the
+		// auto-detect variants below. formFieldExists() above stays an exact
+		// match; it's also used to check a MAPPED field still exists.
+		function findFieldCi(names) {
+			for (var i = 0; i < names.length; i++) {
+				var wanted = names[i].toLowerCase();
+				for (var j = 0; j < formFields.length; j++) {
+					if (formFields[j].name.toLowerCase() === wanted) return formFields[j];
+				}
 			}
 			return null;
+		}
+
+		// Last-resort signal when no name variant matches: any field whose HTML
+		// input type (its 'kind', from parseFormFields()) fits — e.g. a field
+		// named "contact" but type="tel" still auto-detects for the phone column.
+		function findFieldByKind(kind) {
+			for (var i = 0; i < formFields.length; i++) if (formFields[i].kind === kind) return formFields[i];
+			return null;
+		}
+
+		// Name-convention variants tried case-insensitively when no explicit
+		// mapping exists. Mirrors includes/class-es-field-matcher.php's
+		// EMAIL_NAME_VARIANTS / FIRST_NAME_VARIANTS / LAST_NAME_VARIANTS /
+		// PHONE_NAME_VARIANTS (the server-side, authoritative copy) — keep
+		// both lists in sync.
+		var NAME_VARIANTS = {
+			'col:email': ['email', 'your-email', 'email_address', 'user_email', 'e-mail'],
+			'col:contact_no': ['phone', 'tel', 'phone_number', 'mobile', 'contact_number'],
+			'col:f_name': ['first_name', 'fname', 'firstname', 'first-name'],
+			'col:l_name': ['last_name', 'lname', 'surname', 'last-name', 'lastname'],
+		};
+		var KIND_FALLBACK = { 'col:email': 'email', 'col:contact_no': 'tel' };
+
+		// Server-side auto-detection rules (mirrors class-es-ajax.php):
+		// when no explicit mapping is set, certain FK columns automatically
+		// pick up form inputs by conventional name (or, for email/phone, by
+		// HTML input type as a last resort).
+		function autoDetected(fkKey) {
+			var names = NAME_VARIANTS[fkKey];
+			if (!names) return null;
+
+			var hit = findFieldCi(names);
+			if (hit) return { name: hit.name };
+
+			if (fkKey === 'col:f_name' || fkKey === 'col:l_name') {
+				var nameField = formFieldExists('name');
+				return nameField ? { name: 'name', split: fkKey === 'col:f_name' ? 'first' : 'last' } : null;
+			}
+
+			var kind = KIND_FALLBACK[fkKey];
+			var byKind = kind ? findFieldByKind(kind) : null;
+			return byKind ? { name: byKind.name } : null;
 		}
 
 		function render() {
@@ -2002,10 +2038,14 @@
 							var label = auto.name;
 							if (auto.split === 'first') label = auto.name + ' (first word)';
 							else if (auto.split === 'last') label = auto.name + ' (rest)';
+							var autoField = formFieldExists(auto.name);
+							var autoCompat = autoField ? isCompatible(f.kind, autoField.kind) : true;
 							var autoPill = document.createElement('span');
-							autoPill.className = 'es-mapper-pill is-auto';
+							autoPill.className = 'es-mapper-pill is-auto' + (!autoCompat ? ' is-warn' : '');
 							autoPill.innerHTML = '<span>' + esc(label) + '</span><span class="es-mapper-auto-tag">auto</span>';
-							autoPill.title = 'Auto-detected from input name — pushed to FunnelKit on submit. To override, pick a form input on the right then click this slot.';
+							autoPill.title = !autoCompat
+								? 'Type mismatch — auto-detected by name, but the input type doesn\'t match. Saving will still work, but the value may not be stored correctly.'
+								: 'Auto-detected from input name — pushed to FunnelKit on submit. To override, pick a form input on the right then click this slot.';
 							slot.appendChild(autoPill);
 						} else {
 							slot.classList.add('is-empty');

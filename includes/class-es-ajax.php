@@ -332,8 +332,32 @@ class ES_Ajax {
 			}
 			return '';
 		};
-		$value_for = function ( string $fk_key, string $default_form_name = '' ) use ( $mapping, $lookup_field ) {
-			$form_name = ( $mapping[ $fk_key ] ?? '' ) ?: $default_form_name;
+		// The field's HTML input kind (email/tel/...), parsed from the form's
+		// own stored HTML — a last-resort auto-detect signal when no name
+		// variant matches (e.g. a field named "contact" but type="tel").
+		$field_kinds = [];
+		foreach ( ES_Form_Parser::extract_fields( (string) $form->html ) as $f ) {
+			$field_kinds[ $f['name'] ] = $f['kind'];
+		}
+		$posted_names = array_keys( $fields );
+		/**
+		 * Resolve a FunnelKit column's value: an explicit mapping always wins;
+		 * otherwise try each name-convention variant (case-insensitive, via
+		 * ES_Field_Matcher — shared with assets/admin.js's mapper-UI hint),
+		 * then (only when $default_kind is given) any field whose HTML input
+		 * type matches — e.g. an email column will pick up a field named
+		 * "contact" if it's the only type="email" input on the form.
+		 *
+		 * @param string[] $default_names
+		 */
+		$value_for = function ( string $fk_key, array $default_names = [], string $default_kind = '' ) use ( $mapping, $lookup_field, $posted_names, $field_kinds ) {
+			$form_name = (string) ( $mapping[ $fk_key ] ?? '' );
+			if ( $form_name === '' && $default_names ) {
+				$form_name = (string) ES_Field_Matcher::find_by_name( $posted_names, $default_names );
+			}
+			if ( $form_name === '' && $default_kind !== '' ) {
+				$form_name = (string) ES_Field_Matcher::find_by_kind( $posted_names, $field_kinds, $default_kind );
+			}
 			if ( $form_name === '' ) {
 				return '';
 			}
@@ -348,7 +372,7 @@ class ES_Ajax {
 			return $geo[ $geo_key ] ?? '';
 		};
 
-		$email = self::normalize_email( $value_for( 'col:email', 'email' ) );
+		$email = self::normalize_email( $value_for( 'col:email', ES_Field_Matcher::EMAIL_NAME_VARIANTS, 'email' ) );
 		if ( ! $email || ! is_email( $email ) ) {
 			wp_send_json_error( [ 'message' => 'Please enter a valid email address.' ], 422 );
 		}
@@ -362,9 +386,13 @@ class ES_Ajax {
 		}
 
 		// First / last name: mapping wins, then explicit form fields, then split "name".
-		$first_name = $value_for( 'col:f_name', 'first_name' );
-		$last_name  = $value_for( 'col:l_name', 'last_name' );
-		if ( ! $first_name && empty( $mapping['col:f_name'] ) && ! empty( $fields['name'] ) ) {
+		$first_name = $value_for( 'col:f_name', ES_Field_Matcher::FIRST_NAME_VARIANTS );
+		$last_name  = $value_for( 'col:l_name', ES_Field_Matcher::LAST_NAME_VARIANTS );
+		// Only split the full-name field when NEITHER half resolved on its own —
+		// otherwise a form with (say) an explicit last-name field but no
+		// first-name field would have the split overwrite the already-correct
+		// last name with the tail of the split full name.
+		if ( ! $first_name && ! $last_name && empty( $mapping['col:f_name'] ) && ! empty( $fields['name'] ) ) {
 			$full       = self::normalize_name( trim( (string) $fields['name'] ) );
 			$parts      = preg_split( '/\s+/', $full, 2 );
 			$first_name = $parts[0] ?? '';
@@ -374,7 +402,7 @@ class ES_Ajax {
 			$last_name  = self::normalize_name( $last_name );
 		}
 
-		$phone       = $value_for( 'col:contact_no', 'phone' );
+		$phone       = $value_for( 'col:contact_no', ES_Field_Matcher::PHONE_NAME_VARIANTS, 'tel' );
 		// FK-routed columns: only set if mapping says so, OR geo provides it.
 		$fk_country  = $geo_value_for( 'col:country',  'country' );
 		$fk_state    = $geo_value_for( 'col:state',    'state' );
