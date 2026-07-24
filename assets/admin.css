@@ -5322,3 +5322,31 @@
 }
 .emblem-studio-wrap .es-lite-upsell strong { display: block; font-size: 14px; margin-bottom: 4px; }
 .emblem-studio-wrap .es-lite-upsell p { margin: 0; font-size: 12px; color: var(--es-text-muted, #6c7180); line-height: 1.5; }
+
+/* Display-rule presets — Manage Presets modal (SER-899 phase 2). Sits outside
+   .emblem-studio-wrap (appended to body), so it's un-prefixed. */
+#es-preset-modal { display: none; position: fixed; inset: 0; z-index: 100000; }
+#es-preset-modal.is-open { display: block; }
+#es-preset-modal .es-preset-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
+#es-preset-modal .es-preset-modal-box {
+	position: relative; max-width: 640px; max-height: 82vh; margin: 5vh auto; overflow-y: auto;
+	background: #fff; border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.25); padding: 20px 24px;
+}
+#es-preset-modal .es-preset-modal-head { display: flex; align-items: center; justify-content: space-between; }
+#es-preset-modal .es-preset-modal-head h2 { margin: 0; font-size: 16px; }
+#es-preset-modal .es-preset-modal-close { background: none; border: 0; font-size: 20px; line-height: 1; cursor: pointer; color: #646970; }
+#es-preset-modal .es-preset-modal-sub { font-size: 12px; color: #646970; margin: 6px 0 16px; }
+#es-preset-modal .es-preset-modal-row { border: 1px solid #dcdcde; border-radius: 4px; margin-bottom: 8px; }
+#es-preset-modal .es-preset-modal-row-header {
+	width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+	background: none; border: 0; cursor: pointer; text-align: left; font-size: 13px;
+}
+#es-preset-modal .es-preset-modal-chevron { color: #8c8f94; transition: transform .15s; }
+#es-preset-modal .es-preset-modal-row-header.is-open .es-preset-modal-chevron { transform: rotate(90deg); }
+#es-preset-modal .es-preset-modal-row-name { flex: 1; font-weight: 600; }
+#es-preset-modal .es-preset-modal-row-usage { font-size: 11px; color: #8c8f94; }
+#es-preset-modal .es-preset-modal-row-editor { padding: 0 12px 12px; border-top: 1px solid #f0f0f1; }
+#es-preset-modal .es-preset-modal-row-editor p { margin: 8px 0; }
+#es-preset-modal .es-preset-modal-name { width: 100%; }
+#es-preset-modal .es-preset-modal-show-urls,
+#es-preset-modal .es-preset-modal-hide-urls { width: 100%; font-family: Menlo, Consolas, monospace; font-size: 12px; }

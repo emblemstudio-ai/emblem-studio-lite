@@ -72,6 +72,7 @@ class ES_Display_Rules {
 			'show_mode'         => 'all',
 			'show_filters'      => self::empty_filters(),
 			'hide_filters'      => self::empty_filters(),
+			'preset_id'         => null,
 			'visitor_logged_in' => 'any',
 			'visitor_roles'     => [],
 			'visitor_state'     => 'any',
@@ -112,8 +113,22 @@ class ES_Display_Rules {
 		];
 	}
 
-	public static function sanitize( array $raw ): array {
+	/**
+	 * Sanitize just the WHERE fields — show_mode + show_filters + hide_filters.
+	 * Shared by sanitize() (a shell's full rule set) and ES_Preset_Repo (SER-899),
+	 * since a preset is exactly this subset. Never touches schedule or visitor
+	 * targeting. Mirrors the SaaS port's DisplayRules::sanitizeWhere().
+	 */
+	public static function sanitize_where( array $raw ): array {
 		$show_mode = ( ( $raw['show_mode'] ?? '' ) === 'selected' ) ? 'selected' : 'all';
+		return [
+			'show_mode'    => $show_mode,
+			'show_filters' => self::sanitize_filters( $raw['show_filters'] ?? [] ),
+			'hide_filters' => self::sanitize_filters( $raw['hide_filters'] ?? [] ),
+		];
+	}
+
+	public static function sanitize( array $raw ): array {
 		$logged_in = isset( $raw['visitor_logged_in'] ) ? (string) $raw['visitor_logged_in'] : 'any';
 		if ( ! in_array( $logged_in, [ 'any', 'in', 'out' ], true ) ) {
 			$logged_in = 'any';
@@ -126,10 +141,14 @@ class ES_Display_Rules {
 		if ( ! in_array( $visitor_state, [ 'any', 'new', 'returning' ], true ) ) {
 			$visitor_state = 'any';
 		}
+		// A shell "following" a preset (SER-899) — a UI/authoring pointer only. The
+		// show_mode/show_filters/hide_filters below are always the resolved values
+		// (kept in sync with the preset on save); enforcement never reads
+		// preset_id, so nothing downstream (rendering, mirroring) needs to change.
+		$preset_id = isset( $raw['preset_id'] ) && is_numeric( $raw['preset_id'] ) ? (int) $raw['preset_id'] : null;
 		return [
-			'show_mode'         => $show_mode,
-			'show_filters'      => self::sanitize_filters( $raw['show_filters'] ?? [] ),
-			'hide_filters'      => self::sanitize_filters( $raw['hide_filters'] ?? [] ),
+			...self::sanitize_where( $raw ),
+			'preset_id'         => $preset_id,
 			'visitor_logged_in' => $logged_in,
 			'visitor_roles'     => $role_keys,
 			'visitor_state'     => $visitor_state,

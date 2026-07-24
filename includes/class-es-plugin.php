@@ -28,6 +28,9 @@ class ES_Plugin {
 		new ES_REST();
 		if ( is_admin() ) {
 			new ES_Admin();
+			if ( class_exists( 'ES_Preset_Ajax' ) ) {
+				new ES_Preset_Ajax();
+			}
 		}
 
 		// Schedule the daily log purge (retains last 30 days). Idempotent.

@@ -1044,6 +1044,10 @@
 		// Display rules — post / page chip pickers. Live title-search via REST,
 		// chips show currently selected items, hidden inputs carry the IDs.
 		initContentPickers();
+
+		// Display-rule presets (SER-899 phase 2) — per-shell picker + the
+		// Manage Presets modal.
+		initPresetPickers();
 	});
 
 	function initContentPickers() {
@@ -1186,6 +1190,371 @@
 		document.addEventListener('click', function (e) {
 			if (!root.contains(e.target)) hideSuggestions();
 		});
+
+		// Exposed so other code (the display-rule preset picker, SER-899) can
+		// replace this picker's selection without duplicating the chip markup
+		// or re-implementing add/clear here.
+		root._escpApi = {
+			setSelection: function (items) {
+				chipsBox.innerHTML = '';
+				(items || []).forEach(function (it) { addChip(it.id, it.title); });
+			}
+		};
+	}
+
+	/* ── Display-rule presets (SER-899 phase 2) ──────────────────────────
+	 *
+	 * Picking/changing/un-linking a preset on a shell is CLIENT-SIDE ONLY —
+	 * it fills the shell's own WHERE fields (show_mode/show_filters/
+	 * hide_filters) from #es-presets-data and locks them, but nothing is
+	 * persisted until the page's normal Save button, matching the SaaS
+	 * picker's own local-state-until-Save behavior. "Save current as preset"
+	 * and everything in the Manage Presets modal DO hit the server
+	 * immediately (ES_Preset_Ajax) because they mutate the preset ROW itself,
+	 * same as the SaaS picker.
+	 *
+	 * Known gap: editing a preset's post-type/category/tag/post/page filters
+	 * is only possible by applying it to a shell (which has the real WP
+	 * post-type/taxonomy environment already rendered), adjusting there, and
+	 * "Save current as preset" under the same name — the modal's own editor
+	 * only covers show_mode + URL patterns. Full parity with the SaaS's
+	 * WpFilterPane-in-modal editing wasn't built this pass.
+	 */
+
+	function escapeHtml(s) {
+		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+		});
+	}
+
+	function loadPresetsData() {
+		var el = document.getElementById('es-presets-data');
+		if (!el) return [];
+		try {
+			var parsed = JSON.parse(el.textContent || '[]');
+			return Array.isArray(parsed) ? parsed : [];
+		} catch (e) {
+			return [];
+		}
+	}
+
+	function presetFieldName(key, side, field) {
+		return 'display_' + key + '_' + side + '_' + field; // matches $render_filters()
+	}
+
+	function presetWhereFieldset(picker) {
+		return picker.parentElement ? picker.parentElement.querySelector('.es-dr-where-fields') : null;
+	}
+
+	function setCheckboxGroup(scope, name, values) {
+		var strValues = (values || []).map(function (v) { return String(v); });
+		scope.querySelectorAll('input[type="checkbox"][name="' + name + '[]"]').forEach(function (cb) {
+			cb.checked = strValues.indexOf(cb.value) !== -1;
+		});
+	}
+
+	function setChipPicker(scope, type, name, ids, titleMap) {
+		var root = scope.querySelector('.es-content-picker[data-content-type="' + type + '"][data-name="' + name + '"]');
+		if (!root || !root._escpApi) return;
+		var items = (ids || []).map(function (id) {
+			return { id: id, title: (titleMap && titleMap[id]) || ('#' + id) };
+		});
+		root._escpApi.setSelection(items);
+	}
+
+	function setPresetCoupledState(picker, preset) {
+		var idField = picker.querySelector('.es-preset-id-field');
+		var coupled = picker.querySelector('.es-preset-coupled');
+		var uncoupled = picker.querySelector('.es-preset-uncoupled');
+		var fieldset = presetWhereFieldset(picker);
+
+		if (preset) {
+			idField.value = preset.id;
+			var nameEl = picker.querySelector('.es-preset-active-name');
+			if (nameEl) nameEl.textContent = preset.name;
+			var changeSelect = picker.querySelector('.es-preset-change-select');
+			if (changeSelect) changeSelect.value = preset.id;
+			coupled.hidden = false;
+			uncoupled.hidden = true;
+			if (fieldset) { fieldset.setAttribute('disabled', 'disabled'); fieldset.style.opacity = '.6'; }
+		} else {
+			idField.value = 0;
+			coupled.hidden = true;
+			uncoupled.hidden = false;
+			if (fieldset) { fieldset.removeAttribute('disabled'); fieldset.style.opacity = ''; }
+		}
+	}
+
+	function applyPresetToPicker(picker, preset) {
+		var key = picker.getAttribute('data-shell-key');
+		var fieldset = presetWhereFieldset(picker);
+		if (!fieldset || !key) return;
+
+		var modeInput = fieldset.querySelector('input[name="display_' + key + '_show_mode"][value="' + preset.show_mode + '"]');
+		if (modeInput) modeInput.checked = true;
+
+		['show', 'hide'].forEach(function (side) {
+			var filters = preset[side + '_filters'] || {};
+			var titles = (preset.titles && preset.titles[side]) || {};
+
+			setCheckboxGroup(fieldset, presetFieldName(key, side, 'specials'), filters.specials);
+			setCheckboxGroup(fieldset, presetFieldName(key, side, 'post_types'), filters.post_types);
+			setCheckboxGroup(fieldset, presetFieldName(key, side, 'wc_pages'), filters.wc_pages);
+
+			var urlsField = fieldset.querySelector('textarea[name="' + presetFieldName(key, side, 'urls') + '"]');
+			if (urlsField) urlsField.value = (filters.urls || []).join('\n');
+
+			setChipPicker(fieldset, 'category', presetFieldName(key, side, 'categories'), filters.categories, titles.cats);
+			setChipPicker(fieldset, 'tag', presetFieldName(key, side, 'tags'), filters.tags, titles.tags);
+			setChipPicker(fieldset, 'post', presetFieldName(key, side, 'posts'), filters.posts, titles.posts);
+			setChipPicker(fieldset, 'page', presetFieldName(key, side, 'pages'), filters.pages, titles.pages);
+		});
+
+		// Re-run the "All pages" dim-the-filters sync (initDisplayRulesPanel) now
+		// that show_mode may have changed programmatically.
+		fieldset.querySelectorAll('input[name="display_' + key + '_show_mode"]').forEach(function (r) {
+			r.dispatchEvent(new Event('change', { bubbles: true }));
+		});
+
+		setPresetCoupledState(picker, preset);
+	}
+
+	function gatherShellWhere(picker) {
+		var key = picker.getAttribute('data-shell-key');
+		var fieldset = presetWhereFieldset(picker);
+		if (!fieldset || !key) return { show_mode: 'all', show_filters: {}, hide_filters: {} };
+
+		var checkedMode = fieldset.querySelector('input[name="display_' + key + '_show_mode"]:checked');
+
+		function gatherSide(side) {
+			function checkedValues(field) {
+				var out = [];
+				fieldset.querySelectorAll('input[type="checkbox"][name="' + presetFieldName(key, side, field) + '[]"]:checked').forEach(function (cb) { out.push(cb.value); });
+				return out;
+			}
+			function chipIds(type, field) {
+				var root = fieldset.querySelector('.es-content-picker[data-content-type="' + type + '"][data-name="' + presetFieldName(key, side, field) + '"]');
+				var out = [];
+				if (root) root.querySelectorAll('.es-content-chip input[type="hidden"]').forEach(function (inp) { out.push(inp.value); });
+				return out;
+			}
+			var urlsField = fieldset.querySelector('textarea[name="' + presetFieldName(key, side, 'urls') + '"]');
+			return {
+				specials: checkedValues('specials'),
+				post_types: checkedValues('post_types'),
+				wc_pages: checkedValues('wc_pages'),
+				categories: chipIds('category', 'categories'),
+				tags: chipIds('tag', 'tags'),
+				posts: chipIds('post', 'posts'),
+				pages: chipIds('page', 'pages'),
+				urls: urlsField ? urlsField.value.split('\n') : []
+			};
+		}
+
+		return {
+			show_mode: checkedMode ? checkedMode.value : 'all',
+			show_filters: gatherSide('show'),
+			hide_filters: gatherSide('hide')
+		};
+	}
+
+	function presetAjax(action, data, cb) {
+		var cfg = window.EmblemStudioAdmin || {};
+		if (!cfg.ajaxUrl) { cb(null); return; }
+		var body = new URLSearchParams();
+		body.set('action', action);
+		body.set('nonce', cfg.presetNonce || '');
+		Object.keys(data || {}).forEach(function (k) { body.set(k, data[k]); });
+		fetch(cfg.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+			.then(function (r) { return r.json(); })
+			.then(function (json) { cb(json && json.success ? json.data : null); })
+			.catch(function () { cb(null); });
+	}
+
+	function addOrUpdatePresetOption(picker, preset) {
+		['.es-preset-apply-select', '.es-preset-change-select'].forEach(function (sel) {
+			var select = picker.querySelector(sel);
+			if (!select) return;
+			var opt = select.querySelector('option[value="' + preset.id + '"]');
+			if (!opt) {
+				opt = document.createElement('option');
+				opt.value = preset.id;
+				select.appendChild(opt);
+			}
+			opt.textContent = preset.name;
+		});
+	}
+
+	var presetsById = {};
+
+	function initPresetPickers() {
+		presetsById = {};
+		loadPresetsData().forEach(function (p) { presetsById[p.id] = p; });
+
+		document.querySelectorAll('.es-dr-preset-picker').forEach(function (picker) {
+			var applySelect = picker.querySelector('.es-preset-apply-select');
+			var applyBtn = picker.querySelector('.es-preset-apply-btn');
+			var changeSelect = picker.querySelector('.es-preset-change-select');
+			var changeBtn = picker.querySelector('.es-preset-change-btn');
+			var unlinkBtn = picker.querySelector('.es-preset-unlink-btn');
+			var saveAsBtn = picker.querySelector('.es-preset-save-as-btn');
+			var saveNameField = picker.querySelector('.es-preset-save-name');
+			var manageLink = picker.querySelector('.es-preset-manage-link');
+
+			if (applyBtn) applyBtn.addEventListener('click', function () {
+				var id = parseInt(applySelect.value, 10);
+				if (id && presetsById[id]) applyPresetToPicker(picker, presetsById[id]);
+			});
+			if (changeBtn) changeBtn.addEventListener('click', function () {
+				var id = parseInt(changeSelect.value, 10);
+				if (id && presetsById[id]) applyPresetToPicker(picker, presetsById[id]);
+			});
+			if (unlinkBtn) unlinkBtn.addEventListener('click', function () {
+				setPresetCoupledState(picker, null);
+			});
+			if (saveAsBtn) saveAsBtn.addEventListener('click', function () {
+				var name = (saveNameField.value || '').trim();
+				if (!name) { saveNameField.focus(); return; }
+				var where = gatherShellWhere(picker);
+				saveAsBtn.disabled = true;
+				presetAjax('es_preset_save_as', { name: name, rules: JSON.stringify(where) }, function (data) {
+					saveAsBtn.disabled = false;
+					if (!data || !data.preset) return;
+					var preset = data.preset;
+					var prevTitles = presetsById[preset.id] ? presetsById[preset.id].titles : { show: {}, hide: {} };
+					presetsById[preset.id] = Object.assign({}, preset, { titles: prevTitles });
+					document.querySelectorAll('.es-dr-preset-picker').forEach(function (p) { addOrUpdatePresetOption(p, preset); });
+					setPresetCoupledState(picker, presetsById[preset.id]);
+					saveNameField.value = '';
+				});
+			});
+			if (manageLink) manageLink.addEventListener('click', openPresetManageModal);
+		});
+	}
+
+	var presetModalEl = null;
+
+	function ensurePresetModal() {
+		if (presetModalEl) return presetModalEl;
+		var el = document.createElement('div');
+		el.id = 'es-preset-modal';
+		el.innerHTML =
+			'<div class="es-preset-modal-backdrop"></div>' +
+			'<div class="es-preset-modal-box">' +
+				'<div class="es-preset-modal-head">' +
+					'<h2>' + escapeHtml('Display-rule presets') + '</h2>' +
+					'<button type="button" class="es-preset-modal-close" aria-label="Close">&times;</button>' +
+				'</div>' +
+				'<p class="es-preset-modal-sub">Editing here updates every shell already following a preset. Post types, categories, tags, and specific posts/pages: apply the preset to a shell, adjust it there, then "Save current as preset" under the same name.</p>' +
+				'<div class="es-preset-modal-body"><p>Loading…</p></div>' +
+			'</div>';
+		document.body.appendChild(el);
+		el.querySelector('.es-preset-modal-close').addEventListener('click', closePresetManageModal);
+		el.querySelector('.es-preset-modal-backdrop').addEventListener('click', closePresetManageModal);
+		presetModalEl = el;
+		return el;
+	}
+
+	function openPresetManageModal() {
+		var el = ensurePresetModal();
+		el.classList.add('is-open');
+		presetAjax('es_preset_list', {}, function (data) {
+			renderPresetModalList(el, (data && data.presets) || []);
+		});
+	}
+
+	function closePresetManageModal() {
+		if (presetModalEl) presetModalEl.classList.remove('is-open');
+	}
+
+	function renderPresetModalList(el, presets) {
+		var body = el.querySelector('.es-preset-modal-body');
+		body.innerHTML = '';
+		if (!presets.length) {
+			body.innerHTML = '<p>No presets saved for this site yet — save one from any shell’s Display rules panel first.</p>';
+			return;
+		}
+		presets.forEach(function (preset) { body.appendChild(renderPresetModalRow(body, preset)); });
+	}
+
+	function renderPresetModalRow(list, preset) {
+		var row = document.createElement('div');
+		row.className = 'es-preset-modal-row';
+
+		var header = document.createElement('button');
+		header.type = 'button';
+		header.className = 'es-preset-modal-row-header';
+		header.innerHTML =
+			'<span class="es-preset-modal-chevron">&rsaquo;</span>' +
+			'<span class="es-preset-modal-row-name">' + escapeHtml(preset.name) + '</span>' +
+			'<span class="es-preset-modal-row-usage">' + preset.usage_count + ' shell' + (preset.usage_count === 1 ? '' : 's') + '</span>';
+		row.appendChild(header);
+
+		var showUrls = ((preset.show_filters && preset.show_filters.urls) || []).join('\n');
+		var hideUrls = ((preset.hide_filters && preset.hide_filters.urls) || []).join('\n');
+
+		var editor = document.createElement('div');
+		editor.className = 'es-preset-modal-row-editor';
+		editor.hidden = true;
+		editor.innerHTML =
+			'<p><input type="text" class="es-preset-modal-name" value="' + escapeHtml(preset.name) + '"></p>' +
+			'<p>' +
+				'<label><input type="radio" name="es-preset-modal-mode-' + preset.id + '" value="all"' + (preset.show_mode !== 'selected' ? ' checked' : '') + '> Everywhere on the site</label><br>' +
+				'<label><input type="radio" name="es-preset-modal-mode-' + preset.id + '" value="selected"' + (preset.show_mode === 'selected' ? ' checked' : '') + '> Only on pages matching these URLs</label>' +
+			'</p>' +
+			'<p><textarea class="es-preset-modal-show-urls" rows="2" placeholder="/&#10;/pricing">' + escapeHtml(showUrls) + '</textarea></p>' +
+			'<p><textarea class="es-preset-modal-hide-urls" rows="2" placeholder="Hide on:&#10;/cart">' + escapeHtml(hideUrls) + '</textarea></p>' +
+			'<p>' +
+				'<button type="button" class="button button-primary es-preset-modal-save">Save changes</button> ' +
+				'<button type="button" class="button es-preset-modal-delete">Delete</button>' +
+			'</p>';
+		row.appendChild(editor);
+
+		header.addEventListener('click', function () {
+			var opening = editor.hidden;
+			list.querySelectorAll('.es-preset-modal-row-editor').forEach(function (e) { e.hidden = true; });
+			list.querySelectorAll('.es-preset-modal-row-header').forEach(function (h) { h.classList.remove('is-open'); });
+			if (opening) { editor.hidden = false; header.classList.add('is-open'); }
+		});
+
+		editor.querySelector('.es-preset-modal-save').addEventListener('click', function () {
+			var name = editor.querySelector('.es-preset-modal-name').value.trim();
+			if (!name) return;
+			var mode = editor.querySelector('input[name="es-preset-modal-mode-' + preset.id + '"]:checked');
+			var where = {
+				show_mode: mode ? mode.value : 'all',
+				show_filters: Object.assign({}, preset.show_filters, { urls: editor.querySelector('.es-preset-modal-show-urls').value.split('\n') }),
+				hide_filters: Object.assign({}, preset.hide_filters, { urls: editor.querySelector('.es-preset-modal-hide-urls').value.split('\n') })
+			};
+			presetAjax('es_preset_update', { id: preset.id, name: name, rules: JSON.stringify(where) }, function (data) {
+				if (!data || !data.preset) return;
+				var prevTitles = presetsById[preset.id] ? presetsById[preset.id].titles : { show: {}, hide: {} };
+				presetsById[preset.id] = Object.assign({}, data.preset, { titles: prevTitles });
+				document.querySelectorAll('.es-dr-preset-picker').forEach(function (p) { addOrUpdatePresetOption(p, data.preset); });
+				openPresetManageModal();
+			});
+		});
+
+		editor.querySelector('.es-preset-modal-delete').addEventListener('click', function () {
+			var note = preset.usage_count > 0 ? (' ' + preset.usage_count + ' shell' + (preset.usage_count === 1 ? '' : 's') + ' using it will keep their current settings, just un-linked.') : '';
+			if (!window.confirm('Delete "' + preset.name + '"?' + note)) return;
+			presetAjax('es_preset_delete', { id: preset.id }, function (data) {
+				if (!data) return;
+				delete presetsById[preset.id];
+				document.querySelectorAll('.es-dr-preset-picker').forEach(function (p) {
+					var idField = p.querySelector('.es-preset-id-field');
+					if (idField && parseInt(idField.value, 10) === preset.id) setPresetCoupledState(p, null);
+					['.es-preset-apply-select', '.es-preset-change-select'].forEach(function (sel) {
+						var select = p.querySelector(sel);
+						var opt = select && select.querySelector('option[value="' + preset.id + '"]');
+						if (opt) opt.remove();
+					});
+				});
+				openPresetManageModal();
+			});
+		});
+
+		return row;
 	}
 
 	function initDisplayRulesPanel() {

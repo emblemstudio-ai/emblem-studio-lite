@@ -43,6 +43,8 @@ $dr_special_labels = [
 ];
 $dr_post_types = get_post_types( [ 'public' => true ], 'objects' );
 unset( $dr_post_types['attachment'] );
+// Display-rule presets (SER-899 phase 2) — same site-wide list for every shell.
+$dr_presets = class_exists( 'ES_Preset_Repo' ) ? ES_Preset_Repo::all() : [];
 // Pre-fetch titles for any saved post/page IDs so the chip pickers can render
 // their existing selections without an extra round-trip on page load.
 $dr_lookup_titles = function ( string $post_type, array $ids ): array {
@@ -97,6 +99,47 @@ $dr_lookup_term_names = function ( string $taxonomy, array $ids ): array {
 	}
 	return $out;
 };
+/**
+ * Full client-side payload for every display-rule preset (SER-899 phase 2) —
+ * resolved post/page/category/tag TITLES included (not just ids), so the
+ * per-shell picker's JS can apply a preset (fill every field, chips included)
+ * and the Manage Presets modal can render its editor, with zero extra
+ * round-trips. Coupling only persists on the page's normal Save (matching the
+ * SaaS picker's own local-state-until-Save behavior) — this JSON is what
+ * makes that possible without a server call per pick.
+ */
+$dr_preset_payload = function ( object $p ) use ( $dr_lookup_titles, $dr_lookup_term_names ) {
+	$decode = function ( $raw ) {
+		if ( is_string( $raw ) && $raw !== '' ) {
+			$d = json_decode( $raw, true );
+			return is_array( $d ) ? $d : [];
+		}
+		return [];
+	};
+	$show = $decode( $p->show_filters ?? null );
+	$hide = $decode( $p->hide_filters ?? null );
+	$titles_for = function ( array $filters ) use ( $dr_lookup_titles, $dr_lookup_term_names ) {
+		return [
+			'posts' => $dr_lookup_titles( 'post', (array) ( $filters['posts'] ?? [] ) ),
+			'pages' => $dr_lookup_titles( 'page', (array) ( $filters['pages'] ?? [] ) ),
+			'cats'  => $dr_lookup_term_names( 'category', (array) ( $filters['categories'] ?? [] ) ),
+			'tags'  => $dr_lookup_term_names( 'post_tag', (array) ( $filters['tags'] ?? [] ) ),
+		];
+	};
+	return [
+		'id'           => (int) $p->id,
+		'name'         => (string) $p->name,
+		'show_mode'    => (string) ( $p->show_mode ?? 'all' ),
+		'show_filters' => $show,
+		'hide_filters' => $hide,
+		'titles'       => [
+			'show' => $titles_for( $show ),
+			'hide' => $titles_for( $hide ),
+		],
+	];
+};
+$dr_presets_json = wp_json_encode( array_map( $dr_preset_payload, $dr_presets ) );
+
 /**
  * Build a short human summary of one filter set (Show or Hide).
  * Singletons are named; pluralities are counted ("3 categories").
@@ -220,6 +263,10 @@ $ab_day        = ( $ab_running && ES_Caps::has( 'ab' ) ) ? ES_AB::test_day_for( 
 $ab_archive_ct = count( $ab_archived );
 ?>
 <div class="wrap emblem-studio-wrap">
+	<?php // Display-rule presets (SER-899 phase 2) — full client-side payload
+	// (filters + resolved titles) so the picker JS can apply one without a
+	// round-trip. See docs comment on $dr_preset_payload above. ?>
+	<script type="application/json" id="es-presets-data"><?php echo $dr_presets_json; // phpcs:ignore WordPress.Security.EscapeOutput -- wp_json_encode output, safe inside a script tag ?></script>
 	<h1><?php echo $is_new ? esc_html__( 'Add Form', 'emblem-studio' ) : esc_html__( 'Edit Form', 'emblem-studio' ); ?></h1>
 
 	<?php if ( isset( $_GET['saved'] ) ) : ?>

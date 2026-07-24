@@ -727,6 +727,41 @@ final class Emblem_Studio_SaaS_Connector
         ]);
     }
 
+    /**
+     * Send this site's local display-rule presets to the SaaS to be upserted
+     * (SER-899 phase 2) — same shape and same rule as mirror_forms(): a preset
+     * already pulled DOWN from the SaaS (carries a saas_preset_id) never mirrors
+     * back up, or it would look like a new one and duplicate on every connect.
+     */
+    private static function mirror_presets(array $cfg): void
+    {
+        if (! class_exists('ES_Preset_Repo')) {
+            return;
+        }
+        $rows    = ES_Preset_Repo::all();
+        $presets = [];
+        foreach ((array) $rows as $row) {
+            if (! is_object($row) || empty($row->id)) {
+                continue;
+            }
+            if (! empty($row->saas_preset_id)) {
+                continue;
+            }
+            $export = ES_Preset_Repo::to_export_array($row);
+            $export['wp_preset_id'] = (int) $row->id; // stable key → idempotent upsert
+            $presets[] = $export;
+        }
+        if (empty($presets)) {
+            return;
+        }
+
+        self::mirror_post(rtrim($cfg['api_base'], '/').'/v1/embed/mirror/presets', [
+            'site_id' => $cfg['site_id'],
+            'token'   => $cfg['site_token'],
+            'presets' => $presets,
+        ]);
+    }
+
     /** The wpdb table for a mirror kind, or '' when it doesn't exist. */
     private static function mirror_table(string $kind): string
     {
@@ -877,6 +912,7 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
         self::pull_assets($cfg);
+        self::pull_presets($cfg);
         self::pull_stats($cfg);
         self::pull_leads($cfg);
     }
@@ -1035,6 +1071,13 @@ final class Emblem_Studio_SaaS_Connector
         switch ($state['stage']) {
             case 'forms':
                 self::mirror_forms($cfg);
+                $state['stage']   = 'presets';
+                $state['last_id'] = 0;
+
+                return $state;
+
+            case 'presets':
+                self::mirror_presets($cfg);
                 $state['stage']   = 'stats';
                 $state['last_id'] = 0;
 
@@ -1260,6 +1303,65 @@ final class Emblem_Studio_SaaS_Connector
         foreach ((array) $wpdb->get_results("SELECT id, saas_form_id FROM {$t} WHERE saas_form_id IS NOT NULL AND trashed_at IS NULL") as $row) {
             if (! in_array((int) $row->saas_form_id, $received, true)) {
                 ES_Form_Repo::trash((int) $row->id);
+            }
+        }
+    }
+
+    /**
+     * Upsert every SaaS display-rule preset into the local presets table
+     * (SER-899 phase 2) — match by the wp_preset_id it was mirrored up as
+     * (so a preset just pushed up in this same pass gets its saas_preset_id
+     * written back), else by the saas_preset_id stored on a prior pull, else
+     * create. Same convergence pattern as pull_assets(). Full set every time,
+     * no cursor — a site's preset catalog is small.
+     */
+    private static function pull_presets(array $cfg): void
+    {
+        if (! class_exists('ES_Preset_Repo')) {
+            return;
+        }
+        $data = self::pull_post($cfg, '/v1/embed/export/presets');
+        if (! isset($data['presets']) || ! is_array($data['presets'])) {
+            return;
+        }
+
+        global $wpdb;
+        $t = $wpdb->prefix.'emblemstudio_display_rule_presets';
+        $received = [];
+        foreach ($data['presets'] as $p) {
+            if (! is_array($p) || empty($p['saas_preset_id'])) {
+                continue;
+            }
+            $saas_id = (int) $p['saas_preset_id'];
+            $received[] = $saas_id;
+            $wp_preset_id = isset($p['wp_preset_id']) ? (int) $p['wp_preset_id'] : 0;
+
+            $local_id = 0;
+            if ($wp_preset_id && (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE id = %d", $wp_preset_id)) === $wp_preset_id) {
+                $local_id = $wp_preset_id;
+            } else {
+                $local_id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE saas_preset_id = %d", $saas_id));
+            }
+
+            $fields = [
+                'name'         => $p['name'] ?? '',
+                'show_mode'    => $p['show_mode'] ?? 'all',
+                'show_filters' => is_array($p['show_filters'] ?? null) ? $p['show_filters'] : [],
+                'hide_filters' => is_array($p['hide_filters'] ?? null) ? $p['hide_filters'] : [],
+            ];
+            $new_id = ES_Preset_Repo::save($fields, $local_id ?: null);
+            if ($new_id) {
+                $wpdb->update($t, ['saas_preset_id' => $saas_id], ['id' => $new_id]);
+            }
+        }
+
+        // Delete-sync: a locally-synced preset whose SaaS counterpart is gone
+        // (deleted in the SaaS → absent from this full list) is deleted here
+        // too — un-linking any shell still following it, same as a manual delete.
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $t is a prefixed constant name.
+        foreach ((array) $wpdb->get_results("SELECT id, saas_preset_id FROM {$t} WHERE saas_preset_id IS NOT NULL") as $row) {
+            if (! in_array((int) $row->saas_preset_id, $received, true)) {
+                ES_Preset_Repo::delete((int) $row->id);
             }
         }
     }

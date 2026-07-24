@@ -1071,6 +1071,12 @@ class ES_Admin {
 				'cssEditor'  => $css_editor,
 				'restUrl'    => esc_url_raw( rest_url() ),
 				'restNonce'  => wp_create_nonce( 'wp_rest' ),
+				// Display-rule presets (SER-899 phase 2) — the "Manage presets"
+				// modal + "Save current as preset" are the only preset actions
+				// that hit the server immediately; applying/changing/un-linking
+				// a shell's coupling is client-side only until the page's own Save.
+				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
+				'presetNonce'   => wp_create_nonce( 'es_preset_ajax' ),
 			] );
 			// Inspector (semi-builder) takeover — its own JS/CSS so it can
 			// grow without bloating admin.js. Loads after admin.js so the
@@ -1400,11 +1406,39 @@ class ES_Admin {
 			];
 		};
 
+		/**
+		 * Preserve a shell's display-rule preset coupling across a normal page
+		 * save (SER-899 phase 2). Applying/changing/un-linking/saving-as-preset
+		 * happen instantly over AJAX (ES_Preset_Ajax) the moment the picker is
+		 * used — same interaction model as the SaaS's picker, not a separate
+		 * "click Save to take effect" step. So by the time this runs, a coupled
+		 * shell's `preset_id` hidden field already reflects the true state; this
+		 * only needs to re-resolve show_mode/filters from that preset's CURRENT
+		 * values, because the WHERE fields render `disabled` while coupled and
+		 * so never post anything for $collect_shell_rules to have read.
+		 */
+		$resync_preset_coupling = function ( string $shell, array $rules ) use ( $shell_to_key ) {
+			if ( ! class_exists( 'ES_Preset_Repo' ) ) {
+				return $rules;
+			}
+			$key         = $shell_to_key( $shell );
+			$preset_id   = isset( $_POST[ 'display_' . $key . '_preset_id' ] ) ? (int) $_POST[ 'display_' . $key . '_preset_id' ] : 0;
+			$preset      = $preset_id ? ES_Preset_Repo::find( $preset_id ) : null;
+			if ( $preset ) {
+				$where                 = ES_Preset_Repo::to_export_array( $preset );
+				$rules['show_mode']    = $where['show_mode'];
+				$rules['show_filters'] = (array) $where['show_filters'];
+				$rules['hide_filters'] = (array) $where['hide_filters'];
+				$rules['preset_id']    = $preset_id;
+			}
+			return $rules;
+		};
+
 		$auto_trigger_config = [];
 		$display_rules       = [];
 		foreach ( ES_Form_Repo::auto_shells() as $shell ) {
 			$auto_trigger_config[ $shell ] = $collect_shell_trigger( $shell );
-			$display_rules[ $shell ]       = $collect_shell_rules( $shell );
+			$display_rules[ $shell ]       = $resync_preset_coupling( $shell, $collect_shell_rules( $shell ) );
 		}
 
 		// Field mapping arrives as a JSON-encoded object in `field_mapping_json`.

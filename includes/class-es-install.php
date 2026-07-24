@@ -179,6 +179,23 @@ class ES_Install {
 			KEY form_status (form_id, status)
 		) $charset_collate;";
 
+		// Display-rule presets (SER-899 phase 2) — saved page/post/URL targeting
+		// combos, mirrored two-way with a connected SaaS site. saas_preset_id
+		// links a locally pulled-down preset to its SaaS row, same pattern as
+		// forms.saas_form_id.
+		$presets = "CREATE TABLE {$prefix}emblemstudio_display_rule_presets (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			saas_preset_id BIGINT(20) UNSIGNED NULL,
+			name VARCHAR(191) NOT NULL,
+			show_mode VARCHAR(16) NOT NULL DEFAULT 'all',
+			show_filters LONGTEXT NULL,
+			hide_filters LONGTEXT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY saas_preset_id (saas_preset_id)
+		) $charset_collate;";
+
 		dbDelta( $forms );
 		dbDelta( $events );
 		dbDelta( $leads );
@@ -187,6 +204,7 @@ class ES_Install {
 		dbDelta( $ds_revisions );
 		dbDelta( $variants );
 		dbDelta( $tests );
+		dbDelta( $presets );
 
 		update_option( 'emblem_studio_db_version', EMBLEM_STUDIO_DB_VERSION );
 	}
@@ -726,6 +744,29 @@ class ES_Install {
 				$wpdb->query( "ALTER TABLE $forms ADD COLUMN lite_disabled LONGTEXT NULL AFTER connections" );
 			}
 			update_option( 'emblem_studio_db_version', '31' );
+		}
+
+		if ( version_compare( $current, '32', '<' ) ) {
+			global $wpdb;
+			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+			$charset_collate = $wpdb->get_charset_collate();
+			$presets         = self::table( 'display_rule_presets' );
+			// Display-rule presets (SER-899 phase 2) — see the matching CREATE
+			// TABLE in activate() for the fresh-install path; this is the same
+			// shape for existing sites.
+			dbDelta( "CREATE TABLE {$presets} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				saas_preset_id BIGINT(20) UNSIGNED NULL,
+				name VARCHAR(191) NOT NULL,
+				show_mode VARCHAR(16) NOT NULL DEFAULT 'all',
+				show_filters LONGTEXT NULL,
+				hide_filters LONGTEXT NULL,
+				created_at DATETIME NOT NULL,
+				updated_at DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				KEY saas_preset_id (saas_preset_id)
+			) $charset_collate;" );
+			update_option( 'emblem_studio_db_version', '32' );
 		}
 	}
 
