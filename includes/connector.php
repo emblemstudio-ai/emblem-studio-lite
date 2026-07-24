@@ -925,6 +925,21 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Assets only, on demand — a lighter refresh than pull_all() (skips
+     * presets/stats/leads) for callers that just need the local asset mirror
+     * fresh right now, e.g. FunnelKit's own Forms picker (see
+     * ES_FunnelKit_Form_Feed::maybe_refresh_catalog()), which otherwise only
+     * sees whatever the last hourly es_saas_pull happened to pull down.
+     */
+    public static function pull_assets_now(): void
+    {
+        $cfg = self::config();
+        if ($cfg) {
+            self::pull_assets($cfg);
+        }
+    }
+
     /* ── The connect-time import: resumable, chunked, cron-independent ────────
      *
      * A real site's history is tens of thousands of rows, so this CANNOT be one

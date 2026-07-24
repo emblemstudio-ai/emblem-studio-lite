@@ -71,7 +71,33 @@ final class ES_FunnelKit_Form_Feed {
 	public static function bootstrap(): void {
 		if ( function_exists( 'add_action' ) ) {
 			add_action( 'bwfcrm_forms_loaded', [ self::class, 'register_provider' ] );
+			add_action( 'admin_init', [ self::class, 'maybe_refresh_catalog' ] );
 		}
+	}
+
+	/**
+	 * On a connected site, catalog() reads the LOCAL asset mirror — which
+	 * only refreshes on connect, hourly (es_saas_pull), and at disconnect. A
+	 * rename/edit made in the SaaS could sit stale in FunnelKit's own Forms
+	 * picker for up to an hour. Rather than pulling inside catalog() itself
+	 * (it's called several times per picker render — get_form_selection(),
+	 * get_form_fields(), get_form_link() — which would fire that many HTTP
+	 * round-trips), refresh once per admin request, throttled, and only when
+	 * FunnelKit's own admin screen is the one being loaded.
+	 */
+	public static function maybe_refresh_catalog(): void {
+		if ( ! class_exists( 'Emblem_Studio_SaaS_Connector' ) || ! Emblem_Studio_SaaS_Connector::is_connected() ) {
+			return;
+		}
+		$page = isset( $_GET['page'] ) ? sanitize_key( (string) $_GET['page'] ) : '';
+		if ( ! in_array( $page, [ 'autonami', 'bwfan' ], true ) ) {
+			return;
+		}
+		if ( get_transient( 'es_saas_forms_fresh' ) ) {
+			return;
+		}
+		set_transient( 'es_saas_forms_fresh', 1, 60 );
+		Emblem_Studio_SaaS_Connector::pull_assets_now();
 	}
 
 	public static function register_provider(): void {
