@@ -5323,8 +5323,11 @@
 .emblem-studio-wrap .es-lite-upsell strong { display: block; font-size: 14px; margin-bottom: 4px; }
 .emblem-studio-wrap .es-lite-upsell p { margin: 0; font-size: 12px; color: var(--es-text-muted, #6c7180); line-height: 1.5; }
 
-/* Display-rule presets — Manage Presets modal (SER-899 phase 2). Sits outside
-   .emblem-studio-wrap (appended to body), so it's un-prefixed. */
+/* Display-rule presets — Manage Presets modal (SER-899 phase 2). Appended
+   INSIDE .emblem-studio-wrap (not document.body) on purpose, so it inherits
+   the .es-content-picker/.es-content-chip styling below, which is scoped to
+   that wrapper — position:fixed still overlays the full viewport regardless
+   of DOM ancestry. */
 #es-preset-modal { display: none; position: fixed; inset: 0; z-index: 100000; }
 #es-preset-modal.is-open { display: block; }
 #es-preset-modal .es-preset-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
@@ -5348,5 +5351,7 @@
 #es-preset-modal .es-preset-modal-row-editor { padding: 0 12px 12px; border-top: 1px solid #f0f0f1; }
 #es-preset-modal .es-preset-modal-row-editor p { margin: 8px 0; }
 #es-preset-modal .es-preset-modal-name { width: 100%; }
-#es-preset-modal .es-preset-modal-show-urls,
-#es-preset-modal .es-preset-modal-hide-urls { width: 100%; font-family: Menlo, Consolas, monospace; font-size: 12px; }
+#es-preset-modal .es-preset-modal-side { border-top: 1px dashed #dcdcde; padding-top: 8px; margin-top: 8px; }
+#es-preset-modal .es-preset-modal-group-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8c8f94; margin: 10px 0 4px; }
+#es-preset-modal .es-preset-modal-chk { display: inline-flex; align-items: center; gap: 4px; margin: 0 10px 4px 0; font-size: 12px; }
+#es-preset-modal .es-preset-modal-urls { width: 100%; font-family: Menlo, Consolas, monospace; font-size: 12px; }

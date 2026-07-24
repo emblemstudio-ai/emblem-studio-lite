@@ -1421,8 +1421,7 @@
 					saveAsBtn.disabled = false;
 					if (!data || !data.preset) return;
 					var preset = data.preset;
-					var prevTitles = presetsById[preset.id] ? presetsById[preset.id].titles : { show: {}, hide: {} };
-					presetsById[preset.id] = Object.assign({}, preset, { titles: prevTitles });
+					presetsById[preset.id] = preset; // now includes titles, straight from ES_Preset_Ajax::present()
 					document.querySelectorAll('.es-dr-preset-picker').forEach(function (p) { addOrUpdatePresetOption(p, preset); });
 					setPresetCoupledState(picker, presetsById[preset.id]);
 					saveNameField.value = '';
@@ -1448,7 +1447,12 @@
 				'<p class="es-preset-modal-sub">Editing here updates every shell already following a preset. Post types, categories, tags, and specific posts/pages: apply the preset to a shell, adjust it there, then "Save current as preset" under the same name.</p>' +
 				'<div class="es-preset-modal-body"><p>Loading…</p></div>' +
 			'</div>';
-		document.body.appendChild(el);
+		// Appended inside .emblem-studio-wrap (not document.body) so the reused
+		// .es-content-picker/.es-content-chip styling (scoped to that wrapper)
+		// applies here too — position:fixed still overlays the full viewport
+		// regardless of DOM ancestry.
+		var wrap = document.querySelector('.emblem-studio-wrap') || document.body;
+		wrap.appendChild(el);
 		el.querySelector('.es-preset-modal-close').addEventListener('click', closePresetManageModal);
 		el.querySelector('.es-preset-modal-backdrop').addEventListener('click', closePresetManageModal);
 		presetModalEl = el;
@@ -1477,6 +1481,101 @@
 		presets.forEach(function (preset) { body.appendChild(renderPresetModalRow(body, preset)); });
 	}
 
+	/**
+	 * One side's (show/hide) full filter editor for the Manage Presets modal —
+	 * same fields as $render_filters() in shell-trigger-and-rules.php (specials,
+	 * post types, categories, tags, specific posts/pages, WooCommerce pages,
+	 * URL patterns), just single-column instead of the shell panel's grid.
+	 * Chip pickers are wired up separately, after this HTML is in the DOM
+	 * (see initModalContentPickers below) — initContentPicker() needs real
+	 * elements, not an HTML string.
+	 */
+	function renderModalFilterSide(scopeId, side, filters, titles, urlLabel) {
+		var cfg = window.EmblemStudioAdmin || {};
+		filters = filters || {};
+		titles = titles || {};
+		var urls = (filters.urls || []).join('\n');
+
+		function checkboxGroup(field, items, keyOf, selected) {
+			var sel = (selected || []).map(String);
+			return items.map(function (item) {
+				var value = String(keyOf(item));
+				var checked = sel.indexOf(value) !== -1 ? ' checked' : '';
+				return '<label class="es-preset-modal-chk"><input type="checkbox" data-field="' + field + '" value="' + escapeHtml(value) + '"' + checked + '> ' + escapeHtml(item.label) + '</label>';
+			}).join(' ');
+		}
+
+		function contentPicker(type, field) {
+			return '<div class="es-content-picker" data-content-type="' + type + '" data-name="es-preset-modal-' + scopeId + '-' + side + '-' + field + '">' +
+				'<div class="es-content-chips"></div>' +
+				'<div class="es-content-search-wrap"><input type="text" class="es-content-search" placeholder="Search ' + type + 's…"><ul class="es-content-suggestions" hidden></ul></div>' +
+			'</div>';
+		}
+
+		var html = '<div class="es-preset-modal-side" data-side="' + side + '">';
+		html += '<p class="es-preset-modal-group-label">' + escapeHtml(urlLabel) + '</p>';
+		if (cfg.presetSpecials && cfg.presetSpecials.length) {
+			html += '<p>' + checkboxGroup('specials', cfg.presetSpecials, function (i) { return i.key; }, filters.specials) + '</p>';
+		}
+		if (cfg.presetPostTypes && cfg.presetPostTypes.length) {
+			html += '<p>' + checkboxGroup('post_types', cfg.presetPostTypes, function (i) { return i.slug; }, filters.post_types) + '</p>';
+		}
+		if (cfg.presetWcActive && cfg.presetWcPages && cfg.presetWcPages.length) {
+			html += '<p>' + checkboxGroup('wc_pages', cfg.presetWcPages, function (i) { return i.key; }, filters.wc_pages) + '</p>';
+		}
+		html += '<p class="es-preset-modal-group-label">Categories</p>' + contentPicker('category', 'categories');
+		html += '<p class="es-preset-modal-group-label">Tags</p>' + contentPicker('tag', 'tags');
+		html += '<p class="es-preset-modal-group-label">Specific posts</p>' + contentPicker('post', 'posts');
+		html += '<p class="es-preset-modal-group-label">Specific pages</p>' + contentPicker('page', 'pages');
+		html += '<textarea class="es-preset-modal-urls" data-field="urls" rows="2" placeholder="/&#10;/pricing">' + escapeHtml(urls) + '</textarea>';
+		html += '</div>';
+		return html;
+	}
+
+	/** Wire up every chip picker just inserted for one modal row, pre-populated from titles. */
+	function initModalContentPickers(container, filters, titles) {
+		['show', 'hide'].forEach(function (side) {
+			var sideFilters = (filters && filters[side + '_filters']) || {};
+			var sideTitles = (titles && titles[side]) || {};
+			[['category', 'categories', 'cats'], ['tag', 'tags', 'tags'], ['post', 'posts', 'posts'], ['page', 'pages', 'pages']].forEach(function (m) {
+				var root = container.querySelector('.es-preset-modal-side[data-side="' + side + '"] .es-content-picker[data-content-type="' + m[0] + '"]');
+				if (!root) return;
+				initContentPicker(root);
+				var ids = sideFilters[m[1]] || [];
+				var titleMap = sideTitles[m[2]] || {};
+				root._escpApi.setSelection(ids.map(function (id) { return { id: id, title: titleMap[id] || ('#' + id) }; }));
+			});
+		});
+	}
+
+	/** Read one side's filter editor back into a sanitize_where()-ready shape. */
+	function gatherModalFilterSide(container, side) {
+		var root = container.querySelector('.es-preset-modal-side[data-side="' + side + '"]');
+		if (!root) return {};
+		function checked(field) {
+			var out = [];
+			root.querySelectorAll('input[type="checkbox"][data-field="' + field + '"]:checked').forEach(function (cb) { out.push(cb.value); });
+			return out;
+		}
+		function chipIds(type) {
+			var picker = root.querySelector('.es-content-picker[data-content-type="' + type + '"]');
+			var out = [];
+			if (picker) picker.querySelectorAll('.es-content-chip input[type="hidden"]').forEach(function (inp) { out.push(inp.value); });
+			return out;
+		}
+		var urlsField = root.querySelector('.es-preset-modal-urls');
+		return {
+			specials: checked('specials'),
+			post_types: checked('post_types'),
+			wc_pages: checked('wc_pages'),
+			categories: chipIds('category'),
+			tags: chipIds('tag'),
+			posts: chipIds('post'),
+			pages: chipIds('page'),
+			urls: urlsField ? urlsField.value.split('\n') : []
+		};
+	}
+
 	function renderPresetModalRow(list, preset) {
 		var row = document.createElement('div');
 		row.className = 'es-preset-modal-row';
@@ -1490,9 +1589,6 @@
 			'<span class="es-preset-modal-row-usage">' + preset.usage_count + ' shell' + (preset.usage_count === 1 ? '' : 's') + '</span>';
 		row.appendChild(header);
 
-		var showUrls = ((preset.show_filters && preset.show_filters.urls) || []).join('\n');
-		var hideUrls = ((preset.hide_filters && preset.hide_filters.urls) || []).join('\n');
-
 		var editor = document.createElement('div');
 		editor.className = 'es-preset-modal-row-editor';
 		editor.hidden = true;
@@ -1500,15 +1596,16 @@
 			'<p><input type="text" class="es-preset-modal-name" value="' + escapeHtml(preset.name) + '"></p>' +
 			'<p>' +
 				'<label><input type="radio" name="es-preset-modal-mode-' + preset.id + '" value="all"' + (preset.show_mode !== 'selected' ? ' checked' : '') + '> Everywhere on the site</label><br>' +
-				'<label><input type="radio" name="es-preset-modal-mode-' + preset.id + '" value="selected"' + (preset.show_mode === 'selected' ? ' checked' : '') + '> Only on pages matching these URLs</label>' +
+				'<label><input type="radio" name="es-preset-modal-mode-' + preset.id + '" value="selected"' + (preset.show_mode === 'selected' ? ' checked' : '') + '> Only on pages matching one or more of these:</label>' +
 			'</p>' +
-			'<p><textarea class="es-preset-modal-show-urls" rows="2" placeholder="/&#10;/pricing">' + escapeHtml(showUrls) + '</textarea></p>' +
-			'<p><textarea class="es-preset-modal-hide-urls" rows="2" placeholder="Hide on:&#10;/cart">' + escapeHtml(hideUrls) + '</textarea></p>' +
+			renderModalFilterSide(preset.id, 'show', preset.show_filters, preset.titles, 'Show on') +
+			renderModalFilterSide(preset.id, 'hide', preset.hide_filters, preset.titles, 'Hide on (overrides show)') +
 			'<p>' +
 				'<button type="button" class="button button-primary es-preset-modal-save">Save changes</button> ' +
 				'<button type="button" class="button es-preset-modal-delete">Delete</button>' +
 			'</p>';
 		row.appendChild(editor);
+		initModalContentPickers(editor, preset, preset.titles);
 
 		header.addEventListener('click', function () {
 			var opening = editor.hidden;
@@ -1523,13 +1620,12 @@
 			var mode = editor.querySelector('input[name="es-preset-modal-mode-' + preset.id + '"]:checked');
 			var where = {
 				show_mode: mode ? mode.value : 'all',
-				show_filters: Object.assign({}, preset.show_filters, { urls: editor.querySelector('.es-preset-modal-show-urls').value.split('\n') }),
-				hide_filters: Object.assign({}, preset.hide_filters, { urls: editor.querySelector('.es-preset-modal-hide-urls').value.split('\n') })
+				show_filters: gatherModalFilterSide(editor, 'show'),
+				hide_filters: gatherModalFilterSide(editor, 'hide')
 			};
 			presetAjax('es_preset_update', { id: preset.id, name: name, rules: JSON.stringify(where) }, function (data) {
 				if (!data || !data.preset) return;
-				var prevTitles = presetsById[preset.id] ? presetsById[preset.id].titles : { show: {}, hide: {} };
-				presetsById[preset.id] = Object.assign({}, data.preset, { titles: prevTitles });
+				presetsById[preset.id] = data.preset;
 				document.querySelectorAll('.es-dr-preset-picker').forEach(function (p) { addOrUpdatePresetOption(p, data.preset); });
 				openPresetManageModal();
 			});

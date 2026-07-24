@@ -34,20 +34,9 @@ class ES_Preset_Ajax {
 		return ES_Display_Rules::sanitize_where( is_array( $raw ) ? $raw : [] );
 	}
 
+	/** Same shape form-edit.php embeds per-page, plus usage_count — one source of truth. */
 	private function present( object $p ): array {
-		$decode = function ( $raw ) {
-			if ( is_string( $raw ) && $raw !== '' ) {
-				$d = json_decode( $raw, true );
-				return is_array( $d ) ? $d : new stdClass();
-			}
-			return new stdClass();
-		};
-		return [
-			'id' => (int) $p->id,
-			'name' => (string) $p->name,
-			'show_mode' => (string) ( $p->show_mode ?? 'all' ),
-			'show_filters' => $decode( $p->show_filters ?? null ),
-			'hide_filters' => $decode( $p->hide_filters ?? null ),
+		return ES_Preset_Repo::to_admin_payload( $p ) + [
 			'usage_count' => ES_Preset_Repo::usage_count( (int) $p->id ),
 		];
 	}

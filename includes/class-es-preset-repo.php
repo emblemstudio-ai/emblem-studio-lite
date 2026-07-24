@@ -153,4 +153,99 @@ class ES_Preset_Repo {
 			'hide_filters' => $decode( $preset->hide_filters ?? null ) ?? new stdClass(),
 		];
 	}
+
+	/**
+	 * Post/page titles for the given ids — shared by form-edit.php (the current
+	 * shell's own rules) and the admin preset payload below, so both resolve
+	 * titles the same way. Mirrors form-edit.php's original $dr_lookup_titles.
+	 */
+	public static function lookup_post_titles( string $post_type, array $ids ): array {
+		$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
+		if ( empty( $ids ) ) {
+			return [];
+		}
+		$posts = get_posts( [
+			'post_type'      => $post_type,
+			'post__in'       => $ids,
+			'posts_per_page' => count( $ids ),
+			'orderby'        => 'post__in',
+			'post_status'    => [ 'publish', 'private', 'draft', 'pending' ],
+			'no_found_rows'  => true,
+		] );
+		$out = [];
+		foreach ( $posts as $p ) {
+			$out[ (int) $p->ID ] = $p->post_title !== '' ? $p->post_title : __( '(no title)', 'emblem-studio' );
+		}
+		foreach ( $ids as $id ) {
+			if ( ! isset( $out[ $id ] ) ) {
+				$out[ $id ] = sprintf( __( '#%d (not found)', 'emblem-studio' ), $id );
+			}
+		}
+		return $out;
+	}
+
+	/** Taxonomy term names for the given ids. Mirrors $dr_lookup_term_names. */
+	public static function lookup_term_names( string $taxonomy, array $ids ): array {
+		$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
+		if ( empty( $ids ) ) {
+			return [];
+		}
+		$terms = get_terms( [
+			'taxonomy'   => $taxonomy,
+			'include'    => $ids,
+			'hide_empty' => false,
+			'orderby'    => 'include',
+		] );
+		$out = [];
+		if ( ! is_wp_error( $terms ) ) {
+			foreach ( $terms as $term ) {
+				$out[ (int) $term->term_id ] = $term->name;
+			}
+		}
+		foreach ( $ids as $id ) {
+			if ( ! isset( $out[ $id ] ) ) {
+				$out[ $id ] = sprintf( __( '#%d (not found)', 'emblem-studio' ), $id );
+			}
+		}
+		return $out;
+	}
+
+	/** Resolved titles for one filter set (a show_filters or hide_filters shape). */
+	public static function titles_for_filters( array $filters ): array {
+		return [
+			'posts' => self::lookup_post_titles( 'post', (array) ( $filters['posts'] ?? [] ) ),
+			'pages' => self::lookup_post_titles( 'page', (array) ( $filters['pages'] ?? [] ) ),
+			'cats'  => self::lookup_term_names( 'category', (array) ( $filters['categories'] ?? [] ) ),
+			'tags'  => self::lookup_term_names( 'post_tag', (array) ( $filters['tags'] ?? [] ) ),
+		];
+	}
+
+	/**
+	 * Full client-side payload for one preset — filters as plain arrays (not
+	 * to_export_array()'s stdClass-for-empty, which is for the SaaS mirror's
+	 * JSON shape) plus resolved titles, so the picker/modal JS can render and
+	 * edit every filter type (chips included) without an extra round-trip.
+	 */
+	public static function to_admin_payload( object $preset ): array {
+		$decode = function ( $raw ) {
+			if ( is_string( $raw ) && $raw !== '' ) {
+				$d = json_decode( $raw, true );
+				return is_array( $d ) ? $d : [];
+			}
+			return [];
+		};
+		$show = $decode( $preset->show_filters ?? null );
+		$hide = $decode( $preset->hide_filters ?? null );
+		return [
+			'id'           => (int) $preset->id,
+			'name'         => (string) ( $preset->name ?? '' ),
+			'show_mode'    => (string) ( $preset->show_mode ?? 'all' ),
+			'show_filters' => $show,
+			'hide_filters' => $hide,
+			'titles'       => [
+				'show' => self::titles_for_filters( $show ),
+				'hide' => self::titles_for_filters( $hide ),
+			],
+		];
+	}
 }

@@ -1066,6 +1066,19 @@ class ES_Admin {
 			$html_editor = wp_enqueue_code_editor( [ 'type' => 'text/html' ] );
 			$css_editor  = wp_enqueue_code_editor( [ 'type' => 'text/css' ] );
 			wp_enqueue_script( 'emblem-studio-admin', EMBLEM_STUDIO_URL . 'assets/admin.js', [ 'jquery', 'wp-theme-plugin-editor' ], $this->asset_ver( 'assets/admin.js' ), true );
+			// Display-rule presets (SER-899 phase 2) — the site's real post types
+			// + special-page labels + WooCommerce state, so the Manage Presets
+			// modal can render the SAME filter checkboxes/chip pickers the
+			// per-shell panel does, not a cut-down editor. Mirrors form-edit.php's
+			// $dr_post_types / $dr_special_labels.
+			$preset_post_types = [];
+			if ( class_exists( 'ES_Preset_Repo' ) ) {
+				$wp_post_types = get_post_types( [ 'public' => true ], 'objects' );
+				unset( $wp_post_types['attachment'] );
+				foreach ( $wp_post_types as $slug => $pt ) {
+					$preset_post_types[] = [ 'slug' => $slug, 'label' => $pt->labels->singular_name ?? $slug ];
+				}
+			}
 			wp_localize_script( 'emblem-studio-admin', 'EmblemStudioAdmin', [
 				'htmlEditor' => $html_editor,
 				'cssEditor'  => $css_editor,
@@ -1077,6 +1090,27 @@ class ES_Admin {
 				// a shell's coupling is client-side only until the page's own Save.
 				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
 				'presetNonce'   => wp_create_nonce( 'es_preset_ajax' ),
+				'presetPostTypes'   => $preset_post_types,
+				'presetSpecials'    => class_exists( 'ES_Display_Rules' ) ? array_map(
+					static function ( $key ) {
+						$labels = [
+							'front_page' => __( 'Front page', 'emblem-studio' ),
+							'blog'       => __( 'Blog index', 'emblem-studio' ),
+							'404'        => __( '404 page', 'emblem-studio' ),
+							'search'     => __( 'Search results', 'emblem-studio' ),
+							'archive'    => __( 'Archives', 'emblem-studio' ),
+						];
+						return [ 'key' => $key, 'label' => $labels[ $key ] ];
+					},
+					ES_Display_Rules::SPECIALS
+				) : [],
+				'presetWcActive'    => class_exists( 'ES_Display_Rules' ) && ES_Display_Rules::wc_active(),
+				'presetWcPages'     => class_exists( 'ES_Display_Rules' ) ? array_map(
+					static function ( $key ) {
+						return [ 'key' => $key, 'label' => ES_Display_Rules::wc_page_labels()[ $key ] ?? $key ];
+					},
+					ES_Display_Rules::WC_PAGES
+				) : [],
 			] );
 			// Inspector (semi-builder) takeover — its own JS/CSS so it can
 			// grow without bloating admin.js. Loads after admin.js so the

@@ -106,39 +106,12 @@ $dr_lookup_term_names = function ( string $taxonomy, array $ids ): array {
  * and the Manage Presets modal can render its editor, with zero extra
  * round-trips. Coupling only persists on the page's normal Save (matching the
  * SaaS picker's own local-state-until-Save behavior) — this JSON is what
- * makes that possible without a server call per pick.
+ * makes that possible without a server call per pick. Same payload shape
+ * ES_Preset_Ajax returns, via the shared ES_Preset_Repo::to_admin_payload().
  */
-$dr_preset_payload = function ( object $p ) use ( $dr_lookup_titles, $dr_lookup_term_names ) {
-	$decode = function ( $raw ) {
-		if ( is_string( $raw ) && $raw !== '' ) {
-			$d = json_decode( $raw, true );
-			return is_array( $d ) ? $d : [];
-		}
-		return [];
-	};
-	$show = $decode( $p->show_filters ?? null );
-	$hide = $decode( $p->hide_filters ?? null );
-	$titles_for = function ( array $filters ) use ( $dr_lookup_titles, $dr_lookup_term_names ) {
-		return [
-			'posts' => $dr_lookup_titles( 'post', (array) ( $filters['posts'] ?? [] ) ),
-			'pages' => $dr_lookup_titles( 'page', (array) ( $filters['pages'] ?? [] ) ),
-			'cats'  => $dr_lookup_term_names( 'category', (array) ( $filters['categories'] ?? [] ) ),
-			'tags'  => $dr_lookup_term_names( 'post_tag', (array) ( $filters['tags'] ?? [] ) ),
-		];
-	};
-	return [
-		'id'           => (int) $p->id,
-		'name'         => (string) $p->name,
-		'show_mode'    => (string) ( $p->show_mode ?? 'all' ),
-		'show_filters' => $show,
-		'hide_filters' => $hide,
-		'titles'       => [
-			'show' => $titles_for( $show ),
-			'hide' => $titles_for( $hide ),
-		],
-	];
-};
-$dr_presets_json = wp_json_encode( array_map( $dr_preset_payload, $dr_presets ) );
+$dr_presets_json = class_exists( 'ES_Preset_Repo' )
+	? wp_json_encode( array_map( [ 'ES_Preset_Repo', 'to_admin_payload' ], $dr_presets ) )
+	: '[]';
 
 /**
  * Build a short human summary of one filter set (Show or Hide).
