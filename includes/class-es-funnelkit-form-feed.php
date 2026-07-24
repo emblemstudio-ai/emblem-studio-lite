@@ -108,6 +108,13 @@ final class ES_FunnelKit_Form_Feed {
 						}
 					}
 				}
+				// Only assets that actually contain a form belong in FunnelKit's own
+				// Forms picker — a click-through ribbon or announcement popup has
+				// nothing to map (SER-929). form_types (shell/placement) can't be the
+				// filter; a ribbon/popup can legitimately carry real fields too.
+				if ( empty( $fields ) ) {
+					continue;
+				}
 				$catalog[ $key ] = [
 					'key'      => $key,
 					'name'     => (string) ( $form->name ?? 'Asset #' . (int) $form->id ),
