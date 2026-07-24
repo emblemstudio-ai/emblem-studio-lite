@@ -1571,7 +1571,6 @@ class ES_Admin {
 				'mutual'        => ! empty( $conn['mutual'] ),
 				'duration_days' => isset( $conn['duration_days'] ) ? (int) $conn['duration_days'] : ES_Connections::DEFAULT_DAYS,
 				'behavior'      => in_array( ( $conn['behavior'] ?? 'nothing' ), [ 'hide', 'replace', 'nothing' ], true ) ? $conn['behavior'] : 'nothing',
-				'self_suppress' => ! empty( $conn['self_suppress'] ),
 			];
 		} else {
 			$data['connections'] = []; // explicit empty → stored as NULL (no-op)

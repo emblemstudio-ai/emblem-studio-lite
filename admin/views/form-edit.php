@@ -1189,17 +1189,6 @@ $ab_archive_ct = count( $ab_archived );
 					<p><em><?php esc_html_e( 'No other forms yet. Create another form and it will appear here to connect.', 'emblem-studio' ); ?></em></p>
 				<?php else : ?>
 					<table class="form-table"><tbody>
-						<?php if ( $has_fields ) : ?>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Self', 'emblem-studio' ); ?></th>
-							<td>
-								<label style="display:inline-flex; align-items:center; gap:.5rem;">
-									<input type="checkbox" name="connections[self_suppress]" value="1" <?php checked( ! empty( $conn_cfg['self_suppress'] ) ); ?>>
-									<?php esc_html_e( "Don't show this form again once this visitor has submitted it — no other form needed.", 'emblem-studio' ); ?>
-								</label>
-							</td>
-						</tr>
-						<?php endif; ?>
 						<?php if ( ! empty( $other_forms ) ) : ?>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'When this form is submitted, also silence:', 'emblem-studio' ); ?></th>
@@ -1236,6 +1225,9 @@ $ab_archive_ct = count( $ab_archived );
 										'<code>data-esf-subscribed</code>'
 									);
 									?>
+								</p>
+								<p class="description" style="margin:4px 0 0;">
+									<?php esc_html_e( 'Picking Hide or Replace works even with no other forms linked below — it applies the moment this visitor submits THIS form.', 'emblem-studio' ); ?>
 								</p>
 							</td>
 						</tr>
