@@ -20,6 +20,8 @@ class ES_Admin {
 		add_action( 'admin_post_es_trash_form', [ $this, 'handle_trash' ] );
 		add_action( 'admin_post_es_restore_form', [ $this, 'handle_restore' ] );
 		add_action( 'admin_post_es_delete_form', [ $this, 'handle_delete' ] );
+		add_action( 'admin_post_es_archive_form', [ $this, 'handle_archive' ] );
+		add_action( 'admin_post_es_unarchive_form', [ $this, 'handle_unarchive' ] );
 		add_action( 'admin_post_es_bulk_forms', [ $this, 'handle_bulk' ] );
 		add_action( 'admin_post_es_save_settings', [ $this, 'handle_save_settings' ] );
 		// Design System (Pro/full only) — shared per-install CSS.
@@ -1222,7 +1224,7 @@ class ES_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$valid_filters = [ 'all', 'active', 'inactive', 'trash' ];
+		$valid_filters = [ 'all', 'active', 'inactive', 'archived', 'trash' ];
 		$filter        = isset( $_GET['filter'] ) ? sanitize_key( (string) $_GET['filter'] ) : 'all';
 		if ( ! in_array( $filter, $valid_filters, true ) ) {
 			$filter = 'all';
@@ -1753,6 +1755,39 @@ class ES_Admin {
 		exit;
 	}
 
+	/**
+	 * Archive an asset — hides it from the normal lists and stops it
+	 * rendering, without deleting it (kept for history/comparison against
+	 * newer assets; never auto-deleted). Not to be confused with the
+	 * separate A/B-test "variant archive" (ES_AB) — this archives the
+	 * whole asset.
+	 */
+	public function handle_archive(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
+		}
+		$id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
+		check_admin_referer( 'es_archive_form_' . $id );
+		if ( $id ) {
+			ES_Form_Repo::archive( $id );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&archived=1' ) );
+		exit;
+	}
+
+	public function handle_unarchive(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
+		}
+		$id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
+		check_admin_referer( 'es_unarchive_form_' . $id );
+		if ( $id ) {
+			ES_Form_Repo::restore_from_archive( $id );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&filter=archived&restored=1' ) );
+		exit;
+	}
+
 	public function handle_bulk(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1777,6 +1812,14 @@ class ES_Admin {
 							[ 'status' => $action === 'activate' ? 'active' : 'inactive', 'updated_at' => current_time( 'mysql' ) ],
 							[ 'id' => $id ]
 						);
+						$applied++;
+						break;
+					case 'archive':
+						ES_Form_Repo::archive( $id );
+						$applied++;
+						break;
+					case 'unarchive':
+						ES_Form_Repo::restore_from_archive( $id );
 						$applied++;
 						break;
 					case 'trash':

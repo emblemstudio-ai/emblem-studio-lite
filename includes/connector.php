@@ -44,6 +44,12 @@ final class Emblem_Studio_SaaS_Connector
      */
     const DEFAULT_API_BASE = 'https://emblem-studio-beta.serenichron.agency';
 
+    /** Post-decouple background catch-up (SER-950) — see run_postdecouple_pull(). */
+    const POSTDECOUPLE_OPTION = 'es_postdecouple_cfg';
+    const POSTDECOUPLE_STATE = 'es_postdecouple_state';
+    const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';
+    const POSTDECOUPLE_MAX_ATTEMPTS = 40; // ~13 min of real effort before giving up and revoking anyway
+
     /** WP admin page slug → embedded SaaS path (under /app/s/<code>/…). */
     const PAGE_MAP = [
         'emblem-studio'              => 'assets',     // Forms & Assets
@@ -77,6 +83,9 @@ final class Emblem_Studio_SaaS_Connector
         // status endpoint the dashboard's loading screen polls.
         add_action('es_saas_import', [__CLASS__, 'run_import']);
         add_action('wp_ajax_es_import_status', [__CLASS__, 'ajax_import_status']);
+        // Post-decouple background catch-up (SER-950) — runs after the site has
+        // already reverted to Lite, so it never blocks or crashes the admin.
+        add_action(self::POSTDECOUPLE_HOOK, [__CLASS__, 'run_postdecouple_pull']);
     }
 
     /* ── Connection state ──────────────────────────────────────────────── */
@@ -324,9 +333,27 @@ final class Emblem_Studio_SaaS_Connector
                 frame.src = BASE + q + '#est=' + encodeURIComponent(TOKEN);
             })();
 
+            // Browser-tab title parity with the native edit screen's own
+            // filter_admin_title() ("ES <id> - <name> ‹ Site — WordPress"). The
+            // native version re-runs server-side on every page load because
+            // ?action=edit&id= is a real navigation; here the SPA never reloads
+            // the WP page, so nothing re-fires that PHP filter — this is the
+            // client-side equivalent, keyed off the same postMessage route data.
+            var baseTitle = document.title;
+            var titleSuffixIdx = baseTitle.indexOf(' ‹ '); // ' ‹ '
+            var titleSuffix = titleSuffixIdx !== -1 ? baseTitle.slice(titleSuffixIdx) : '';
+            function syncWpTitle(d) {
+                if (d.view === 'assets' && d.assetId && d.assetName) {
+                    document.title = 'ES ' + d.assetId + ' - ' + d.assetName + titleSuffix;
+                } else {
+                    document.title = baseTitle;
+                }
+            }
+
             // Rewrite the WP address bar to a native-looking URL as the SPA moves,
             // so refresh / bookmark / share / Back all land on the same place.
             function syncWpUrl(d) {
+                syncWpTitle(d);
                 var slug = VIEW_SLUG[d.view];
                 if (!slug) {
                     // SaaS-only view (team/account/…): no native page to name; leave
@@ -698,7 +725,10 @@ final class Emblem_Studio_SaaS_Connector
         if (! class_exists('ES_Form_Repo')) {
             return;
         }
-        $rows  = ES_Form_Repo::all('all'); // every non-trashed form, all statuses
+        // Every non-trashed form, all statuses — including archived, since archived
+        // assets still need to sync up (they just don't show in the admin's "All"
+        // tab, which is what all('all') now means).
+        $rows = array_merge(ES_Form_Repo::all('all'), ES_Form_Repo::all('archived'));
         $forms = [];
         foreach ((array) $rows as $row) {
             if (! is_object($row) || empty($row->id)) {
@@ -1303,6 +1333,18 @@ final class Emblem_Studio_SaaS_Connector
                     'form_types'    => wp_json_encode($supported),
                     'lite_disabled' => wp_json_encode(['shells' => $disabled, 'asset_off' => $asset_off]),
                 ], ['id' => $new_id]);
+
+                // Archive is a separate flag from status (like trash), so it isn't
+                // part of ES_Form_Repo::save()'s field set — apply it explicitly.
+                // Only touch it when the key is present, so an older SaaS build
+                // (no archived_at in the payload yet) never un-archives on pull.
+                if (array_key_exists('archived_at', $a)) {
+                    if (! empty($a['archived_at'])) {
+                        ES_Form_Repo::archive($new_id);
+                    } else {
+                        ES_Form_Repo::restore_from_archive($new_id);
+                    }
+                }
             }
         }
 
@@ -1422,14 +1464,24 @@ final class Emblem_Studio_SaaS_Connector
         return 0;
     }
 
-    /** Pull SaaS-native events down, mapped by saas_form_id; dedupe by saas_event_id. */
-    private static function pull_stats(array $cfg): void
+    /**
+     * Pull SaaS-native events down, mapped by saas_form_id; dedupe by saas_event_id.
+     *
+     * @param  int|null  $deadline  When given (SER-950's post-decouple catch-up),
+     *                              stop looping once time() reaches it, leaving the
+     *                              cursor exactly where it is for the next pass to
+     *                              resume from. Omitted (the normal hourly refresh)
+     *                              behaves exactly as before — loops until caught up.
+     * @return bool  True once fully caught up; false if it stopped early because
+     *               the deadline hit while a full batch (more likely pending) remained.
+     */
+    private static function pull_stats(array $cfg, ?int $deadline = null): bool
     {
         global $wpdb;
         $events = $wpdb->prefix . 'emblemstudio_events';
         $map    = self::saas_form_map();
         if (empty($map)) {
-            return;
+            return true;
         }
         $after = (int) get_option('es_saas_pull_stats_after', 0);
         do {
@@ -1443,7 +1495,7 @@ final class Emblem_Studio_SaaS_Connector
             $after = self::apply_stats_reset($data, $after);
 
             if (empty($data['events']) || ! is_array($data['events'])) {
-                return;
+                return true;
             }
             $wpdb->suppress_errors(true);
             foreach ($data['events'] as $e) {
@@ -1468,23 +1520,31 @@ final class Emblem_Studio_SaaS_Connector
             $wpdb->suppress_errors(false);
             $after = (int) ($data['last_id'] ?? $after);
             update_option('es_saas_pull_stats_after', $after, false);
-        } while (count($data['events']) === 500);
+            if (count($data['events']) < 500) {
+                return true;
+            }
+        } while ($deadline === null || time() < $deadline);
+
+        return false;
     }
 
-    /** Pull SaaS-native leads down, mapped by saas_form_id; dedupe by saas_lead_id. */
-    private static function pull_leads(array $cfg): void
+    /**
+     * Pull SaaS-native leads down, mapped by saas_form_id; dedupe by saas_lead_id.
+     * See pull_stats() for the $deadline / return-value contract — identical here.
+     */
+    private static function pull_leads(array $cfg, ?int $deadline = null): bool
     {
         global $wpdb;
         $leads = $wpdb->prefix . 'emblemstudio_leads';
         $map   = self::saas_form_map();
         if (empty($map)) {
-            return;
+            return true;
         }
         $after = (int) get_option('es_saas_pull_leads_after', 0);
         do {
             $data = self::pull_post($cfg, '/v1/embed/export/leads', ['after_id' => $after]);
             if (empty($data['leads']) || ! is_array($data['leads'])) {
-                return;
+                return true;
             }
             $wpdb->suppress_errors(true);
             foreach ($data['leads'] as $l) {
@@ -1512,7 +1572,12 @@ final class Emblem_Studio_SaaS_Connector
             $wpdb->suppress_errors(false);
             $after = (int) ($data['last_id'] ?? $after);
             update_option('es_saas_pull_leads_after', $after, false);
-        } while (count($data['leads']) === 500);
+            if (count($data['leads']) < 500) {
+                return true;
+            }
+        } while ($deadline === null || time() < $deadline);
+
+        return false;
     }
 
     /** saas_form_id → local form id (only rows we've mapped on a prior asset pull). */
@@ -1579,7 +1644,24 @@ final class Emblem_Studio_SaaS_Connector
         return $out;
     }
 
-    /** Remove the stored connection — revert to the Lite plugin. */
+    /**
+     * Remove the stored connection — revert to the Lite plugin, immediately.
+     *
+     * SER-950: this used to do "one last copy-down" (pull_all — assets, presets,
+     * stats, leads, all in one request) synchronously, before severing anything.
+     * On a site with enough queued history that single request could outrun PHP's
+     * execution limit and fatal — leaving WordPress stuck holding a connection
+     * config that could no longer sign in or cleanly finish decoupling either
+     * (exactly what happened on tstprep.com, 2026-07-27).
+     *
+     * Now: sever the LOCAL side first — clearing cron hooks and deleting one
+     * option can't meaningfully fail or time out, so the admin reverts to Lite
+     * reliably, every time. The copy-down (and revoking the SaaS-side token)
+     * moves to a resumable background job (run_postdecouple_pull()) that starts
+     * right after, using the same bounded-pass pattern as the connect-time
+     * import — safe to take several passes on a site with real history, and it
+     * never blocks this action from completing.
+     */
     public static function handle_decouple(): void
     {
         if (! current_user_can('manage_options')) {
@@ -1589,17 +1671,10 @@ final class Emblem_Studio_SaaS_Connector
 
         $cfg = self::config();
 
-        // One last copy-down before going solo, so WordPress keeps the full,
-        // current set of assets, stats and leads locally.
-        self::pull_all($cfg);
         wp_clear_scheduled_hook('es_saas_pull');
         // Stop any in-flight import and forget its cursor, so a later reconnect
         // starts a clean run instead of resuming into a severed connection.
         wp_clear_scheduled_hook('es_saas_import');
-
-        // Tell the SaaS to sever the connection (rotate the site secret) so this
-        // site can't sign in again without reconnecting. Best-effort.
-        self::revoke_connection($cfg);
 
         delete_option(self::OPTION);
         delete_option('es_import_state');
@@ -1607,8 +1682,86 @@ final class Emblem_Studio_SaaS_Connector
         delete_transient(self::FORMS_TRANSIENT);
         delete_transient(self::IMPORT_LOCK);
 
+        // The SaaS-side token stays valid until the background job below either
+        // finishes or gives up — deliberately, so it can keep authenticating
+        // across passes even though the local connection config is already gone.
+        if ($cfg) {
+            self::start_postdecouple_pull($cfg);
+        }
+
         wp_safe_redirect(add_query_arg('es_decoupled', '1', admin_url('admin.php?page=emblem-studio')));
         exit;
+    }
+
+    /** Arm the post-decouple background catch-up and kick its first pass immediately. */
+    private static function start_postdecouple_pull(array $cfg): void
+    {
+        update_option(self::POSTDECOUPLE_OPTION, $cfg, false);
+        update_option(self::POSTDECOUPLE_STATE, ['stage' => 'assets', 'attempts' => 0], false);
+        wp_schedule_single_event(time(), self::POSTDECOUPLE_HOOK);
+        if (function_exists('spawn_cron')) {
+            spawn_cron();
+        }
+    }
+
+    /**
+     * Best-effort, resumable: finish copying the site's history down to
+     * WordPress after decoupling, then revoke the SaaS-side token. Runs
+     * entirely in the background — the admin already saw the disconnected/Lite
+     * screen before this ever starts, so nothing here can block or crash it.
+     * Bounded to IMPORT_PASS_SECONDS per pass, same as the connect-time import,
+     * and gives up (revoking anyway) after POSTDECOUPLE_MAX_ATTEMPTS passes so a
+     * stuck pull can't leave the token valid indefinitely.
+     */
+    public static function run_postdecouple_pull(): void
+    {
+        $cfg = get_option(self::POSTDECOUPLE_OPTION);
+        if (! is_array($cfg) || empty($cfg['site_token'])) {
+            return; // nothing queued, or a prior pass already finished + cleaned up
+        }
+        $state = get_option(self::POSTDECOUPLE_STATE);
+        if (! is_array($state) || empty($state['stage'])) {
+            $state = ['stage' => 'assets', 'attempts' => 0];
+        }
+        $state['attempts'] = (int) ($state['attempts'] ?? 0) + 1;
+
+        $deadline = time() + self::IMPORT_PASS_SECONDS;
+        try {
+            while ($state['stage'] !== 'done' && time() < $deadline) {
+                switch ($state['stage']) {
+                    case 'assets':
+                        self::pull_assets($cfg);
+                        $state['stage'] = 'presets';
+                        break;
+                    case 'presets':
+                        self::pull_presets($cfg);
+                        $state['stage'] = 'stats';
+                        break;
+                    case 'stats':
+                        $state['stage'] = self::pull_stats($cfg, $deadline) ? 'leads' : 'stats';
+                        break;
+                    case 'leads':
+                        $state['stage'] = self::pull_leads($cfg, $deadline) ? 'done' : 'leads';
+                        break;
+                    default:
+                        $state['stage'] = 'done';
+                }
+            }
+        } catch (\Throwable $e) {
+            // Best-effort only — fall through; a later pass (or the attempts cap
+            // below) resolves it either way, so nothing here can wedge forever.
+        }
+
+        if ($state['stage'] === 'done' || $state['attempts'] >= self::POSTDECOUPLE_MAX_ATTEMPTS) {
+            self::revoke_connection($cfg);
+            delete_option(self::POSTDECOUPLE_OPTION);
+            delete_option(self::POSTDECOUPLE_STATE);
+
+            return;
+        }
+
+        update_option(self::POSTDECOUPLE_STATE, $state, false);
+        wp_schedule_single_event(time() + 5, self::POSTDECOUPLE_HOOK);
     }
 
     /** Ask the SaaS to sever this site's connection (rotate its secret). Best-effort. */

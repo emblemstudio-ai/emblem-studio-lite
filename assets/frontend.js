@@ -753,6 +753,19 @@
 		});
 	}
 
+	// Replace mode (already-subscribed visitor): inline checks this on its own
+	// host at mount time (see init() below), but a click/auto popup, ribbon, or
+	// slide-in doesn't have a live host to check until it actually opens — the
+	// mark lives on the host baked inside its <template>. This peeks at that
+	// template so the trigger/bootstrap arm step can skip page_view for an
+	// already-subscribed visitor too, matching inline instead of counting a
+	// view for content that's semantically already been replaced.
+	function isTemplateHostSubscribed(templateSelector) {
+		const tpl = document.querySelector(templateSelector);
+		const host = tpl && tpl.content && tpl.content.querySelector('.esf-host');
+		return !!(host && host.getAttribute('data-esf-subscribed') === '1');
+	}
+
 	function init() {
 		persistVariantCookies();
 
@@ -792,13 +805,19 @@
 			if (trigger._osPopupHooked) return;
 			trigger._osPopupHooked = true;
 
-			fetchGeo();
-			fireEvent(trigger, 'es_page_view');
-			observeTrigger(trigger);
+			const popupId = trigger.getAttribute('data-esf-popup-id');
+			// Replace mode: an already-subscribed visitor doesn't count as a view —
+			// same rule as inline, just checked on the template since there's no
+			// live host to read yet (see isTemplateHostSubscribed above).
+			if (!isTemplateHostSubscribed('template.esf-popup-data[data-esf-popup-id="' + popupId + '"]')) {
+				fetchGeo();
+				fireEvent(trigger, 'es_page_view');
+				observeTrigger(trigger);
+			}
 
 			trigger.addEventListener('click', e => {
 				e.preventDefault();
-				openPopup(trigger.getAttribute('data-esf-popup-id'));
+				openPopup(popupId);
 			});
 		});
 
@@ -835,14 +854,25 @@
 		let config;
 		try { config = JSON.parse(boot.getAttribute('data-esf-auto-config') || '{}'); }
 		catch (e) { return; }
-		if (!config || !config.trigger) return;
+		if (!config) return;
+		// A trigger drives WHEN an auto shell shows on a live page; with none set
+		// it never fires there. But the edit-screen preview renders the shell
+		// immediately (below), so don't bail for a missing trigger in preview —
+		// otherwise a fresh asset whose trigger isn't chosen yet previews blank.
+		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
 		// Honour persistent dismissal — if the visitor closed this popup with
-		// a "don't show again" rule still in effect, skip entirely.
-		if (isShellSuppressed(popupId, 'popup-auto')) return;
+		// a "don't show again" rule still in effect, skip entirely. This is
+		// real-visitor memory — without the preview exemption, previewing the
+		// asset once (and dismissing it) silently blanks every later preview
+		// until the dismissal window expires.
+		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(popupId, 'popup-auto')) return;
 
-		fetchGeo();
-		fireEvent(boot, 'es_page_view');
+		// Replace mode: an already-subscribed visitor doesn't count as a view.
+		if (!isTemplateHostSubscribed('template.esf-popup-data[data-esf-popup-id="' + popupId + '"]')) {
+			fetchGeo();
+			fireEvent(boot, 'es_page_view');
+		}
 
 		const showClose = config.close_button !== false;
 		const fire = () => openPopup(popupId, {
@@ -1133,7 +1163,8 @@
 		shadow.querySelectorAll('img').forEach(img => {
 			if (!img.complete) img.addEventListener('load', syncCloseOffset);
 		});
-		fireEvent(host, 'es_view'); // form became visible (popup opened)
+		// Replace mode: an already-subscribed visitor doesn't count as a view.
+		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view'); // form became visible (popup opened)
 		attachClickTracking(host, shadow);
 
 		const form = shadow.querySelector('form');
@@ -1159,14 +1190,25 @@
 		let config;
 		try { config = JSON.parse(boot.getAttribute('data-esf-auto-config') || '{}'); }
 		catch (e) { return; }
-		if (!config || !config.trigger) return;
+		if (!config) return;
+		// A trigger drives WHEN an auto shell shows on a live page; with none set
+		// it never fires there. But the edit-screen preview renders the shell
+		// immediately (below), so don't bail for a missing trigger in preview —
+		// otherwise a fresh asset whose trigger isn't chosen yet previews blank.
+		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
 		// Honour persistent dismissal — if the visitor closed this ribbon
-		// with a "don't show again" rule still in effect, skip entirely.
-		if (isShellSuppressed(ribbonId, 'ribbon')) return;
+		// with a "don't show again" rule still in effect, skip entirely. This is
+		// real-visitor memory — without the preview exemption, previewing the
+		// asset once (and dismissing it) silently blanks every later preview
+		// until the dismissal window expires.
+		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(ribbonId, 'ribbon')) return;
 
-		fetchGeo();
-		fireEvent(boot, 'es_page_view');
+		// Replace mode: an already-subscribed visitor doesn't count as a view.
+		if (!isTemplateHostSubscribed('template.esf-ribbon-data[data-esf-ribbon-id="' + ribbonId + '"]')) {
+			fetchGeo();
+			fireEvent(boot, 'es_page_view');
+		}
 
 		const position  = boot.getAttribute('data-esf-position') === 'bottom' ? 'bottom' : 'top';
 		const showClose = config.close_button !== false;
@@ -1384,7 +1426,8 @@
 
 		const shadow = mount(host);
 		if (!shadow) return;
-		fireEvent(host, 'es_view'); // form became visible (ribbon revealed)
+		// Replace mode: an already-subscribed visitor doesn't count as a view.
+		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view'); // form became visible (ribbon revealed)
 		attachClickTracking(host, shadow);
 
 		const form = shadow.querySelector('form');
@@ -1409,12 +1452,23 @@
 		let config;
 		try { config = JSON.parse(boot.getAttribute('data-esf-auto-config') || '{}'); }
 		catch (e) { return; }
-		if (!config || !config.trigger) return;
+		if (!config) return;
+		// A trigger drives WHEN an auto shell shows on a live page; with none set
+		// it never fires there. But the edit-screen preview renders the shell
+		// immediately (below), so don't bail for a missing trigger in preview —
+		// otherwise a fresh asset whose trigger isn't chosen yet previews blank.
+		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
-		if (isShellSuppressed(slideInId, 'slide-in')) return;
+		// Real-visitor dismissal memory — without the preview exemption,
+		// previewing the asset once (and dismissing it) silently blanks every
+		// later preview until the dismissal window expires.
+		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(slideInId, 'slide-in')) return;
 
-		fetchGeo();
-		fireEvent(boot, 'es_page_view');
+		// Replace mode: an already-subscribed visitor doesn't count as a view.
+		if (!isTemplateHostSubscribed('template.esf-slide-in-data[data-esf-slide-in-id="' + slideInId + '"]')) {
+			fetchGeo();
+			fireEvent(boot, 'es_page_view');
+		}
 
 		const corner    = boot.getAttribute('data-esf-corner') === 'bottom-left' ? 'bottom-left' : 'bottom-right';
 		const showClose = config.close_button !== false;
@@ -1584,7 +1638,8 @@
 
 		const shadow = mount(host);
 		if (!shadow) return;
-		fireEvent(host, 'es_view');
+		// Replace mode: an already-subscribed visitor doesn't count as a view.
+		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view');
 		attachClickTracking(host, shadow);
 
 		const form = shadow.querySelector('form');

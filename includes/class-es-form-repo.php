@@ -30,10 +30,13 @@ class ES_Form_Repo {
 	}
 
 	/**
-	 * Fetch forms. By default, only non-trashed rows.
+	 * Fetch forms. By default, only non-trashed, non-archived rows.
 	 *
-	 * Filter values: 'all' | 'active' | 'inactive' | 'trash'.
-	 * The first three exclude trashed rows; 'trash' returns only trashed.
+	 * Filter values: 'all' | 'active' | 'inactive' | 'archived' | 'trash'.
+	 * 'all'/'active'/'inactive' exclude both trashed AND archived rows (archived
+	 * has its own tab, same as trash); 'archived' returns only archived (and
+	 * never-trashed — a trashed row wins over an archived one); 'trash' returns
+	 * only trashed.
 	 */
 	public static function all( string $filter = 'all' ): array {
 		global $wpdb;
@@ -41,7 +44,10 @@ class ES_Form_Repo {
 		if ( $filter === 'trash' ) {
 			return $wpdb->get_results( "SELECT * FROM $t WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC" );
 		}
-		$where  = 'trashed_at IS NULL';
+		if ( $filter === 'archived' ) {
+			return $wpdb->get_results( "SELECT * FROM $t WHERE trashed_at IS NULL AND archived_at IS NOT NULL ORDER BY archived_at DESC" );
+		}
+		$where  = 'trashed_at IS NULL AND archived_at IS NULL';
 		$params = [];
 		if ( in_array( $filter, [ 'active', 'inactive' ], true ) ) {
 			$where   .= ' AND status = %s';
@@ -68,16 +74,18 @@ class ES_Form_Repo {
 		$t = self::table();
 		$row = $wpdb->get_row(
 			"SELECT
-				SUM(CASE WHEN trashed_at IS NULL THEN 1 ELSE 0 END)                                    AS all_count,
-				SUM(CASE WHEN trashed_at IS NULL AND status = 'active'   THEN 1 ELSE 0 END)            AS active_count,
-				SUM(CASE WHEN trashed_at IS NULL AND status = 'inactive' THEN 1 ELSE 0 END)            AS inactive_count,
-				SUM(CASE WHEN trashed_at IS NOT NULL THEN 1 ELSE 0 END)                                AS trash_count
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL THEN 1 ELSE 0 END)                             AS all_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'active'   THEN 1 ELSE 0 END)     AS active_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'inactive' THEN 1 ELSE 0 END)     AS inactive_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NOT NULL THEN 1 ELSE 0 END)                        AS archived_count,
+				SUM(CASE WHEN trashed_at IS NOT NULL THEN 1 ELSE 0 END)                                                AS trash_count
 			FROM $t"
 		);
 		return [
 			'all'      => (int) ( $row->all_count      ?? 0 ),
 			'active'   => (int) ( $row->active_count   ?? 0 ),
 			'inactive' => (int) ( $row->inactive_count ?? 0 ),
+			'archived' => (int) ( $row->archived_count ?? 0 ),
 			'trash'    => (int) ( $row->trash_count    ?? 0 ),
 		];
 	}
@@ -390,6 +398,32 @@ class ES_Form_Repo {
 	}
 
 	/**
+	 * Archive — a hidden bucket like Trash, but a separate flag (never
+	 * auto-deleted, and `status` underneath is left untouched so Restore
+	 * from Archive brings the form back exactly as it was).
+	 */
+	public static function archive( int $id ): void {
+		global $wpdb;
+		$wpdb->update(
+			self::table(),
+			[ 'archived_at' => current_time( 'mysql' ) ],
+			[ 'id' => $id ]
+		);
+		self::flush_caches();
+	}
+
+	/** Restore a form from Archive (NULLs archived_at). */
+	public static function restore_from_archive( int $id ): void {
+		global $wpdb;
+		$wpdb->update(
+			self::table(),
+			[ 'archived_at' => null ],
+			[ 'id' => $id ]
+		);
+		self::flush_caches();
+	}
+
+	/**
 	 * Build a portable JSON-shaped array representing one form's
 	 * definition. Stats, leads, revisions, timestamps, and the row id
 	 * are intentionally excluded — only the fields that DEFINE the
@@ -417,6 +451,7 @@ class ES_Form_Repo {
 			'html'                 => (string) ( $form->html ?? '' ),
 			'css'                  => (string) ( $form->css ?? '' ),
 			'status'               => (string) ( $form->status ?? 'inactive' ),
+			'archived_at'          => ! empty( $form->archived_at ) ? (string) $form->archived_at : null,
 			'display_order'        => (int) ( $form->display_order ?? 0 ),
 			'success_mode'         => (string) ( $form->success_mode ?? 'inline_state' ),
 			'success_message'      => (string) ( $form->success_message ?? '' ),
@@ -836,7 +871,7 @@ class ES_Form_Repo {
 	 * stay in ES_Display_Rules.
 	 */
 	public static function is_currently_active( object $form ): bool {
-		if ( ! empty( $form->trashed_at ) ) {
+		if ( ! empty( $form->trashed_at ) || ! empty( $form->archived_at ) ) {
 			return false;
 		}
 		if ( ( $form->status ?? 'inactive' ) !== 'active' ) {
@@ -852,7 +887,7 @@ class ES_Form_Repo {
 	 * schedule window hasn't started, or has already passed).
 	 *
 	 * Returns one of:
-	 *   'inactive'  — status is not 'active' (or trashed); never renders.
+	 *   'inactive'  — status is not 'active' (or trashed, or archived); never renders.
 	 *   'scheduled' — Active, but "now" is before active_from (not started yet).
 	 *   'expired'   — Active, but "now" is after active_until (window passed).
 	 *   'ending'    — Active and rendering now, but an end date is still ahead.
@@ -870,7 +905,8 @@ class ES_Form_Repo {
 			! empty( $form->trashed_at ),
 			$ignore_window ? null : ( $form->active_from  ?? null ),
 			$ignore_window ? null : ( $form->active_until ?? null ),
-			(string) current_time( 'mysql' )
+			(string) current_time( 'mysql' ),
+			! empty( $form->archived_at )
 		);
 	}
 
@@ -879,9 +915,10 @@ class ES_Form_Repo {
 	 * schedule bounds and "now" (all MySQL DATETIME strings — fixed-width, so a
 	 * plain string compare orders them), return the derived display state. "Now"
 	 * is a parameter so the logic is unit-testable without freezing the clock.
+	 * $archived mirrors $trashed — an archived form never renders either.
 	 */
-	public static function effective_state_at( ?string $status, bool $trashed, ?string $from, ?string $until, string $now ): string {
-		if ( $trashed || ( $status ?? 'inactive' ) !== 'active' ) {
+	public static function effective_state_at( ?string $status, bool $trashed, ?string $from, ?string $until, string $now, bool $archived = false ): string {
+		if ( $trashed || $archived || ( $status ?? 'inactive' ) !== 'active' ) {
 			return 'inactive';
 		}
 		if ( ! empty( $from ) && strcmp( $now, (string) $from ) < 0 ) {

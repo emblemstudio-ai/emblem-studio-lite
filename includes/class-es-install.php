@@ -57,6 +57,7 @@ class ES_Install {
 			active_from DATETIME NULL,
 			active_until DATETIME NULL,
 			trashed_at DATETIME NULL,
+			archived_at DATETIME NULL,
 			locked_by BIGINT(20) UNSIGNED NULL,
 			locked_at DATETIME NULL,
 			locked_token VARCHAR(64) NULL,
@@ -65,6 +66,7 @@ class ES_Install {
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
 			KEY trashed_at (trashed_at),
+			KEY archived_at (archived_at),
 			KEY saas_form_id (saas_form_id)
 		) $charset_collate;";
 
@@ -767,6 +769,20 @@ class ES_Install {
 				KEY saas_preset_id (saas_preset_id)
 			) $charset_collate;" );
 			update_option( 'emblem_studio_db_version', '32' );
+		}
+
+		if ( version_compare( $current, '33', '<' ) ) {
+			global $wpdb;
+			$forms     = self::table( 'forms' );
+			$form_cols = $wpdb->get_col( "SHOW COLUMNS FROM $forms" );
+			// Archive: a hidden bucket like Trash, but a separate flag from
+			// `trashed_at` — the asset's status survives unarchiving untouched,
+			// and archived assets are never auto-deleted.
+			if ( ! in_array( 'archived_at', $form_cols, true ) ) {
+				$wpdb->query( "ALTER TABLE $forms ADD COLUMN archived_at DATETIME NULL AFTER trashed_at" );
+				$wpdb->query( "ALTER TABLE $forms ADD INDEX archived_at (archived_at)" );
+			}
+			update_option( 'emblem_studio_db_version', '33' );
 		}
 	}
 

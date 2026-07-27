@@ -18,7 +18,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php esc_html_e( 'Your forms and popups set one cookie worth mentioning: esf_visitor. It\'s a random, anonymous id — no name, no email, no IP — that just tells your stats a new visitor from a returning one, and it never leaves your site.', 'emblem-studio' ); ?>
 	</p>
 	<p>
-		<?php esc_html_e( 'Everything else we set — the A/B cookie, "already subscribed" memory, our spam trap — only starts after a visitor has already acted, so none of it needs mentioning.', 'emblem-studio' ); ?>
+		<?php esc_html_e( '"Already subscribed" memory and our spam trap only start after a visitor has already acted (submitting a form), so neither needs mentioning.', 'emblem-studio' ); ?>
+	</p>
+	<p>
+		<?php esc_html_e( 'One exception: if you\'re running an A/B test on a form, we also set a cookie (esf_ab_<form id>) on page load — same timing as esf_visitor above — to keep a visitor seeing the same version. Worth listing alongside it in your cookie policy if you use A/B testing.', 'emblem-studio' ); ?>
 	</p>
 	<p>
 		<?php esc_html_e( 'It\'s your site and your banner, so the call is yours. We just make sure our code follows whatever your visitors decide.', 'emblem-studio' ); ?>

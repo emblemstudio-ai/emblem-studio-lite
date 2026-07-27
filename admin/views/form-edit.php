@@ -356,6 +356,11 @@ $ab_archive_ct = count( $ab_archived );
 							aria-label="<?php esc_attr_e( 'Active', 'emblem-studio' ); ?>"></button>
 						<span class="es-status-text"><?php echo $is_active ? esc_html__( 'Active', 'emblem-studio' ) : esc_html__( 'Inactive', 'emblem-studio' ); ?></span>
 					</span>
+					<?php if ( ! empty( $f->archived_at ) ) : ?>
+						<span class="es-status-pill es-status-archived" title="<?php esc_attr_e( 'Archived — hidden from the normal lists and never renders, until restored. See Asset status below.', 'emblem-studio' ); ?>">
+							<?php esc_html_e( 'Archived', 'emblem-studio' ); ?>
+						</span>
+					<?php endif; ?>
 					<?php
 					// Effective-state chip: when this asset is Active but its schedule
 					// window says it isn't actually showing, say so right here so the
@@ -1762,6 +1767,27 @@ $ab_archive_ct = count( $ab_archived );
 						<?php esc_html_e( 'Download JSON', 'emblem-studio' ); ?> <span aria-hidden="true">↓</span>
 					</a>
 				</p>
+			<?php endif; ?>
+
+			<?php if ( ! $is_new ) : ?>
+				<div class="es-danger-zone es-archive-zone">
+					<h2><?php esc_html_e( 'Asset status', 'emblem-studio' ); ?></h2>
+					<?php if ( ! empty( $f->archived_at ) ) : ?>
+						<p class="description"><?php esc_html_e( 'This asset is archived — hidden from the normal lists, kept for history and comparison against newer assets. It never renders on your site while archived.', 'emblem-studio' ); ?></p>
+						<p>
+							<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_unarchive_form&id=' . (int) $f->id ), 'es_unarchive_form_' . (int) $f->id ) ); ?>">
+								<?php esc_html_e( 'Restore from Archive', 'emblem-studio' ); ?>
+							</a>
+						</p>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'Archiving hides this asset from the normal lists and stops it rendering, without deleting it — kept for history and comparison against newer assets. Restore it any time.', 'emblem-studio' ); ?></p>
+						<p>
+							<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_archive_form&id=' . (int) $f->id ), 'es_archive_form_' . (int) $f->id ) ); ?>">
+								<?php esc_html_e( 'Archive this asset', 'emblem-studio' ); ?>
+							</a>
+						</p>
+					<?php endif; ?>
+				</div>
 			<?php endif; ?>
 
 			<?php if ( ! $is_new ) :

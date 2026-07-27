@@ -3269,6 +3269,10 @@
    it reads as live-but-time-limited, distinct from plain green Active. */
 .emblem-studio-wrap .es-status-ending    { background: #e0f2fe; color: #075985; }
 .emblem-studio-wrap .es-status-ending::before    { background: #0ea5e9; }
+/* Archived — hidden from the normal lists/tabs and never renders, kept for
+   history/comparison. Violet, distinct from every render-state color above. */
+.emblem-studio-wrap .es-status-archived  { background: #f5f3ff; color: #6d28d9; }
+.emblem-studio-wrap .es-status-archived::before  { background: #8b5cf6; }
 /* Schedule display-zone toggle (Site time / My local time) — a small joined
    segmented control. Display only; times are always saved in site time. */
 .emblem-studio-wrap .es-tz-toggle { display: inline-flex; border: 1px solid var(--es-gray-300, #c3c4c7); border-radius: 6px; overflow: hidden; }

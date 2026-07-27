@@ -79,7 +79,9 @@ CSS
 
 NOTES
 - Prefix your own class names with "esf-"; scope every rule to .esf-form.
-- Add data-es-track="label" to a link or button to track its clicks.
+- Add data-es-track="label" to a link or button to track its clicks — never
+  to the submit button itself (submitting already counts as a conversion;
+  tagging it too double-counts the same action).
 - Animations and hover effects are welcome.
 - The shell adds the popup backdrop, positioning and close button — don't
   build your own overlay, modal wrapper or full-bleed background. Put the
@@ -189,8 +191,12 @@ CSS
   popups and on phones.
 
 OPTIONAL
-- Add  data-es-track="a short label"  to any link or button you want
-  counted separately in click stats.
+- Add  data-es-track="a short label"  to a link or button you want counted
+  separately in click stats — but NEVER on the form's own submit button.
+  Submitting is already measured as a conversion; tagging the submit button
+  too double-counts the same action as a separate "click". Only add it
+  there if the user explicitly asks you to track the submit button
+  specifically — don't do it by default or "for completeness".
 - Entrance animations and hover effects are fine — keep them tasteful.
 
 NOT ALLOWED (stripped automatically on save)

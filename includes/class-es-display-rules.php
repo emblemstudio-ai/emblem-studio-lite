@@ -506,7 +506,7 @@ class ES_Display_Rules {
 		global $wpdb;
 		$t = ES_Install::table( 'forms' );
 		$rows = $wpdb->get_col(
-			"SELECT display_rules FROM $t WHERE trashed_at IS NULL AND status = 'active' AND display_rules IS NOT NULL AND display_rules <> ''"
+			"SELECT display_rules FROM $t WHERE trashed_at IS NULL AND archived_at IS NULL AND status = 'active' AND display_rules IS NOT NULL AND display_rules <> ''"
 		);
 		$any = false;
 		foreach ( (array) $rows as $json ) {

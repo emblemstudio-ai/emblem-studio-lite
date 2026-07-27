@@ -1048,6 +1048,10 @@
 		// Display-rule presets (SER-899 phase 2) — per-shell picker + the
 		// Manage Presets modal.
 		initPresetPickers();
+
+		// "Clear all" — reset one shell's whole Targeting panel (where/when/who,
+		// and un-link any preset) back to "everywhere, any time, for everyone".
+		initClearAllButtons();
 	});
 
 	function initContentPickers() {
@@ -1428,6 +1432,60 @@
 				});
 			});
 			if (manageLink) manageLink.addEventListener('click', openPresetManageModal);
+		});
+	}
+
+	// Reset one shell's whole Targeting panel — where/when/who, and any linked
+	// preset — back to "everywhere, any time, for everyone". Mirrors the SaaS
+	// editor's "Clear all" (FormScreen.tsx blankRules()); same end state as
+	// ES_Display_Rules::defaults() (unlinking a preset first, then manually
+	// undoing every field), just done in one click instead of by hand.
+	function clearAllDisplayRules(picker) {
+		var key = picker.getAttribute('data-shell-key');
+		var body = picker.closest('.es-display-rules-body');
+		var fieldset = presetWhereFieldset(picker);
+		if (!body || !fieldset || !key) return;
+
+		var modeAll = fieldset.querySelector('input[name="display_' + key + '_show_mode"][value="all"]');
+		if (modeAll) modeAll.checked = true;
+		['show', 'hide'].forEach(function (side) {
+			setCheckboxGroup(fieldset, presetFieldName(key, side, 'specials'), []);
+			setCheckboxGroup(fieldset, presetFieldName(key, side, 'post_types'), []);
+			setCheckboxGroup(fieldset, presetFieldName(key, side, 'wc_pages'), []);
+			var urlsField = fieldset.querySelector('textarea[name="' + presetFieldName(key, side, 'urls') + '"]');
+			if (urlsField) urlsField.value = '';
+			setChipPicker(fieldset, 'category', presetFieldName(key, side, 'categories'), [], {});
+			setChipPicker(fieldset, 'tag', presetFieldName(key, side, 'tags'), [], {});
+			setChipPicker(fieldset, 'post', presetFieldName(key, side, 'posts'), [], {});
+			setChipPicker(fieldset, 'page', presetFieldName(key, side, 'pages'), [], {});
+		});
+		// Re-run the "All pages" dim-the-filters sync now that show_mode changed.
+		fieldset.querySelectorAll('input[name="display_' + key + '_show_mode"]').forEach(function (r) {
+			r.dispatchEvent(new Event('change', { bubbles: true }));
+		});
+		setPresetCoupledState(picker, null);
+
+		// Visitor + schedule live outside the preset-controlled fieldset.
+		var loggedInAny = body.querySelector('input[name="display_' + key + '_visitor_logged_in"][value="any"]');
+		if (loggedInAny) { loggedInAny.checked = true; loggedInAny.dispatchEvent(new Event('change', { bubbles: true })); }
+		setCheckboxGroup(body, 'display_' + key + '_visitor_roles', []);
+		var stateAny = body.querySelector('input[name="display_' + key + '_visitor_state"][value="any"]');
+		if (stateAny) stateAny.checked = true;
+		setCheckboxGroup(body, 'display_' + key + '_schedule_days', []);
+		var startField = body.querySelector('input[name="display_' + key + '_schedule_start_time"]');
+		if (startField) startField.value = '';
+		var endField = body.querySelector('input[name="display_' + key + '_schedule_end_time"]');
+		if (endField) endField.value = '';
+	}
+
+	function initClearAllButtons() {
+		document.querySelectorAll('.es-dr-clear-all').forEach(function (btn) {
+			btn.addEventListener('click', function () {
+				if (!window.confirm('Clear all display rules for this shell? It goes back to showing everywhere, any time, for everyone.')) return;
+				var body = btn.closest('.es-display-rules-body');
+				var picker = body ? body.querySelector('.es-dr-preset-picker') : null;
+				if (picker) clearAllDisplayRules(picker);
+			});
 		});
 	}
 

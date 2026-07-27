@@ -46,8 +46,8 @@ class ES_Shortcode {
 		}
 		global $wpdb;
 		$t = ES_Install::table( 'forms' );
-		// Trashed forms don't render — their shortcodes are not registered.
-		$rows = $wpdb->get_results( "SELECT id, form_types FROM $t WHERE trashed_at IS NULL" );
+		// Trashed/archived forms don't render — their shortcodes are not registered.
+		$rows = $wpdb->get_results( "SELECT id, form_types FROM $t WHERE trashed_at IS NULL AND archived_at IS NULL" );
 		foreach ( (array) $rows as $row ) {
 			$form_id = (int) $row->id;
 			if ( $form_id <= 0 ) {
@@ -293,7 +293,7 @@ class ES_Shortcode {
 		global $wpdb;
 		$t    = ES_Install::table( 'forms' );
 		$rows = $wpdb->get_col(
-			"SELECT form_types FROM $t WHERE trashed_at IS NULL AND status = 'active' AND form_types IS NOT NULL AND form_types <> ''"
+			"SELECT form_types FROM $t WHERE trashed_at IS NULL AND archived_at IS NULL AND status = 'active' AND form_types IS NOT NULL AND form_types <> ''"
 		);
 		$auto = ES_Form_Repo::auto_shells();
 		$any  = false;

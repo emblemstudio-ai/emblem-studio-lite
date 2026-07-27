@@ -157,6 +157,7 @@ function es_delta_line( int $current, int $prior ): string {
 		'all'      => __( 'All',      'emblem-studio' ),
 		'active'   => __( 'Active',   'emblem-studio' ),
 		'inactive' => __( 'Inactive', 'emblem-studio' ),
+		'archived' => __( 'Archived', 'emblem-studio' ),
 		'trash'    => __( 'Trash',    'emblem-studio' ),
 	];
 	?>
@@ -212,19 +213,27 @@ function es_delta_line( int $current, int $prior ): string {
 		}
 		return '[es-inline-' . $form_id . ']';
 	};
-	$is_trash = ( $filter === 'trash' );
+	$is_trash    = ( $filter === 'trash' );
+	$is_archived = ( $filter === 'archived' );
 	$bulk_options = $is_trash
 		? [
 			''                 => __( 'Bulk actions', 'emblem-studio' ),
 			'restore'          => __( 'Restore', 'emblem-studio' ),
 			'delete_permanent' => __( 'Delete permanently', 'emblem-studio' ),
 		]
-		: [
-			''         => __( 'Bulk actions', 'emblem-studio' ),
-			'activate' => __( 'Set Active', 'emblem-studio' ),
-			'inactive' => __( 'Set Inactive', 'emblem-studio' ),
-			'trash'    => __( 'Move to Trash', 'emblem-studio' ),
-		];
+		: ( $is_archived
+			? [
+				''          => __( 'Bulk actions', 'emblem-studio' ),
+				'unarchive' => __( 'Restore from Archive', 'emblem-studio' ),
+				'trash'     => __( 'Move to Trash', 'emblem-studio' ),
+			]
+			: [
+				''         => __( 'Bulk actions', 'emblem-studio' ),
+				'activate' => __( 'Set Active', 'emblem-studio' ),
+				'inactive' => __( 'Set Inactive', 'emblem-studio' ),
+				'archive'  => __( 'Archive', 'emblem-studio' ),
+				'trash'    => __( 'Move to Trash', 'emblem-studio' ),
+			] );
 	$bulk_confirm_js = "var sel=this.querySelector('select[name=bulk_action]'); if(!sel||!sel.value){return false;} if(sel.value==='delete_permanent'){return confirm('" . esc_js( __( 'Permanently delete the selected forms? This cannot be undone.', 'emblem-studio' ) ) . "');} return true;";
 	?>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="<?php echo esc_attr( $bulk_confirm_js ); ?>">
@@ -279,7 +288,9 @@ function es_delta_line( int $current, int $prior ): string {
 				<tr><td colspan="18"><em><?php
 					echo esc_html( $is_trash
 						? __( 'Trash is empty.', 'emblem-studio' )
-						: ( $filter === 'all' ? __( 'No forms yet. Click “Add New” to create one.', 'emblem-studio' ) : __( 'No forms in this view.', 'emblem-studio' ) )
+						: ( $is_archived
+							? __( 'No archived assets.', 'emblem-studio' )
+							: ( $filter === 'all' ? __( 'No forms yet. Click “Add New” to create one.', 'emblem-studio' ) : __( 'No forms in this view.', 'emblem-studio' ) ) )
 					);
 				?></em></td></tr>
 			</tbody>
@@ -321,10 +332,18 @@ function es_delta_line( int $current, int $prior ): string {
 						. '<a class="es-action-icon" title="' . esc_attr__( 'Restore', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Restore', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_restore_form&id=' . $f->id ), 'es_restore_form_' . $f->id ) ) . '"><span class="dashicons dashicons-undo" aria-hidden="true"></span></a>'
 						. '<a class="es-action-icon es-action-danger" title="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_form&id=' . $f->id ), 'es_delete_form_' . $f->id ) ) . '" onclick="return confirm(\'' . esc_attr__( 'Permanently delete this form? This cannot be undone.', 'emblem-studio' ) . '\');"><span class="dashicons dashicons-trash" aria-hidden="true"></span></a>'
 						. '</div>';
+				} elseif ( $is_archived ) {
+					$actions_html = '<div class="es-actions-icons">'
+						. '<a class="es-action-icon" title="' . esc_attr__( 'Edit', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Edit', 'emblem-studio' ) . '" href="' . esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) ) . '"><span class="dashicons dashicons-edit" aria-hidden="true"></span></a>'
+						. '<a class="es-action-icon" title="' . esc_attr__( 'Duplicate', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Duplicate', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_duplicate_form&id=' . $f->id ), 'es_duplicate_form_' . $f->id ) ) . '"><span class="dashicons dashicons-admin-page" aria-hidden="true"></span></a>'
+						. '<a class="es-action-icon" title="' . esc_attr__( 'Restore from Archive', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Restore from Archive', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_unarchive_form&id=' . $f->id ), 'es_unarchive_form_' . $f->id ) ) . '"><span class="dashicons dashicons-undo" aria-hidden="true"></span></a>'
+						. '<a class="es-action-icon es-action-danger" title="' . esc_attr__( 'Trash', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Trash', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_trash_form&id=' . $f->id ), 'es_trash_form_' . $f->id ) ) . '"><span class="dashicons dashicons-trash" aria-hidden="true"></span></a>'
+						. '</div>';
 				} else {
 					$actions_html = '<div class="es-actions-icons">'
 						. '<a class="es-action-icon" title="' . esc_attr__( 'Edit', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Edit', 'emblem-studio' ) . '" href="' . esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) ) . '"><span class="dashicons dashicons-edit" aria-hidden="true"></span></a>'
 						. '<a class="es-action-icon" title="' . esc_attr__( 'Duplicate', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Duplicate', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_duplicate_form&id=' . $f->id ), 'es_duplicate_form_' . $f->id ) ) . '"><span class="dashicons dashicons-admin-page" aria-hidden="true"></span></a>'
+						. '<a class="es-action-icon" title="' . esc_attr__( 'Archive', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Archive', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_archive_form&id=' . $f->id ), 'es_archive_form_' . $f->id ) ) . '"><span class="dashicons dashicons-archive" aria-hidden="true"></span></a>'
 						. '<a class="es-action-icon es-action-danger" title="' . esc_attr__( 'Trash', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Trash', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_trash_form&id=' . $f->id ), 'es_trash_form_' . $f->id ) ) . '"><span class="dashicons dashicons-trash" aria-hidden="true"></span></a>'
 						. '</div>';
 				}
@@ -345,7 +364,10 @@ function es_delta_line( int $current, int $prior ): string {
 					$status_class = 'es-status-inactive';
 					$status_title = '';
 					$dt_fmt       = get_option( 'date_format' ) . ' g:i A';
-					if ( $f->status !== 'active' ) {
+					if ( ! empty( $f->archived_at ) ) {
+						$status_label = __( 'Archived', 'emblem-studio' );
+						$status_class = 'es-status-archived';
+					} elseif ( $f->status !== 'active' ) {
 						$status_label = ucfirst( $f->status );
 					} elseif ( $row_blank || ! $is_enabled ) {
 						$status_label = __( 'Inactive', 'emblem-studio' );
