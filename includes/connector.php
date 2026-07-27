@@ -1486,6 +1486,11 @@ final class Emblem_Studio_SaaS_Connector
         $after = (int) get_option('es_saas_pull_stats_after', 0);
         do {
             $data = self::pull_post($cfg, '/v1/embed/export/stats', ['after_id' => $after]);
+            if (! is_array($data)) {
+                // A refused or failed export is incomplete work, not an empty
+                // successful batch. Keep the cursor unchanged and retry later.
+                return false;
+            }
 
             // A wipe over there cannot reach us as rows — this pull only ever
             // inserts, so an emptied SaaS and a SaaS with nothing new look exactly
