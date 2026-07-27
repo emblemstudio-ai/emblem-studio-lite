@@ -286,38 +286,25 @@ class ES_Admin {
 	}
 
 	/**
-	 * Brand emblem for the admin menu: a vivid gradient squircle with a white
-	 * sparkle. Returned as a base64 SVG data URI so it ships in the plugin (no
-	 * extra HTTP request) and renders at any size. Intentionally full-colour —
-	 * `menu_icon_css()` keeps it bright so it stands out among WP's grey icons.
+	 * Brand emblem for the admin menu: the approved sunset logo, at the size WP
+	 * expects for `add_menu_page()`'s icon. Returned as a base64 PNG data URI so
+	 * it ships in the plugin (no extra HTTP request) and needs no enqueue.
 	 */
 	private function menu_icon(): string {
-		$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">'
-			. '<defs><linearGradient id="esg" x1="3" y1="2.5" x2="20" y2="21.5" gradientUnits="userSpaceOnUse">'
-			. '<stop offset="0" stop-color="#FFD60A"/><stop offset=".48" stop-color="#FF9500"/><stop offset="1" stop-color="#FF3D81"/>'
-			. '</linearGradient></defs>'
-			. '<rect x="2.5" y="2.5" width="19" height="19" rx="5.6" fill="url(#esg)"/>'
-			. '<path d="M11.4 5.6c0 3.9.9 5.8 4.8 6.4-3.9.6-4.8 2.5-4.8 6.4 0-3.9-.9-5.8-4.8-6.4 3.9-.6 4.8-2.5 4.8-6.4z" fill="#fff"/>'
-			. '<circle cx="16.7" cy="7.3" r="1.25" fill="#fff"/>'
-			. '</svg>';
-		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+		$png = (string) file_get_contents( EMBLEM_STUDIO_PATH . 'assets/images/wp-admin-menu-icon-20x20.png' );
+
+		return 'data:image/png;base64,' . base64_encode( $png );
 	}
 
 	/**
-	 * Force the menu emblem to full opacity (WP dims icons to ~60%) and give it
-	 * a soft magenta glow, on every admin page. Tiny inline style — no enqueue.
+	 * Force the menu emblem to full opacity (WP dims icons to ~60%) on every
+	 * admin page, and swap in the retina (40x40@2x) export so it stays crisp on
+	 * HiDPI screens — WP's own background-image (set from menu_icon() above)
+	 * only ever uses the 20x20 file. Tiny inline style — no enqueue.
 	 */
 	public function menu_icon_css(): void {
-		// Paint the emblem as a CSS gradient (always renders, can't be "whitened"
-		// by WP's current-menu icon styling) and use an SVG purely as a SHAPE
-		// MASK — the squircle is opaque, the sparkle + dot are knocked out. This
-		// sidesteps the fragile case of an SVG-internal gradient failing to
-		// resolve when used as a background-image. Pinned across every state so
-		// the icon looks identical whether or not an Emblem Studio page is open.
-		$mask = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
-			. '<path fill-rule="evenodd" fill="#fff" d="M8.1 2.5H15.9A5.6 5.6 0 0 1 21.5 8.1V15.9A5.6 5.6 0 0 1 15.9 21.5H8.1A5.6 5.6 0 0 1 2.5 15.9V8.1A5.6 5.6 0 0 1 8.1 2.5ZM11.4 5.6c0 3.9.9 5.8 4.8 6.4-3.9.6-4.8 2.5-4.8 6.4 0-3.9-.9-5.8-4.8-6.4 3.9-.6 4.8-2.5 4.8-6.4zM17.95 7.3a1.25 1.25 0 1 0-2.5 0 1.25 1.25 0 0 0 2.5 0z"/>'
-			. '</svg>';
-		$mask_uri = 'data:image/svg+xml;base64,' . base64_encode( $mask );
+		$png = (string) file_get_contents( EMBLEM_STUDIO_PATH . 'assets/images/wp-admin-menu-icon-40x40@2x.png' );
+		$icon_uri = 'data:image/png;base64,' . base64_encode( $png );
 
 		$sel    = '#adminmenu #toplevel_page_emblem-studio';
 		$states = [ '', '.opensub', ':hover', '.wp-has-current-submenu', '.current' ];
@@ -327,13 +314,13 @@ class ES_Admin {
 		}
 		$selector = implode( ',', $rules );
 
-		$decl = 'background:linear-gradient(135deg,#FFD60A 0%,#FF9500 48%,#FF3D81 100%) !important;'
-			. 'opacity:1 !important;'
-			// drop-shadow (not box-shadow) follows the masked squircle shape, for a
-			// faint lift on both the dark sidebar and the blue active bar.
-			. 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)) !important;'
-			. "-webkit-mask:url('{$mask_uri}') no-repeat center / 22px auto;"
-			. "mask:url('{$mask_uri}') no-repeat center / 22px auto;";
+		$decl = 'opacity:1 !important;'
+			. "background-image:url('{$icon_uri}') !important;"
+			. 'background-repeat:no-repeat !important;'
+			. 'background-position:center !important;'
+			. 'background-size:20px auto !important;'
+			// Faint lift on both the dark sidebar and the blue active bar.
+			. 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)) !important;';
 
 		echo '<style id="es-menu-icon-css">' . esc_html( $selector ) . '{' . $decl . '}</style>';
 	}
