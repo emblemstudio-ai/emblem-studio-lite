@@ -648,9 +648,9 @@ class ES_Reports {
 		return sprintf(
 			'<span class="es-rate-num" data-es-tip="%s">%s%%</span> <span class="es-rate-sep">/</span> <span class="es-rate-num" data-es-tip="%s">%s%%</span>',
 			esc_attr( $tip_views ),
-			esc_html( number_format_i18n( $views_rate, 1 ) ),
+			esc_html( number_format_i18n( $views_rate, 2 ) ),
 			esc_attr( $tip_unique ),
-			esc_html( number_format_i18n( $unique_rate, 1 ) )
+			esc_html( number_format_i18n( $unique_rate, 2 ) )
 		);
 	}
 

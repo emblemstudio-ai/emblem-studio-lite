@@ -1302,7 +1302,7 @@ $ab_archive_ct = count( $ab_archived );
 										<?php if ( $is_leader ) : ?>
 											<span class="es-ab-leader-tag">
 												<?php /* translators: %s: lift percent */
-												printf( esc_html__( 'Leader · +%s%%', 'emblem-studio' ), esc_html( (string) $ab_leader['lift'] ) ); ?>
+												printf( esc_html__( 'Leader · +%s%%', 'emblem-studio' ), esc_html( number_format_i18n( (float) $ab_leader['lift'], 2 ) ) ); ?>
 											</span>
 										<?php endif; ?>
 									</div>

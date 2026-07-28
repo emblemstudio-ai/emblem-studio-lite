@@ -819,6 +819,11 @@
 				e.preventDefault();
 				openPopup(popupId);
 			});
+
+			// Design-tab preview: open immediately, same as popup-auto/ribbon/slide-in —
+			// there's no real visitor to click the trigger, so a click-popup asset would
+			// otherwise never render in the previewer if this markup is ever reused there.
+			if (window.EmblemStudio && window.EmblemStudio.preview) openPopup(popupId);
 		});
 
 		// Auto popups: each bootstrap element carries trigger config + a sibling

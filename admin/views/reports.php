@@ -227,12 +227,12 @@ $render_device = static function () use ( $device_break, $device_total, $device_
 			<div class="es-rep-bars">
 				<?php foreach ( $device_break as $d ) :
 					$d_pct = (int) round( (int) $d['views'] / max( 1, $device_total ) * 100 );
-					$d_cr  = (int) $d['views'] > 0 ? round( (int) $d['conversions'] / (int) $d['views'] * 100, 1 ) : 0.0;
+					$d_cr  = (int) $d['views'] > 0 ? round( (int) $d['conversions'] / (int) $d['views'] * 100, 2 ) : 0.0;
 				?>
 					<div class="es-rep-bar-row">
 						<div class="es-rep-bar-top">
 							<span><?php echo esc_html( $device_labels[ $d['device'] ] ?? $d['device'] ); ?></span>
-							<span class="es-rep-vs"><?php echo esc_html( number_format_i18n( (int) $d['views'] ) ); ?> · <?php echo esc_html( (string) $d_pct ); ?>% ·<?php echo esc_html( number_format_i18n( $d_cr, 1 ) ); ?>% <?php esc_html_e( 'conv', 'emblem-studio' ); ?></span>
+							<span class="es-rep-vs"><?php echo esc_html( number_format_i18n( (int) $d['views'] ) ); ?> · <?php echo esc_html( (string) $d_pct ); ?>% ·<?php echo esc_html( number_format_i18n( $d_cr, 2 ) ); ?>% <?php esc_html_e( 'conv', 'emblem-studio' ); ?></span>
 						</div>
 						<div class="es-rep-bar"><span style="width:<?php echo esc_attr( (string) $d_pct ); ?>%"></span></div>
 					</div>
@@ -263,7 +263,7 @@ $render_page = static function () use ( $page_break ) {
 								<?php echo esc_html( $p['label'] ); ?>
 							<?php endif; ?>
 						</span>
-						<span class="es-rep-vs"><?php echo esc_html( number_format_i18n( (int) $p['views'] ) ); ?> <?php esc_html_e( 'views', 'emblem-studio' ); ?> · <strong><?php echo esc_html( number_format_i18n( (float) $p['conv_rate'], 1 ) ); ?>%</strong></span>
+						<span class="es-rep-vs"><?php echo esc_html( number_format_i18n( (int) $p['views'] ) ); ?> <?php esc_html_e( 'views', 'emblem-studio' ); ?> · <strong><?php echo esc_html( number_format_i18n( (float) $p['conv_rate'], 2 ) ); ?>%</strong></span>
 					</div>
 				<?php endforeach; ?>
 			</div>
