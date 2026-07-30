@@ -56,10 +56,40 @@
 		link.onload = function () { this.media = 'all'; };
 		(document.head || document.documentElement).appendChild(link);
 	}
-	// Strip leading @charset/@import (loading any fonts non-blocking) and return
-	// the rest, optionally prefixed with the shadow reset.
+	// A shadow-root <style> that declares @font-face registers that font for
+	// the WHOLE document per spec, not just its own tree — but only while that
+	// <style> stays mounted. Different render surfaces (live embed, editor
+	// preview, revision diff) each mount/unmount their own shadow root
+	// independently, and an older revision's CSS may reference a theme font by
+	// name without carrying its own @font-face (it predates authoring that
+	// pattern). Left alone, that surface's font correctness becomes a coin
+	// flip: right only while some OTHER currently-mounted shadow root happens
+	// to supply the registration, and silently reverts to a fallback font the
+	// moment that other one unmounts. So we also lift every @font-face block
+	// into one shared, persistent <style> that outlives any single preview.
+	var _esFontFacesLifted = {};
+	var _esFontFaceStyleEl = null;
+	function liftFontFaces(css) {
+		var re = /@font-face\s*\{[^{}]*\}/gi;
+		var m;
+		while ((m = re.exec(css)) !== null) {
+			var rule = m[0];
+			if (_esFontFacesLifted[rule]) continue;
+			_esFontFacesLifted[rule] = true;
+			if (!_esFontFaceStyleEl) {
+				_esFontFaceStyleEl = document.createElement('style');
+				_esFontFaceStyleEl.setAttribute('data-es-lifted-fonts', '');
+				(document.head || document.documentElement).appendChild(_esFontFaceStyleEl);
+			}
+			_esFontFaceStyleEl.appendChild(document.createTextNode(rule));
+		}
+	}
+	// Strip leading @charset/@import (loading any fonts non-blocking), lift any
+	// @font-face rules to the shared stylesheet above, and return the rest,
+	// optionally prefixed with the shadow reset.
 	function prepareCss(css, withBoot) {
 		css = css || '';
+		liftFontFaces(css);
 		// Quote-aware: a Google-Fonts @import URL can itself contain ';'
 		// (e.g. wght@400;500;600), so we must not stop at the first semicolon —
 		// match the quoted/parenthesised value, then the statement's own ';'.

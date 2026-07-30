@@ -44,8 +44,36 @@
 		( document.head || document.documentElement ).appendChild( link );
 	}
 
+	// A shadow-root <style> that declares @font-face registers that font for
+	// the WHOLE document per spec, not just its own tree — but only while that
+	// <style> stays mounted. Different render surfaces each mount/unmount their
+	// own shadow root independently, and an older asset/revision may reference
+	// a theme font by name without carrying its own @font-face. Left alone,
+	// that surface's font correctness becomes a coin flip: right only while
+	// some OTHER currently-mounted shadow root happens to supply the
+	// registration. So we also lift every @font-face block into one shared,
+	// persistent <style> that outlives any single preview.
+	var fontFacesLifted = {};
+	var fontFaceStyleEl = null;
+	function liftFontFaces( css ) {
+		var re = /@font-face\s*\{[^{}]*\}/gi;
+		var m;
+		while ( ( m = re.exec( css ) ) !== null ) {
+			var rule = m[0];
+			if ( fontFacesLifted[ rule ] ) continue;
+			fontFacesLifted[ rule ] = true;
+			if ( ! fontFaceStyleEl ) {
+				fontFaceStyleEl = document.createElement( 'style' );
+				fontFaceStyleEl.setAttribute( 'data-es-lifted-fonts', '' );
+				( document.head || document.documentElement ).appendChild( fontFaceStyleEl );
+			}
+			fontFaceStyleEl.appendChild( document.createTextNode( rule ) );
+		}
+	}
+
 	function prepareCss( css, withBoot ) {
 		css = css || '';
+		liftFontFaces( css );
 		var re = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
 		var m;
 		while ( ( m = re.exec( css ) ) !== null ) {

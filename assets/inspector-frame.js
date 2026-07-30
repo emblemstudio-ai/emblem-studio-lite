@@ -46,8 +46,35 @@
 	// keep only the reset + the asset's own rules in the (shadow) style.
 	var BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;}';
 	var _esFontsLoaded = {};
+	// A shadow-root <style> that declares @font-face registers that font for
+	// the WHOLE document per spec, not just its own tree — but only while that
+	// <style> stays mounted. This frame's own live-preview mount can unmount
+	// and remount independently of every other render surface (editor peek,
+	// hover thumbnail, revision diff), so a font whose registration was only
+	// ever contributed by one of those other surfaces disappears the moment
+	// that surface goes away, leaving THIS frame on a fallback font even though
+	// nothing about its own CSS changed. Lift @font-face into a shared,
+	// persistent <style> so the registration outlives any single preview.
+	var _esFontFacesLifted = {};
+	var _esFontFaceStyleEl = null;
+	function liftFontFaces(css) {
+		var re = /@font-face\s*\{[^{}]*\}/gi;
+		var m;
+		while ((m = re.exec(css)) !== null) {
+			var rule = m[0];
+			if (_esFontFacesLifted[rule]) continue;
+			_esFontFacesLifted[rule] = true;
+			if (!_esFontFaceStyleEl) {
+				_esFontFaceStyleEl = document.createElement('style');
+				_esFontFaceStyleEl.setAttribute('data-es-lifted-fonts', '');
+				(document.head || document.documentElement).appendChild(_esFontFaceStyleEl);
+			}
+			_esFontFaceStyleEl.appendChild(document.createTextNode(rule));
+		}
+	}
 	function prepareCss(css, withBoot) {
 		css = css || '';
+		liftFontFaces(css);
 		// Quote-aware (see frontend.js): font @import URLs may contain ';'.
 		var re = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
 		var m;
