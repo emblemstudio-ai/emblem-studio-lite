@@ -47,34 +47,66 @@
 	var BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;}';
 	var _esFontsLoaded = {};
 	// A shadow-root <style> that declares @font-face registers that font for
-	// the WHOLE document per spec, not just its own tree — but only while that
-	// <style> stays mounted. This frame's own live-preview mount can unmount
-	// and remount independently of every other render surface (editor peek,
-	// hover thumbnail, revision diff), so a font whose registration was only
-	// ever contributed by one of those other surfaces disappears the moment
-	// that surface goes away, leaving THIS frame on a fallback font even though
-	// nothing about its own CSS changed. Lift @font-face into a shared,
-	// persistent <style> so the registration outlives any single preview.
-	var _esFontFacesLifted = {};
+	// the WHOLE document per spec, not just its own tree — so an unscoped name
+	// is a shared global slot. Two renders with different CSS (e.g. this
+	// frame's live-preview mount vs. an older revision that references the
+	// same font NAME but never carried its own @font-face) would then either
+	// borrow each other's registration or stomp on it depending on
+	// mount/unmount order — a revision with no font of its own should
+	// consistently show the fallback, not sometimes-right depending on which
+	// sibling preview happens to be open. So instead of lifting @font-face
+	// rules as-written, we scope each one to a name unique to ITS OWN content
+	// (family + a hash of its own rule text), rewrite every font-family
+	// reference to that name within this SAME css string, then lift the
+	// renamed rules into one shared, persistent <style> (deduped by exact
+	// rule text). Only a render that carries the identical @font-face
+	// rule(s) can ever resolve to that scoped name.
+	var _esLiftedFontFaceRules = {};
 	var _esFontFaceStyleEl = null;
-	function liftFontFaces(css) {
-		var re = /@font-face\s*\{[^{}]*\}/gi;
+	function _esHashStr(s) {
+		var h = 5381;
+		for (var i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i);
+		return (h >>> 0).toString(36);
+	}
+	function _esEscapeRegExp(s) {
+		return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	}
+	function scopeAndLiftFontFaces(css) {
+		var blockRe = /@font-face\s*\{[^{}]*\}/gi;
+		var familyRe = /font-family\s*:\s*(['"]?)([^;'"]+?)\1\s*;/i;
+		var blocksByFamily = {};
 		var m;
-		while ((m = re.exec(css)) !== null) {
-			var rule = m[0];
-			if (_esFontFacesLifted[rule]) continue;
-			_esFontFacesLifted[rule] = true;
-			if (!_esFontFaceStyleEl) {
-				_esFontFaceStyleEl = document.createElement('style');
-				_esFontFaceStyleEl.setAttribute('data-es-lifted-fonts', '');
-				(document.head || document.documentElement).appendChild(_esFontFaceStyleEl);
-			}
-			_esFontFaceStyleEl.appendChild(document.createTextNode(rule));
+		while ((m = blockRe.exec(css)) !== null) {
+			var fm = familyRe.exec(m[0]);
+			if (!fm) continue;
+			var family = fm[2].trim();
+			if (!blocksByFamily[family]) blocksByFamily[family] = [];
+			blocksByFamily[family].push(m[0]);
 		}
+		var families = Object.keys(blocksByFamily);
+		if (!families.length) return css;
+		for (var fi = 0; fi < families.length; fi++) {
+			var fam = families[fi];
+			var scoped = fam + '__es' + _esHashStr(blocksByFamily[fam].join('\n'));
+			var nameRe = new RegExp("(['\"]?)\\b" + _esEscapeRegExp(fam) + "\\b\\1", 'g');
+			css = css.replace(nameRe, function (_all, q) { return q + scoped + q; });
+		}
+		return css.replace(blockRe, function (block) {
+			if (!_esLiftedFontFaceRules[block]) {
+				_esLiftedFontFaceRules[block] = true;
+				if (!_esFontFaceStyleEl) {
+					_esFontFaceStyleEl = document.createElement('style');
+					_esFontFaceStyleEl.setAttribute('data-es-lifted-fonts', '');
+					(document.head || document.documentElement).appendChild(_esFontFaceStyleEl);
+				}
+				_esFontFaceStyleEl.appendChild(document.createTextNode(block));
+			}
+			return '';
+		});
 	}
 	function prepareCss(css, withBoot) {
 		css = css || '';
-		liftFontFaces(css);
+		css = scopeAndLiftFontFaces(css);
 		// Quote-aware (see frontend.js): font @import URLs may contain ';'.
 		var re = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
 		var m;

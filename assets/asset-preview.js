@@ -45,35 +45,67 @@
 	}
 
 	// A shadow-root <style> that declares @font-face registers that font for
-	// the WHOLE document per spec, not just its own tree — but only while that
-	// <style> stays mounted. Different render surfaces each mount/unmount their
-	// own shadow root independently, and an older asset/revision may reference
-	// a theme font by name without carrying its own @font-face. Left alone,
-	// that surface's font correctness becomes a coin flip: right only while
-	// some OTHER currently-mounted shadow root happens to supply the
-	// registration. So we also lift every @font-face block into one shared,
-	// persistent <style> that outlives any single preview.
-	var fontFacesLifted = {};
+	// the WHOLE document per spec, not just its own tree — so an unscoped name
+	// is a shared global slot. Two renders with different CSS (e.g. the live
+	// "current" asset vs. an older revision that references the same font
+	// NAME but never carried its own @font-face) would then either borrow
+	// each other's registration or stomp on it depending on mount/unmount
+	// order — a revision with no font of its own should consistently show the
+	// fallback, not sometimes-right depending on which sibling preview
+	// happens to be open. So instead of lifting @font-face rules as-written,
+	// we scope each one to a name unique to ITS OWN content (family + a hash
+	// of its own rule text), rewrite every font-family reference to that name
+	// within this SAME css string, then lift the renamed rules into one
+	// shared, persistent <style> (deduped by exact rule text). Only a render
+	// that carries the identical @font-face rule(s) can ever resolve to that
+	// scoped name.
+	var liftedFontFaceRules = {};
 	var fontFaceStyleEl = null;
-	function liftFontFaces( css ) {
-		var re = /@font-face\s*\{[^{}]*\}/gi;
+	function hashStr( s ) {
+		var h = 5381;
+		for ( var i = 0; i < s.length; i++ ) h = ( h * 33 ) ^ s.charCodeAt( i );
+		return ( h >>> 0 ).toString( 36 );
+	}
+	function escapeRegExp( s ) {
+		return s.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+	}
+	function scopeAndLiftFontFaces( css ) {
+		var blockRe = /@font-face\s*\{[^{}]*\}/gi;
+		var familyRe = /font-family\s*:\s*(['"]?)([^;'"]+?)\1\s*;/i;
+		var blocksByFamily = {};
 		var m;
-		while ( ( m = re.exec( css ) ) !== null ) {
-			var rule = m[0];
-			if ( fontFacesLifted[ rule ] ) continue;
-			fontFacesLifted[ rule ] = true;
-			if ( ! fontFaceStyleEl ) {
-				fontFaceStyleEl = document.createElement( 'style' );
-				fontFaceStyleEl.setAttribute( 'data-es-lifted-fonts', '' );
-				( document.head || document.documentElement ).appendChild( fontFaceStyleEl );
-			}
-			fontFaceStyleEl.appendChild( document.createTextNode( rule ) );
+		while ( ( m = blockRe.exec( css ) ) !== null ) {
+			var fm = familyRe.exec( m[0] );
+			if ( ! fm ) continue;
+			var family = fm[2].trim();
+			if ( ! blocksByFamily[ family ] ) blocksByFamily[ family ] = [];
+			blocksByFamily[ family ].push( m[0] );
 		}
+		var families = Object.keys( blocksByFamily );
+		if ( ! families.length ) return css;
+		for ( var fi = 0; fi < families.length; fi++ ) {
+			var fam = families[ fi ];
+			var scoped = fam + '__es' + hashStr( blocksByFamily[ fam ].join( '\n' ) );
+			var nameRe = new RegExp( "(['\"]?)\\b" + escapeRegExp( fam ) + "\\b\\1", 'g' );
+			css = css.replace( nameRe, function ( _all, q ) { return q + scoped + q; } );
+		}
+		return css.replace( blockRe, function ( block ) {
+			if ( ! liftedFontFaceRules[ block ] ) {
+				liftedFontFaceRules[ block ] = true;
+				if ( ! fontFaceStyleEl ) {
+					fontFaceStyleEl = document.createElement( 'style' );
+					fontFaceStyleEl.setAttribute( 'data-es-lifted-fonts', '' );
+					( document.head || document.documentElement ).appendChild( fontFaceStyleEl );
+				}
+				fontFaceStyleEl.appendChild( document.createTextNode( block ) );
+			}
+			return '';
+		} );
 	}
 
 	function prepareCss( css, withBoot ) {
 		css = css || '';
-		liftFontFaces( css );
+		css = scopeAndLiftFontFaces( css );
 		var re = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
 		var m;
 		while ( ( m = re.exec( css ) ) !== null ) {
