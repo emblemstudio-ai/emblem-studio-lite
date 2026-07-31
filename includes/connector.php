@@ -945,6 +945,7 @@ final class Emblem_Studio_SaaS_Connector
         self::pull_presets($cfg);
         self::pull_stats($cfg);
         self::pull_leads($cfg);
+        self::pull_lead_deletions($cfg);
     }
 
     /** WP-cron tick — refresh the local copy while connected. */
@@ -1606,6 +1607,41 @@ final class Emblem_Studio_SaaS_Connector
         return false;
     }
 
+    /**
+     * Periodic safety net for lead-deletion sync — the instant delete route
+     * (handle_lead_delete()) is the primary path; this catches whatever it
+     * missed (site was offline, the SaaS-side job exhausted its retries, or
+     * this site wasn't even connected yet when the lead was deleted). Same
+     * cursor pattern as pull_leads(), over the tombstone log instead of the
+     * leads themselves — each row deletes at most one local lead, matched the
+     * same way the instant route matches it.
+     */
+    private static function pull_lead_deletions(array $cfg): void
+    {
+        if (! class_exists('ES_Leads')) {
+            return;
+        }
+        $after = (int) get_option('es_saas_pull_lead_deletions_after', 0);
+        do {
+            $data = self::pull_post($cfg, '/v1/embed/export/lead-deletions', ['after_id' => $after]);
+            if (empty($data['deletions']) || ! is_array($data['deletions'])) {
+                return;
+            }
+            foreach ($data['deletions'] as $d) {
+                $wp_lead_id = isset($d['wp_lead_id']) ? (int) $d['wp_lead_id'] : 0;
+                $saas_lead_id = isset($d['saas_lead_id']) ? (int) $d['saas_lead_id'] : 0;
+                if ($wp_lead_id) {
+                    ES_Leads::delete($wp_lead_id);
+                }
+                if ($saas_lead_id) {
+                    ES_Leads::delete_by_saas_id($saas_lead_id);
+                }
+            }
+            $after = (int) ($data['last_id'] ?? $after);
+            update_option('es_saas_pull_lead_deletions_after', $after, false);
+        } while (count($data['deletions']) >= 500);
+    }
+
     /** saas_form_id → local form id (only rows we've mapped on a prior asset pull). */
     private static function saas_form_map(): array
     {
@@ -2001,6 +2037,16 @@ final class Emblem_Studio_SaaS_Connector
             'callback'            => [__CLASS__, 'receive_lead'],
         ]);
 
+        // Instant half of lead-deletion sync — fired the moment a lead is
+        // deleted in the SaaS (see Lead::booted() there). The periodic
+        // pull_lead_deletions() reconciliation is the fallback if this never
+        // arrives.
+        register_rest_route('emblem-studio-saas/v1', '/lead/delete', [
+            'methods'             => 'POST',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'handle_lead_delete'],
+        ]);
+
         register_rest_route('emblem-studio-saas/v1', '/funnelkit/meta', [
             'methods'             => 'GET',
             'permission_callback' => [__CLASS__, 'authorize'],
@@ -2277,6 +2323,36 @@ final class Emblem_Studio_SaaS_Connector
         ]);
 
         return new WP_REST_Response($result, ! empty($result['ok']) ? 200 : 500);
+    }
+
+    /**
+     * Delete the local copy of one lead, pushed instantly from the SaaS the
+     * moment it's deleted there. Whichever id is present is matched: wp_lead_id
+     * when this lead originated in WordPress (its own local id), saas_lead_id
+     * when it didn't but was mirrored down here by pull_leads(). Idempotent —
+     * deleting an already-gone or never-mirrored row is a harmless no-op, since
+     * the periodic pull_lead_deletions() reconciliation may also reach the same
+     * row independently.
+     */
+    public static function handle_lead_delete(WP_REST_Request $request)
+    {
+        if (! class_exists('ES_Leads')) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'Leads not available'], 503);
+        }
+
+        $p = (array) $request->get_json_params();
+        $wp_lead_id = isset($p['wp_lead_id']) ? (int) $p['wp_lead_id'] : 0;
+        $saas_lead_id = isset($p['saas_lead_id']) ? (int) $p['saas_lead_id'] : 0;
+
+        $deleted = false;
+        if ($wp_lead_id) {
+            $deleted = ES_Leads::delete($wp_lead_id) || $deleted;
+        }
+        if ($saas_lead_id) {
+            $deleted = ES_Leads::delete_by_saas_id($saas_lead_id) || $deleted;
+        }
+
+        return new WP_REST_Response(['ok' => true, 'deleted' => $deleted], 200);
     }
 }
 

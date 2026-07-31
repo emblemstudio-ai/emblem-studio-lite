@@ -198,6 +198,17 @@ class ES_Leads {
 	}
 
 	/**
+	 * Delete the local row mirrored down from a given SaaS-native lead (matched
+	 * by saas_lead_id, not the local id — this lead never had a WordPress id of
+	 * its own until pull_leads() mirrored it here). Used by lead-deletion sync,
+	 * both the instant delete route and the periodic reconciliation pull.
+	 */
+	public static function delete_by_saas_id( int $saas_lead_id ): bool {
+		global $wpdb;
+		return (bool) $wpdb->delete( ES_Install::table( 'leads' ), [ 'saas_lead_id' => $saas_lead_id ], [ '%d' ] );
+	}
+
+	/**
 	 * Reclassify a bot lead as a human (flips is_bot to 0). Optional
 	 * second arg controls whether the saved fields get pushed to
 	 * FunnelKit + per-form webhooks retroactively — that's the whole
