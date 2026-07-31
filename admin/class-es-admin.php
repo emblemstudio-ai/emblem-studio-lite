@@ -1042,7 +1042,7 @@ class ES_Admin {
 		if ( ! str_contains( $hook, 'emblem-studio' ) ) {
 			return;
 		}
-		// Brand fonts (Inter + Space Grotesk) are self-hosted in
+		// Brand fonts (Inter + Titillium Web) are self-hosted in
 		// assets/fonts/ and declared via @font-face at the top of admin.css
 		// — no Google Fonts dependency, so they render even offline and
 		// the admin never phones a third party on load.

@@ -1271,6 +1271,10 @@ final class Emblem_Studio_SaaS_Connector
 
         global $wpdb;
         $t = $wpdb->prefix . 'emblemstudio_forms';
+        // saas_form_id => local WordPress id, reported back to the SaaS after the
+        // loop so the dashboard can show a real, working [es-inline-N] shortcode
+        // for assets authored there (it has no way to know this id otherwise).
+        $wp_ids = [];
         foreach ($data['assets'] as $a) {
             if (! is_array($a) || empty($a['saas_form_id'])) {
                 continue;
@@ -1333,6 +1337,7 @@ final class Emblem_Studio_SaaS_Connector
                     'form_types'    => wp_json_encode($supported),
                     'lite_disabled' => wp_json_encode(['shells' => $disabled, 'asset_off' => $asset_off]),
                 ], ['id' => $new_id]);
+                $wp_ids[$saas_id] = $new_id;
 
                 // Archive is a separate flag from status (like trash), so it isn't
                 // part of ES_Form_Repo::save()'s field set — apply it explicitly.
@@ -1361,6 +1366,22 @@ final class Emblem_Studio_SaaS_Connector
             if (! in_array((int) $row->saas_form_id, $received, true)) {
                 ES_Form_Repo::trash((int) $row->id);
             }
+        }
+
+        // Report this pass's id mapping back — pure bookkeeping, never a content
+        // mirror-up (mirror_forms() still refuses to send a SaaS-origin row's
+        // content back). Sent every pull so a first-ever local id, or a changed
+        // one after a trash/restore reassigns rows, always reaches the SaaS.
+        if ($wp_ids) {
+            $mappings = [];
+            foreach ($wp_ids as $saas_form_id => $wp_form_id) {
+                $mappings[] = ['saas_form_id' => $saas_form_id, 'wp_form_id' => $wp_form_id];
+            }
+            self::mirror_post(rtrim($cfg['api_base'], '/') . '/v1/embed/mirror/wp-ids', [
+                'site_id'  => $cfg['site_id'],
+                'token'    => $cfg['site_token'],
+                'mappings' => $mappings,
+            ]);
         }
     }
 
