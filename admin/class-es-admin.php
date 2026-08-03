@@ -1511,7 +1511,7 @@ class ES_Admin {
 			'use_design_system'    => ES_Caps::has( 'design_system' ) ? ( ! empty( $_POST['use_design_system'] ) ? 1 : 0 ) : 1,
 			'popup_max_width'      => isset( $_POST['popup_max_width'] ) ? (int) $_POST['popup_max_width'] : 720,
 			'popup_fullscreen'     => ! empty( $_POST['popup_fullscreen'] ) ? 1 : 0,
-			'popup_close_theme'    => sanitize_key( (string) ( $_POST['popup_close_theme'] ?? 'light' ) ),
+			'popup_close_theme'    => sanitize_key( (string) ( $_POST['popup_close_theme'] ?? 'dark' ) ),
 			'active_from'          => isset( $_POST['active_from'] )  ? wp_unslash( $_POST['active_from'] )  : '',
 			'active_until'         => isset( $_POST['active_until'] ) ? wp_unslash( $_POST['active_until'] ) : '',
 		];

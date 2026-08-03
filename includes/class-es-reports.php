@@ -348,7 +348,8 @@ class ES_Reports {
 				SUM(CASE WHEN event_type = 'engage'       THEN 1 ELSE 0 END) AS engagements,
 				SUM(CASE WHEN event_type = 'conversion'   THEN 1 ELSE 0 END) AS conversions,
 				SUM(CASE WHEN event_type = 'bot_filtered' THEN 1 ELSE 0 END) AS bot_filtered,
-				SUM(CASE WHEN event_type = 'click' AND click_target IN ('__close__','__backdrop__') THEN 1 ELSE 0 END) AS dismissals
+				SUM(CASE WHEN event_type = 'click' AND click_target IN ('__close__','__backdrop__') THEN 1 ELSE 0 END) AS dismissals,
+				SUM(CASE WHEN event_type = 'click' AND (click_target IS NULL OR click_target NOT IN ('__close__','__backdrop__')) THEN 1 ELSE 0 END) AS clicks
 			FROM $events
 			WHERE created_at >= %s AND created_at <= %s",
 			self::pad_dt( $from, 'start' ), self::pad_dt( $to, 'end' )
@@ -360,6 +361,9 @@ class ES_Reports {
 		$c  = (int) ( $row->conversions ?? 0 );
 		$bf = (int) ( $row->bot_filtered ?? 0 );
 		$dis = (int) ( $row->dismissals ?? 0 );
+		// Meaningful clicks only (excludes the close-button/backdrop dismissal
+		// clicks) — same exclusion the per-form report uses for its own 'clicks'.
+		$cl = (int) ( $row->clicks ?? 0 );
 
 		return [
 			'page_views'   => $pv,
@@ -368,9 +372,11 @@ class ES_Reports {
 			'conversions'  => $c,
 			'bot_filtered' => $bf,
 			'dismissals'   => $dis,
+			'clicks'       => $cl,
 			'close_rate'   => $v  > 0 ? round( $dis / $v * 100, 2 ) : 0.0,
 			'view_rate'    => $pv > 0 ? round( $v / $pv * 100, 2 ) : 0.0,
 			'conv_rate'    => $v  > 0 ? round( $c / $v  * 100, 2 ) : 0.0,
+			'click_rate'   => $v  > 0 ? round( $cl / $v * 100, 2 ) : 0.0,
 		];
 	}
 

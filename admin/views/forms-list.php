@@ -41,6 +41,30 @@ function es_delta_line( int $current, int $prior ): string {
 	$tip  = sprintf( __( 'Prior 7 days: %d', 'emblem-studio' ), $prior );
 	return '<div class="es-kpi-sub es-kpi-delta ' . esc_attr( $cls ) . '" title="' . esc_attr( $tip ) . '">' . $arr . ' ' . esc_html( $sign . number_format_i18n( $pct, 1 ) ) . '% ' . esc_html__( 'vs prev 7d', 'emblem-studio' ) . '</div>';
 }
+
+/**
+ * A KPI card's own rate line (e.g. "12.4% click rate"), with its own
+ * current-vs-prior-7-days delta underneath — separate from es_delta_line()
+ * because the tooltip/format here is a percentage, not a plain count.
+ */
+function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_label ): string {
+	$out  = '<div class="es-kpi-rate">';
+	$out .= '<span class="es-kpi-rate-value">' . esc_html( number_format_i18n( $cur_rate, 1 ) ) . '% ' . esc_html( $rate_label ) . '</span>';
+	if ( $prior_rate > 0 || $cur_rate > 0 ) {
+		if ( $prior_rate === 0.0 ) {
+			$out .= ' <span class="es-kpi-delta es-kpi-delta-up" title="' . esc_attr( sprintf( __( 'Prior 7 days: %s%%', 'emblem-studio' ), number_format_i18n( $prior_rate, 1 ) ) ) . '">▲ ' . esc_html__( 'new', 'emblem-studio' ) . '</span>';
+		} else {
+			$pct  = round( ( ( $cur_rate - $prior_rate ) / $prior_rate ) * 100, 1 );
+			$cls  = $pct > 0 ? 'es-kpi-delta-up' : ( $pct < 0 ? 'es-kpi-delta-down' : 'es-kpi-delta-flat' );
+			$arr  = $pct > 0 ? '▲' : ( $pct < 0 ? '▼' : '■' );
+			$sign = $pct > 0 ? '+' : '';
+			$tip  = sprintf( __( 'Prior 7 days: %s%%', 'emblem-studio' ), number_format_i18n( $prior_rate, 1 ) );
+			$out .= ' <span class="es-kpi-delta ' . esc_attr( $cls ) . '" title="' . esc_attr( $tip ) . '">' . $arr . ' ' . esc_html( $sign . number_format_i18n( $pct, 1 ) ) . '%</span>';
+		}
+	}
+	$out .= '</div>';
+	return $out;
+}
 ?>
 <div class="wrap emblem-studio-wrap">
 	<div class="es-page-header">
@@ -190,9 +214,16 @@ function es_delta_line( int $current, int $prior ): string {
 			<?php echo es_delta_line( (int) $cur['views'], (int) $prev['views'] ); ?>
 		</div>
 		<div class="es-kpi">
+			<div class="es-kpi-label"><?php esc_html_e( 'Clicks (7d)', 'emblem-studio' ); ?></div>
+			<div class="es-kpi-value"><?php echo (int) $cur['clicks']; ?></div>
+			<?php echo es_delta_line( (int) $cur['clicks'], (int) $prev['clicks'] ); ?>
+			<?php echo es_kpi_rate_line( (float) $cur['click_rate'], (float) $prev['click_rate'], __( 'click rate', 'emblem-studio' ) ); ?>
+		</div>
+		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Form Conversions (7d)', 'emblem-studio' ); ?></div>
 			<div class="es-kpi-value"><?php echo (int) $cur['conversions']; ?></div>
 			<?php echo es_delta_line( (int) $cur['conversions'], (int) $prev['conversions'] ); ?>
+			<?php echo es_kpi_rate_line( (float) $cur['conv_rate'], (float) $prev['conv_rate'], __( 'conv. rate', 'emblem-studio' ) ); ?>
 		</div>
 	</div>
 

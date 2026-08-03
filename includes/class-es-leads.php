@@ -333,29 +333,68 @@ class ES_Leads {
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="' . self::csv_filename( $filters ) . '"' );
 
+		// Decode every row's extra_fields once (kept alongside $rows so the second
+		// pass below doesn't re-decode), and collect the union of whatever custom
+		// question keys remain once the known columns (first/last/phone/tags,
+		// already their own columns) are pulled out — every row gets a stable
+		// column even if only some rows answered that particular question.
+		$decoded = [];
+		$custom_keys = [];
+		foreach ( (array) $rows as $r ) {
+			$extra = $r['extra_fields'] ? json_decode( $r['extra_fields'], true ) : [];
+			$extra = is_array( $extra ) ? $extra : [];
+			unset( $extra['first_name'], $extra['last_name'], $extra['phone'], $extra['tags'] );
+			foreach ( array_keys( $extra ) as $key ) {
+				$custom_keys[ $key ] = true;
+			}
+			$decoded[] = $extra;
+		}
+		$custom_keys = array_keys( $custom_keys );
+
 		$out = fopen( 'php://output', 'w' );
 		fputs( $out, "\xEF\xBB\xBF" );
-		fputcsv( $out, [ 'id', 'created_at', 'form', 'form_slug', 'email', 'first_name', 'last_name', 'phone', 'tags', 'custom_fields', 'funnelkit_pushed', 'funnelkit_contact_id', 'error' ] );
+		fputcsv( $out, array_merge(
+			[ 'id', 'created_at', 'form', 'form_slug', 'email', 'first_name', 'last_name', 'phone', 'tags' ],
+			array_map( [ self::class, 'humanize_custom_key' ], $custom_keys ),
+			[ 'funnelkit_pushed', 'funnelkit_contact_id', 'error' ]
+		) );
 
-		foreach ( (array) $rows as $r ) {
+		foreach ( (array) $rows as $i => $r ) {
 			$extra = $r['extra_fields'] ? json_decode( $r['extra_fields'], true ) : [];
 			$extra = is_array( $extra ) ? $extra : [];
 			$first = $extra['first_name'] ?? '';
 			$last  = $extra['last_name']  ?? '';
 			$phone = $extra['phone']      ?? '';
 			$tags  = isset( $extra['tags'] ) ? ( is_array( $extra['tags'] ) ? implode( '|', $extra['tags'] ) : (string) $extra['tags'] ) : '';
-			unset( $extra['first_name'], $extra['last_name'], $extra['phone'], $extra['tags'] );
 
-			$row = [
-				$r['id'], $r['created_at'], $r['form_name'], $r['form_slug'], $r['email'],
-				$first, $last, $phone, $tags,
-				$extra ? wp_json_encode( $extra ) : '',
-				$r['funnelkit_pushed'], $r['funnelkit_contact_id'], $r['error'],
-			];
+			$custom_cells = [];
+			foreach ( $custom_keys as $key ) {
+				$custom_cells[] = self::custom_field_display( $decoded[ $i ][ $key ] ?? '' );
+			}
+
+			$row = array_merge(
+				[ $r['id'], $r['created_at'], $r['form_name'], $r['form_slug'], $r['email'], $first, $last, $phone, $tags ],
+				$custom_cells,
+				[ $r['funnelkit_pushed'], $r['funnelkit_contact_id'], $r['error'] ]
+			);
 			fputcsv( $out, array_map( [ self::class, 'neutralize_formula' ], $row ) );
 		}
 		fclose( $out );
 		exit;
+	}
+
+	/** "site_role" / "site-role" → "Site Role", for a custom question's CSV header. */
+	private static function humanize_custom_key( string $key ): string {
+		$words = array_filter( preg_split( '/[_\-]+/', rtrim( $key, '[]' ) ) ?: [] );
+		return $words ? implode( ' ', array_map( 'ucfirst', $words ) ) : $key;
+	}
+
+	/** A checkbox group's answer arrives as an array — join it into one readable cell. */
+	private static function custom_field_display( $value ): string {
+		if ( $value === null || $value === '' ) {
+			return '';
+		}
+		return is_array( $value ) ? implode( '; ', array_map( 'strval', $value ) ) : (string) $value;
 	}
 
 	/**

@@ -47,7 +47,7 @@ class ES_Install {
 			use_design_system TINYINT(1) NOT NULL DEFAULT 1,
 			popup_max_width INT(11) NOT NULL DEFAULT 720,
 			popup_fullscreen TINYINT(1) NOT NULL DEFAULT 0,
-			popup_close_theme VARCHAR(10) NOT NULL DEFAULT 'light',
+			popup_close_theme VARCHAR(10) NOT NULL DEFAULT 'dark',
 			track_clicks TINYINT(1) NOT NULL DEFAULT 1,
 			funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 1,
 			webhooks LONGTEXT NULL,
@@ -392,10 +392,14 @@ class ES_Install {
 			global $wpdb;
 			$forms     = self::table( 'forms' );
 			$form_cols = $wpdb->get_col( "SHOW COLUMNS FROM $forms" );
-			// Per-form close-button theme. 'light' (default, white-on-dark
-			// glass — for dark form backgrounds) or 'dark' (dark-on-light
-			// for light form backgrounds). Applies to every close button
-			// the form renders: click popup, auto popup, ribbon, slide-in.
+			// Per-form close-button theme. 'light' (white-on-dark glass — for
+			// dark form backgrounds) or 'dark' (dark-on-light — for light form
+			// backgrounds, the default for NEW forms as of DB v31). Applies to
+			// every close button the form renders: click popup, auto popup,
+			// ribbon, slide-in. This backfill stays 'light' on purpose — it's
+			// retroactively adding the column to forms that already existed
+			// before it did, and 'light' is what they were already rendering;
+			// changing it here would silently recolor live forms on real sites.
 			if ( ! in_array( 'popup_close_theme', $form_cols, true ) ) {
 				$wpdb->query( "ALTER TABLE $forms ADD COLUMN popup_close_theme VARCHAR(10) NOT NULL DEFAULT 'light' AFTER popup_fullscreen" );
 			}

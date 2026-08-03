@@ -228,11 +228,11 @@ class ES_Form_Repo {
 			$row['popup_fullscreen'] = ! empty( $data['popup_fullscreen'] ) ? 1 : 0;
 		}
 
-		// Close-button theme: 'light' (default) | 'dark'. Whitelist-clamped.
+		// Close-button theme: 'dark' (default) | 'light'. Whitelist-clamped.
 		if ( array_key_exists( 'popup_close_theme', $data ) ) {
 			$row['popup_close_theme'] = in_array( $data['popup_close_theme'], [ 'light', 'dark' ], true )
 				? $data['popup_close_theme']
-				: 'light';
+				: 'dark';
 		}
 
 		// Per-form click tracking. Default ON for new forms; opt-out per form
@@ -506,6 +506,10 @@ class ES_Form_Repo {
 			: $name;
 		$slug = self::unique_slug( $slug_seed );
 
+		// Coalesce once: in_array() must see a defined value AND the ternary's
+		// true-branch must not re-read a possibly-absent key.
+		$popup_close_theme = $data['popup_close_theme'] ?? 'dark';
+
 		$payload = [
 			'name'                 => $name,
 			'slug'                 => $slug,
@@ -527,7 +531,7 @@ class ES_Form_Repo {
 			'use_design_system'    => array_key_exists( 'use_design_system', $data ) ? ( ! empty( $data['use_design_system'] ) ? 1 : 0 ) : 1,
 			'popup_max_width'      => (int) ( $data['popup_max_width'] ?? 720 ),
 			'popup_fullscreen'     => ! empty( $data['popup_fullscreen'] ) ? 1 : 0,
-			'popup_close_theme'    => in_array( $data['popup_close_theme'] ?? 'light', [ 'light', 'dark' ], true ) ? $data['popup_close_theme'] : 'light',
+			'popup_close_theme'    => in_array( $popup_close_theme, [ 'light', 'dark' ], true ) ? $popup_close_theme : 'dark',
 			'track_clicks'         => array_key_exists( 'track_clicks', $data ) ? ( ! empty( $data['track_clicks'] ) ? 1 : 0 ) : 1,
 			// New forms (blank + template install) default FK off — user
 			// explicitly turns it on when they want this form's leads to
