@@ -302,7 +302,11 @@ class ES_Admin {
 	 * Force the menu emblem to full opacity (WP dims icons to ~60%) on every
 	 * admin page, and swap in the retina (40x40@2x) export so it stays crisp on
 	 * HiDPI screens — WP's own background-image (set from menu_icon() above)
-	 * only ever uses the 20x20 file. Tiny inline style — no enqueue.
+	 * only ever uses the 20x20 file. Also sets the sidebar label itself
+	 * ("Emblem Studio") to the brand display font — it sits right next to the
+	 * logo, so it needs the same styling everywhere the icon does, not just on
+	 * our own screens (`.emblem-studio-wrap h1` in admin.css only covers our
+	 * own pages' headings, never the sidebar). Tiny inline style — no enqueue.
 	 */
 	public function menu_icon_css(): void {
 		$png = (string) file_get_contents( EMBLEM_STUDIO_PATH . 'assets/images/wp-admin-menu-icon-40x40@2x.png' );
@@ -324,7 +328,12 @@ class ES_Admin {
 			// Faint lift on both the dark sidebar and the blue active bar.
 			. 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)) !important;';
 
-		echo '<style id="es-menu-icon-css">' . esc_html( $selector ) . '{' . $decl . '}</style>';
+		$font_decl = "font-family:'Titillium Web','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif !important;";
+
+		echo '<style id="es-menu-icon-css">'
+			. esc_html( $selector ) . '{' . $decl . '}'
+			. esc_html( "{$sel} .wp-menu-name" ) . '{' . $font_decl . '}'
+			. '</style>';
 	}
 
 	public function menu(): void {

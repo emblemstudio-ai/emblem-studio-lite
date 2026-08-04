@@ -477,7 +477,7 @@ final class Emblem_Studio_SaaS_Connector
         $name = get_bloginfo('name');
         ?>
         <div class="wrap">
-            <h1><?php esc_html_e('Emblem Studio account', 'emblem-studio'); ?></h1>
+            <h1 style="font-family:'Titillium Web','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;"><?php esc_html_e('Emblem Studio account', 'emblem-studio'); ?></h1>
             <div style="max-width:620px;background:#fff;border:1px solid #dcdcde;border-radius:12px;padding:24px;margin-top:16px;">
                 <p style="font-size:14px;margin:0 0 4px;">
                     <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#46b450;margin-right:8px;"></span>
@@ -542,13 +542,18 @@ final class Emblem_Studio_SaaS_Connector
         ?>
         <div class="wrap">
             <div style="max-width:520px;margin:6vh auto;text-align:center;background:#fff;border:1px solid #dcdcde;border-radius:14px;padding:40px 32px;">
-                <h1 style="font-size:24px;margin:0 0 8px;"><?php esc_html_e('Connect to Emblem Studio', 'emblem-studio'); ?></h1>
+                <h1 style="font-family:'Titillium Web','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:24px;margin:0 0 8px;"><?php esc_html_e('Connect to Emblem Studio', 'emblem-studio'); ?></h1>
                 <p style="color:#50575e;font-size:14px;margin:0 0 8px;">
                     <?php esc_html_e('Sign in to your Emblem Studio account to manage this site’s forms, popups and reports right here in WordPress.', 'emblem-studio'); ?>
                 </p>
-                <?php // TODO (Multica SER-749): once the beta landing page is live, link "ask for beta access" to it (jump to the signup form) for people without an account. ?>
                 <p style="color:#646970;font-size:12px;margin:0 0 8px;">
-                    <?php esc_html_e('A secure Emblem Studio sign-in window will open. The beta is invite-only.', 'emblem-studio'); ?>
+                    <?php
+                    printf(
+                        /* translators: %s: link to the beta application page */
+                        esc_html__('A secure Emblem Studio sign-in window will open. The beta is invite-only — %s if you don\'t have access yet.', 'emblem-studio'),
+                        '<a href="'.esc_url(rtrim($api, '/').'/#apply').'" target="_blank" rel="noopener">'.esc_html__('ask for beta access', 'emblem-studio').'</a>'
+                    );
+                    ?>
                 </p>
                 <p style="color:#646970;font-size:12px;margin:0 0 22px;">
                     <?php esc_html_e('Connecting copies this site’s existing leads, subscribers and stats into your Emblem Studio account, and keeps them in sync from then on. You’ll confirm this on the next screen.', 'emblem-studio'); ?>
