@@ -230,13 +230,17 @@ class ES_Leads {
 
 		$wpdb->update( $leads_table, [ 'is_bot' => 0 ], [ 'id' => $lead_id ] );
 
-		// "Blocked spam" (Reports) counts honeypot_blocked EVENTS, a separate
-		// append-only table with no link back to the lead that caused one.
-		// Best-effort correlation: that event was written in the same
-		// request as this lead, on the same form, so matching form_id +
-		// created_at-to-the-second finds it reliably in practice. A human
-		// just said "this wasn't spam" — the stat should stop counting it.
-		// No match (old data, second-boundary miss) is silently fine.
+		// Every stat driven by the events table (Conversions, conv. rate,
+		// "Blocked spam") needs correcting too — a real submission would
+		// have recorded a 'conversion' event and never a 'honeypot_blocked'
+		// one. Rather than delete one and insert the other (losing whatever
+		// context the original event captured, and risking the two falling
+		// out of sync), convert the SAME row in place: one UPDATE moves it
+		// out of "Blocked spam" and into "Conversions" atomically.
+		// Correlated by form_id + created_at (the event and the lead were
+		// written in the same request; no direct FK between them exists).
+		// No match (old data, second-boundary miss) leaves both stats as-is
+		// rather than blocking the rest of this.
 		$events_table = ES_Install::table( 'events' );
 		$hp_event_id  = $wpdb->get_var( $wpdb->prepare(
 			"SELECT id FROM $events_table WHERE form_id = %d AND event_type = 'honeypot_blocked' AND created_at = %s LIMIT 1",
@@ -244,7 +248,15 @@ class ES_Leads {
 			$lead->created_at
 		) );
 		if ( $hp_event_id ) {
-			$wpdb->delete( $events_table, [ 'id' => (int) $hp_event_id ] );
+			$wpdb->update( $events_table, [ 'event_type' => 'conversion' ], [ 'id' => (int) $hp_event_id ] );
+
+			// Conversion is the A/B auto-winner's success metric — a lead
+			// that now genuinely counts as one should be able to affect
+			// that result, same as it would have at submit time. Throttled
+			// / no-op when no test is running.
+			if ( class_exists( 'ES_AB' ) ) {
+				ES_AB::auto_winner_check( (int) $lead->form_id );
+			}
 		}
 
 		if ( ! $push ) {
