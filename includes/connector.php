@@ -282,8 +282,16 @@ final class Emblem_Studio_SaaS_Connector
             #wpbody-content { padding-bottom: 0 !important; }
             #wpfooter { display: none; }
             html.wp-toolbar { background: #fff; }
-            .es-embed-frame { display: block; width: 100%; height: calc(100vh - 32px); border: 0; margin: 0; }
-            @media screen and (max-width: 782px) { .es-embed-frame { height: calc(100vh - 46px); } }
+            /* min-height, not height: a fixed viewport height clipped the dashboard
+               into its OWN inner scrollbar whenever its content ran taller than one
+               screen — on top of the WP admin page's own outer scrollbar once the
+               sidebar menu itself is taller than the viewport. Two independent,
+               confusing scroll containers. The SaaS reports its real content height
+               (see the 'resize' message below) and JS sets that as the actual
+               height, inline — min-height here is only the floor before the first
+               report arrives, and for short pages that don't need more than a screen. */
+            .es-embed-frame { display: block; width: 100%; min-height: calc(100vh - 32px); border: 0; margin: 0; }
+            @media screen and (max-width: 782px) { .es-embed-frame { min-height: calc(100vh - 46px); } }
             /* Fullscreen editing — cover the WP toolbar + admin menu (admin bar is
                z-index 99999, so go above it). Toggled by the SaaS via postMessage. */
             .es-embed-frame.es-embed-fullscreen { position: fixed; inset: 0; height: 100vh; z-index: 100000; }
@@ -367,14 +375,33 @@ final class Emblem_Studio_SaaS_Connector
                 try { history.replaceState(null, '', url); } catch (err) {}
             }
 
+            // Last content height the SaaS reported, re-applied when leaving
+            // fullscreen (which pins the iframe to 100vh via CSS while active —
+            // an inline height would otherwise fight that, inline styles beat
+            // any class selector regardless of specificity).
+            var lastHeight = 0;
+            function applyHeight(px) {
+                lastHeight = px;
+                if (!frame.classList.contains('es-embed-fullscreen')) {
+                    frame.style.height = px + 'px';
+                }
+            }
+
             window.addEventListener('message', function (e) {
                 if (e.origin !== ORIGIN || !frame) { return; }
                 var d = e.data || {};
                 if (d.source !== 'emblem-studio') { return; }
                 if (d.type === 'chrome') {
                     frame.classList.toggle('es-embed-fullscreen', !!d.fullscreen);
+                    if (!d.fullscreen) {
+                        frame.style.height = lastHeight ? lastHeight + 'px' : '';
+                    } else {
+                        frame.style.height = '';
+                    }
                 } else if (d.type === 'route') {
                     syncWpUrl(d);
+                } else if (d.type === 'resize' && typeof d.height === 'number' && d.height > 0) {
+                    applyHeight(d.height);
                 }
             });
         })();
