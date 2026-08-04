@@ -12,6 +12,11 @@ class ES_Ajax {
 	private const EVENT_MAX           = 120;   // page_view+view events / window / (ip, form)
 	private const CLICK_WINDOW        = 60;    // seconds
 	private const CLICK_MAX           = 60;    // click events / window / (ip, form, shell)
+	// Below this, a filled honeypot is trusted as a bot signal on its own. A
+	// scripted submission fills every field and posts near-instantly; a real
+	// visitor — even one whose browser autofill cross-filled the trap — takes
+	// at least this long to see the form and click submit.
+	private const MIN_HUMAN_SUBMIT_MS = 1200;
 
 	public function __construct() {
 		add_action( 'wp_ajax_es_page_view',           [ $this, 'page_view' ] );
@@ -262,13 +267,32 @@ class ES_Ajax {
 		// flag to suppress their own conversion.
 		$is_preview = ! empty( $_POST['es_preview'] ) && current_user_can( 'edit_posts' );
 
-		// Honeypot — must be empty. Record the trip as an event AND save
-		// a bot-flagged lead so admins can inspect what attackers send
-		// without those rows polluting the real Humans list. We skip the
-		// FunnelKit / webhook push so the CRM never sees garbage. Still
-		// return success silently so a real attacker gets no signal that
-		// the trick was detected.
-		if ( ! empty( $_POST['esf_hp'] ) ) {
+		// Honeypot — must be empty, UNLESS the submission also took a
+		// normal human amount of time. Browser autofill (an accepted
+		// address/profile suggestion cascading into every empty field on
+		// the form) can drop a stray value into the trap for a genuine
+		// visitor; a scripted bot fills and submits near-instantly, so
+		// pairing the trap with submit speed tells the two apart. `es_ts`
+		// is the client-recorded moment the form appeared (injected
+		// alongside the trap itself — see injectHoneypot in frontend.js);
+		// missing/invalid timing falls back to today's honeypot-alone rule.
+		$hp_filled = ! empty( $_POST['esf_hp'] );
+		if ( $hp_filled ) {
+			$form_ready_at = isset( $_POST['es_ts'] ) ? (int) $_POST['es_ts'] : 0;
+			if ( $form_ready_at > 0 ) {
+				$elapsed_ms = (int) round( microtime( true ) * 1000 ) - $form_ready_at;
+				if ( $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS ) {
+					$hp_filled = false;
+				}
+			}
+		}
+
+		// Record the trip as an event AND save a bot-flagged lead so admins
+		// can inspect what attackers send without those rows polluting the
+		// real Humans list. We skip the FunnelKit / webhook push so the CRM
+		// never sees garbage. Still return success silently so a real
+		// attacker gets no signal that the trick was detected.
+		if ( $hp_filled ) {
 			ES_Logger::info( 'Honeypot triggered', [ 'form_id' => $form_id ] );
 			$hp_shell = isset( $_POST['type'] ) ? sanitize_key( (string) $_POST['type'] ) : 'inline';
 			if ( ! in_array( $hp_shell, ES_Form_Repo::valid_types(), true ) ) {
@@ -459,7 +483,7 @@ class ES_Ajax {
 		// reserve them here; they pass through as plain custom data when not mapped.
 		$reserved      = [
 			'email', 'first_name', 'last_name', 'name', 'phone',
-			'form_id', 'esf_hp', 'esf_tag', 'esf_list',
+			'form_id', 'esf_hp', 'es_ts', 'esf_tag', 'esf_list',
 			'action', '_wpnonce', '_wp_http_referer',
 		];
 		// Only keep fields that actually exist on the form (SER-872). Without this
@@ -748,7 +772,7 @@ class ES_Ajax {
 	private function collect_fields(): array {
 		$out = [];
 		foreach ( $_POST as $k => $v ) {
-			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp' ], true ) ) {
+			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_ts' ], true ) ) {
 				continue;
 			}
 			$out[ $k ] = is_array( $v ) ? array_map( 'sanitize_text_field', wp_unslash( $v ) ) : sanitize_text_field( wp_unslash( $v ) );

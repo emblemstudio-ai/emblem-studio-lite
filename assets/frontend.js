@@ -651,6 +651,15 @@
 		input.autocomplete = 'off';
 		input.setAttribute('form', form.id);
 		wrap.appendChild(input);
+		// The moment the form appeared, so the server can tell a bot's
+		// near-instant fill-and-submit apart from a human's — even one whose
+		// browser autofill cross-filled the honeypot above.
+		const ts = document.createElement('input');
+		ts.type = 'hidden';
+		ts.name = 'es_ts';
+		ts.value = String(Date.now());
+		ts.setAttribute('form', form.id);
+		wrap.appendChild(ts);
 		// A SIBLING of the form, not a descendant — tied to it only via the
 		// `form` attribute (still included in FormData/submission normally).
 		// Browsers sweep autofill suggestions into fields *inside* a form's
