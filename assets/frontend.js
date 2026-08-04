@@ -638,7 +638,9 @@
 	}
 
 	function injectHoneypot(form) {
-		if (form.querySelector('input[name="esf_hp"]')) return;
+		if (form._esHoneypotInjected) return;
+		form._esHoneypotInjected = true;
+		if (!form.id) form.id = 'esf-hp-' + Math.random().toString(36).slice(2, 10);
 		const wrap = document.createElement('div');
 		wrap.style.cssText = 'position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;';
 		wrap.setAttribute('aria-hidden', 'true');
@@ -647,8 +649,15 @@
 		input.name = 'esf_hp';
 		input.tabIndex = -1;
 		input.autocomplete = 'off';
+		input.setAttribute('form', form.id);
 		wrap.appendChild(input);
-		form.appendChild(wrap);
+		// A SIBLING of the form, not a descendant — tied to it only via the
+		// `form` attribute (still included in FormData/submission normally).
+		// Browsers sweep autofill suggestions into fields *inside* a form's
+		// own subtree; keeping the honeypot out of that subtree stops an
+		// accepted address/profile suggestion from ever reaching it and
+		// wrongly flagging a real submission as a bot.
+		(form.parentNode || form).insertBefore(wrap, form.nextSibling);
 	}
 
 	function showInlineThankYou(shadow) {
