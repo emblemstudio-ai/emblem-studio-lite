@@ -168,6 +168,12 @@ $status_labels = [
 	<?php if ( isset( $_GET['lead_move_failed'] ) ) : ?>
 		<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Could not move lead. It may have been deleted.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
+	<?php if ( isset( $_GET['lead_retried'] ) ) : ?>
+		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Retried — check the Status column for the result.', 'emblem-studio' ); ?></p></div>
+	<?php endif; ?>
+	<?php if ( isset( $_GET['lead_retry_failed'] ) ) : ?>
+		<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Could not retry lead. It may have been deleted.', 'emblem-studio' ); ?></p></div>
+	<?php endif; ?>
 
 	<table class="wp-list-table widefat fixed striped es-data-table">
 		<thead>
@@ -236,6 +242,12 @@ $status_labels = [
 							<a href="<?php echo esc_url( $move_without_push ); ?>"
 							   onclick="return confirm('<?php esc_attr_e( 'Move this lead to Humans without pushing to FunnelKit/webhooks?', 'emblem-studio' ); ?>');"
 							   style="color:#666;font-size:11px;"><?php esc_html_e( 'Move only', 'emblem-studio' ); ?></a>
+							<br>
+						<?php elseif ( ! $r->funnelkit_pushed ) :
+							$retry_url = wp_nonce_url( admin_url( 'admin-post.php?action=es_retry_lead&id=' . (int) $r->id ), 'es_retry_lead_' . (int) $r->id );
+						?>
+							<a href="<?php echo esc_url( $retry_url ); ?>"
+							   title="<?php esc_attr_e( 'Try sending this lead to FunnelKit/webhooks again.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Retry', 'emblem-studio' ); ?></a>
 							<br>
 						<?php endif; ?>
 						<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_lead&id=' . (int) $r->id ), 'es_delete_lead_' . (int) $r->id ) ); ?>"

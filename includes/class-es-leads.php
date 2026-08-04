@@ -263,12 +263,57 @@ class ES_Leads {
 			return [ 'ok' => true, 'message' => null ];
 		}
 
-		// Best-effort retroactive push. If the form is gone or its FK
-		// destination is disabled, we silently leave the lead as a human
-		// and the user can deal with it manually.
+		return self::push_to_connections( $lead );
+	}
+
+	/**
+	 * Manually re-try FunnelKit + webhook delivery for a lead that's a
+	 * confirmed human but never landed — `funnelkit_pushed=0`, whether
+	 * that's a genuine error (`error` set) or the form's FK destination
+	 * was disabled at submit time and someone's since turned it on. The
+	 * plugin's push either succeeds or fails within the same request (see
+	 * `move_to_humans`'s docblock — there's no async "stuck pending" state
+	 * to safeguard against here the way the SaaS's connector needs to), so
+	 * this is a plain re-run, not a queued/backed-off retry.
+	 *
+	 * Returns: [ 'ok' => bool, 'message' => string|null ]
+	 */
+	public static function retry_push( int $lead_id ): array {
+		global $wpdb;
+		$leads_table = ES_Install::table( 'leads' );
+
+		$lead = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $leads_table WHERE id = %d", $lead_id ) );
+		if ( ! $lead ) {
+			return [ 'ok' => false, 'message' => __( 'Lead not found.', 'emblem-studio' ) ];
+		}
+		if ( (int) $lead->is_bot === 1 ) {
+			return [ 'ok' => false, 'message' => __( 'This lead is still flagged as a bot — move it to Humans first.', 'emblem-studio' ) ];
+		}
+		if ( (int) $lead->funnelkit_pushed === 1 ) {
+			return [ 'ok' => true, 'message' => __( 'Already synced.', 'emblem-studio' ) ];
+		}
+
+		return self::push_to_connections( $lead );
+	}
+
+	/**
+	 * The actual FunnelKit + per-form-webhook delivery for one lead row —
+	 * shared by `move_to_humans`'s "Move + push" and `retry_push`, so the
+	 * two can never drift on what a "push" actually does. Best-effort: if
+	 * the form is gone, silently reports that and does nothing else; the
+	 * caller (a human who already confirmed the action) can deal with it
+	 * manually either way.
+	 *
+	 * @param object $lead A full row from the leads table.
+	 * Returns: [ 'ok' => bool, 'message' => string|null ]
+	 */
+	private static function push_to_connections( object $lead ): array {
+		global $wpdb;
+		$leads_table = ES_Install::table( 'leads' );
+
 		$form = ES_Form_Repo::find( (int) $lead->form_id );
 		if ( ! $form ) {
-			return [ 'ok' => true, 'message' => __( 'Moved to Humans. Source form is gone — nothing was pushed.', 'emblem-studio' ) ];
+			return [ 'ok' => true, 'message' => __( 'Source form is gone — nothing was pushed.', 'emblem-studio' ) ];
 		}
 		$extra = $lead->extra_fields ? json_decode( (string) $lead->extra_fields, true ) : [];
 		$extra = is_array( $extra ) ? $extra : [];
@@ -300,13 +345,12 @@ class ES_Leads {
 			],
 			$fk_enabled
 		);
-		$contact_id = $push_res['contact_id'] ?? null;
 		if ( ( $push_res['mode'] ?? '' ) !== 'disabled' ) {
 			$wpdb->update( $leads_table, [
 				'funnelkit_pushed'     => $push_res['ok'] ? 1 : 0,
-				'funnelkit_contact_id' => $contact_id,
+				'funnelkit_contact_id' => $push_res['contact_id'] ?? null,
 				'error'                => $push_res['ok'] ? null : ( $push_res['error'] ?? 'Unknown' ),
-			], [ 'id' => $lead_id ] );
+			], [ 'id' => (int) $lead->id ] );
 		}
 
 		// Per-form webhook fan-out.

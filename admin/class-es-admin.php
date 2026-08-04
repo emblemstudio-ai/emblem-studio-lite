@@ -32,6 +32,7 @@ class ES_Admin {
 		add_action( 'admin_post_es_reset_stats', [ $this, 'handle_reset_stats' ] );
 		add_action( 'admin_post_es_delete_lead', [ $this, 'handle_delete_lead' ] );
 		add_action( 'admin_post_es_move_lead_to_humans', [ $this, 'handle_move_lead_to_humans' ] );
+		add_action( 'admin_post_es_retry_lead', [ $this, 'handle_retry_lead' ] );
 		add_action( 'admin_post_es_duplicate_form', [ $this, 'handle_duplicate' ] );
 		// Revisions are account-gated (Free and up) — register handlers only
 		// when the module is present (absent in the Lite build).
@@ -283,6 +284,23 @@ class ES_Admin {
 		$result = $id ? ES_Leads::move_to_humans( $id, $push ) : [ 'ok' => false ];
 		$back = wp_get_referer() ?: admin_url( 'admin.php?page=emblem-studio-leads' );
 		$flag = $result['ok'] ? 'lead_moved' : 'lead_move_failed';
+		wp_safe_redirect( add_query_arg( $flag, '1', $back ) );
+		exit;
+	}
+
+	/**
+	 * A human asking, right now, for one more try on a confirmed-human
+	 * lead whose FunnelKit push never landed — see ES_Leads::retry_push.
+	 */
+	public function handle_retry_lead(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
+		}
+		$id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
+		check_admin_referer( 'es_retry_lead_' . $id );
+		$result = $id ? ES_Leads::retry_push( $id ) : [ 'ok' => false ];
+		$back = wp_get_referer() ?: admin_url( 'admin.php?page=emblem-studio-leads' );
+		$flag = $result['ok'] ? 'lead_retried' : 'lead_retry_failed';
 		wp_safe_redirect( add_query_arg( $flag, '1', $back ) );
 		exit;
 	}
