@@ -445,6 +445,19 @@ class ES_Admin {
 				[ $this, 'route_integrations' ]
 			);
 		}
+		// Support & feedback (SER-1049) — SaaS-only, account-scoped (not
+		// per-site), so it only appears once the site is actually paired; a
+		// standalone Lite install has no local ticket data to show at all.
+		if ( $connected ) {
+			add_submenu_page(
+				'emblem-studio',
+				__( 'Support', 'emblem-studio' ),
+				__( 'Support', 'emblem-studio' ),
+				'manage_options',
+				'emblem-studio-tickets',
+				[ $this, 'route_tickets' ]
+			);
+		}
 		add_submenu_page(
 			'emblem-studio',
 			__( 'Settings', 'emblem-studio' ),
@@ -642,6 +655,31 @@ class ES_Admin {
 			return;
 		}
 		include EMBLEM_STUDIO_PATH . 'admin/views/settings.php';
+	}
+
+	/** Support & feedback (SER-1049) — SaaS-only, no local Lite equivalent.
+	 *  The submenu only registers when connected, so reaching this unconnected
+	 *  is a rare direct-URL edge case, not the normal path. */
+	public function route_tickets(): void {
+		if ( $this->maybe_embed( 'emblem-studio-tickets' ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Support', 'emblem-studio' ); ?></h1>
+			<p>
+				<?php esc_html_e( 'Connect this site to Emblem Studio to report a problem or request a feature.', 'emblem-studio' ); ?>
+			</p>
+			<p>
+				<a class="button button-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio-account' ) ); ?>">
+					<?php esc_html_e( 'Connect', 'emblem-studio' ); ?>
+				</a>
+			</p>
+		</div>
+		<?php
 	}
 
 	/** Plugin-local — deliberately skips maybe_embed(). This is static explainer
