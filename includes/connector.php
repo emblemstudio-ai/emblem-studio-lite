@@ -50,13 +50,7 @@ final class Emblem_Studio_SaaS_Connector
     const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';
     const POSTDECOUPLE_MAX_ATTEMPTS = 40; // ~13 min of real effort before giving up and revoking anyway
 
-    /**
-     * WP admin page slug → embedded SaaS path. Normally site-scoped (joined
-     * under /app/s/<code>/…) — a value starting with `account/` is the one
-     * exception: it embeds /app/<path> instead, no site code, see
-     * render_embed()'s `$account_scoped` check. Support (SER-1049) is the
-     * first of these — it's account-wide, not per-site.
-     */
+    /** WP admin page slug → embedded SaaS path (under /app/s/<code>/…). */
     const PAGE_MAP = [
         'emblem-studio'              => 'assets',     // Forms & Assets
         'emblem-studio-new'          => 'assets/new', // Add New
@@ -66,7 +60,10 @@ final class Emblem_Studio_SaaS_Connector
         'emblem-studio-integrations' => 'integrations',
         'emblem-studio-design-system' => 'design-system',
         'emblem-studio-settings'     => 'settings',
-        'emblem-studio-tickets'      => 'account/tickets',
+        // Support (SER-1049) — site-scoped like everything else here. A ticket
+        // filed from wp-admin is always about THIS site; there's no "general
+        // account" concept reachable from wp-admin to begin with.
+        'emblem-studio-tickets'      => 'tickets',
     ];
 
     public static function init(): void
@@ -278,13 +275,7 @@ final class Emblem_Studio_SaaS_Connector
         // builder reads location.hash, so a shared tab-deep-link actually opens that
         // tab. The pieces PHP knows (base path, editor) are handed over as data; the
         // sign-in token rides the src fragment (#est=…), never logged.
-        // Almost every embedded page is site-scoped — but an `account/…` path
-        // (Support, SER-1049) is account-wide, so it skips the /s/<code>/ segment
-        // entirely rather than embedding under a site that isn't really its scope.
-        $account_scoped = str_starts_with($path, 'account/');
-        $embed_base = $account_scoped
-            ? $api.'/app/'.$path
-            : $api.'/app/s/'.rawurlencode($code).'/'.$path;
+        $embed_base = $api.'/app/s/'.rawurlencode($code).'/'.$path;
         // Let WordPress position the content column (it already sits right of the
         // admin menu and auto-adjusts for folded/responsive states). We just strip
         // the column's padding so the iframe is flush, and fill the height. This
@@ -340,7 +331,8 @@ final class Emblem_Studio_SaaS_Connector
                 'reports': 'emblem-studio-reports',
                 'integrations': 'emblem-studio-integrations',
                 'design-system': 'emblem-studio-design-system',
-                'settings': 'emblem-studio-settings'
+                'settings': 'emblem-studio-settings',
+                'tickets': 'emblem-studio-tickets'
             };
 
             // Build the src from what PHP knew (base path, editor) plus the tab read
