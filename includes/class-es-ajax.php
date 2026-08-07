@@ -517,6 +517,17 @@ class ES_Ajax {
 		] );
 		$lead_id = (int) $wpdb->insert_id;
 
+		// Immutable consent evidence (SER-853) — a no-op when this form has no
+		// consent checkbox at all. See docs/CONSENT-AND-LIABILITY.md (SaaS repo).
+		ES_Consent_Log::record(
+			$form_id,
+			(string) $form->html,
+			$lead_id,
+			$fields,
+			isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : null,
+			$this->ab_slot( $form_id ) ?: null
+		);
+
 		// An active FunnelKit Form Feed is authoritative. Otherwise the direct
 		// destination toggle decides whether the corrected direct upsert runs.
 		// Webhooks remain independent in either case.

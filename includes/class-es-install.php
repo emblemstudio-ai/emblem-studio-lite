@@ -198,6 +198,34 @@ class ES_Install {
 			KEY saas_preset_id (saas_preset_id)
 		) $charset_collate;";
 
+		// Consent proof (SER-853): the wording is stored once, content-addressed
+		// by a sha256 hash; the per-submission row just references that hash.
+		// Deliberately independent of forms/form_revisions (no FK to either) so
+		// a record can't go dangling when a form is edited or deleted — see the
+		// matching SaaS design in emblem-studio-saas docs/CONSENT-AND-LIABILITY.md.
+		$consent_texts = "CREATE TABLE {$prefix}emblemstudio_consent_texts (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			hash VARCHAR(64) NOT NULL,
+			text LONGTEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY hash (hash)
+		) $charset_collate;";
+
+		$lead_consents = "CREATE TABLE {$prefix}emblemstudio_lead_consents (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			lead_id BIGINT(20) UNSIGNED NOT NULL,
+			consent_text_hash VARCHAR(64) NOT NULL,
+			checkbox_state TINYINT(1) NOT NULL,
+			page_url VARCHAR(255) NULL,
+			consent_version VARCHAR(191) NULL,
+			form_revision_id BIGINT(20) UNSIGNED NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY lead_id (lead_id),
+			KEY consent_text_hash (consent_text_hash)
+		) $charset_collate;";
+
 		dbDelta( $forms );
 		dbDelta( $events );
 		dbDelta( $leads );
@@ -207,6 +235,8 @@ class ES_Install {
 		dbDelta( $variants );
 		dbDelta( $tests );
 		dbDelta( $presets );
+		dbDelta( $consent_texts );
+		dbDelta( $lead_consents );
 
 		update_option( 'emblem_studio_db_version', EMBLEM_STUDIO_DB_VERSION );
 	}
@@ -798,6 +828,38 @@ class ES_Install {
 			// read; it's schema hygiene, not a behavior change).
 			$wpdb->query( "ALTER TABLE $forms MODIFY COLUMN funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 0" );
 			update_option( 'emblem_studio_db_version', '34' );
+		}
+
+		if ( version_compare( $current, '35', '<' ) ) {
+			global $wpdb;
+			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+			$charset_collate = $wpdb->get_charset_collate();
+			$consent_texts   = self::table( 'consent_texts' );
+			$lead_consents   = self::table( 'lead_consents' );
+			// Consent proof (SER-853) — see the matching CREATE TABLEs in
+			// activate() for the fresh-install path; same shape for existing sites.
+			dbDelta( "CREATE TABLE {$consent_texts} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				hash VARCHAR(64) NOT NULL,
+				text LONGTEXT NOT NULL,
+				created_at DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY hash (hash)
+			) $charset_collate;" );
+			dbDelta( "CREATE TABLE {$lead_consents} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				lead_id BIGINT(20) UNSIGNED NOT NULL,
+				consent_text_hash VARCHAR(64) NOT NULL,
+				checkbox_state TINYINT(1) NOT NULL,
+				page_url VARCHAR(255) NULL,
+				consent_version VARCHAR(191) NULL,
+				form_revision_id BIGINT(20) UNSIGNED NULL,
+				created_at DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY lead_id (lead_id),
+				KEY consent_text_hash (consent_text_hash)
+			) $charset_collate;" );
+			update_option( 'emblem_studio_db_version', '35' );
 		}
 	}
 

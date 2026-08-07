@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.2.32-beta
+ * Version:           1.2.33-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,8 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.2.32-beta' );
-define( 'EMBLEM_STUDIO_DB_VERSION', '34' );
+define( 'EMBLEM_STUDIO_VERSION', '1.2.33-beta' );
+define( 'EMBLEM_STUDIO_DB_VERSION', '35' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'EMBLEM_STUDIO_URL', plugin_dir_url( __FILE__ ) );
@@ -39,6 +39,9 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-ajax.php';
 // the VIEW — the editor shows a locked Revisions tab with a connect upsell. The
 // viewing/restore admin handlers stay behind the 'revisions' capability.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-revisions.php';
+// Consent proof (SER-853): loaded in EVERY edition, same reasoning as
+// revisions above — this is compliance infrastructure, not a paid feature.
+require_once EMBLEM_STUDIO_PATH . 'includes/class-es-consent-log.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-templates.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-event-recorder.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-funnelkit-upsert.php';
