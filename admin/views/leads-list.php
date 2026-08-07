@@ -219,9 +219,7 @@ $status_labels = [
 				<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?><?php echo $row_title ? ' title="' . $row_title . '"' : ''; ?>>
 					<td>
 						<?php if ( $is_bot_row ) : ?><span class="es-bot-tag" aria-label="<?php esc_attr_e( 'Bot lead', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Caught by the hidden honeypot field — not sent to your CRM.', 'emblem-studio' ); ?>"><?php esc_html_e( 'BOT', 'emblem-studio' ); ?></span> <?php endif; ?>
-						<button type="button" class="es-lead-toggle" aria-expanded="false" aria-controls="es-lead-detail-<?php echo (int) $r->id; ?>">
-							<?php echo esc_html( ES_Leads::display_name( $r->extra_fields ) ); ?>
-						</button>
+						<?php echo esc_html( ES_Leads::display_name( $r->extra_fields ) ); ?>
 					</td>
 					<td><?php echo esc_html( $r->email ); ?></td>
 					<td class="es-leads-col-form">
@@ -258,6 +256,11 @@ $status_labels = [
 							   title="<?php esc_attr_e( 'Try sending this lead to FunnelKit/webhooks again.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Retry', 'emblem-studio' ); ?></a>
 							<br>
 						<?php endif; ?>
+						<?php // An explicit button rather than a click on the name: the row
+							// already carries Move/Retry/Delete, so "click the row" was an
+							// invisible action sitting underneath real ones. ?>
+						<button type="button" class="es-lead-toggle" aria-expanded="false" aria-controls="es-lead-detail-<?php echo (int) $r->id; ?>"><?php esc_html_e( 'View', 'emblem-studio' ); ?></button>
+						<br>
 						<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_lead&id=' . (int) $r->id ), 'es_delete_lead_' . (int) $r->id ) ); ?>"
 						   onclick="return confirm('<?php esc_attr_e( 'Permanently delete this lead from Emblem Studio? (Contact in FunnelKit is not affected.)', 'emblem-studio' ); ?>');"
 						   style="color:var(--es-danger,#b32d2e);"><?php esc_html_e( 'Delete', 'emblem-studio' ); ?></a>

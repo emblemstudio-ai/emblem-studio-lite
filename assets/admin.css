@@ -5376,8 +5376,8 @@
 #es-preset-modal .es-preset-modal-urls { width: 100%; font-family: Menlo, Consolas, monospace; font-size: 12px; }
 
 /* ── Leads: expandable submission detail ──────────────────────────────────
-   The name in each row is the toggle. Styled as plain text with a link
-   affordance rather than a button, so the table still reads as a table. */
+   A "View" action in the actions column, next to Delete. Styled to match the
+   other row actions, which are plain links, so the column reads as one set. */
 .es-lead-toggle {
 	background: none;
 	border: 0;

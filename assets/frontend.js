@@ -35,6 +35,23 @@
 	// reset above them in the same rule.
 	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;isolation:isolate!important;}';
 
+	// The blinking text cursor follows the colour of the text beside it.
+	//
+	// A visitor whose OS/browser is in dark mode can get a WHITE caret painted
+	// into a white field, because the browser decides the control is dark even
+	// though the asset set its own light background. The field then looks
+	// broken: you type and nothing blinks. Deliberately NOT fixed by forcing
+	// `color-scheme: light`, which is what a hand-written asset tends to do —
+	// that would wreck a genuinely dark design (white text on black), where a
+	// light caret is the correct one. currentColor is right either way.
+	//
+	// `:where()` so the whole thing carries ZERO specificity: it is a default,
+	// and any rule an author writes beats it without needing !important. The
+	// non-shadow copy is scoped to the host, since that CSS lands in the
+	// theme's own document and must never touch the site's other inputs.
+	const CARET_CSS = ':where(input,textarea,select){caret-color:currentColor;}';
+	const CARET_CSS_SCOPED = ':where(.esf-host) :where(input,textarea,select){caret-color:currentColor;}';
+
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
 	// the import loads, which on a slow/blocked font host leaves the asset
@@ -129,7 +146,8 @@
 			loadFontImport(m[1]);
 			css = css.slice(m.index + m[0].length);
 		}
-		return (withBoot ? BOOT_CSS : '') + css;
+		// Both defaults go BEFORE the asset's own CSS, so the author always wins.
+		return (withBoot ? BOOT_CSS + CARET_CSS : CARET_CSS_SCOPED) + css;
 	}
 
 	// ============================================================
