@@ -1590,10 +1590,13 @@ class ES_Admin {
 		}
 
 		// FunnelKit destination toggle (same per-form pattern as webhooks).
-		// Always send something so the save persists the user's choice —
-		// can't use `! empty($_POST[…])` alone because that's also the
-		// state when the box is unchecked. Existing forms default to 1
-		// via the DB column default, so missing-on-new-form is fine.
+		// Always computed as an explicit 0/1 — an unchecked box sends no
+		// `funnelkit_enabled` key at all (standard HTML checkbox behavior),
+		// so `! empty($_POST[…])` alone would leave the column untouched on
+		// an UPDATE and fall through to the DB column default on an INSERT.
+		// Sending it explicitly every save is what makes "uncheck and save"
+		// actually turn it off, and is why the column's own default (now 0,
+		// see class-es-install.php's v34 migration) never actually matters.
 		$data['funnelkit_enabled'] = ! empty( $_POST['funnelkit_enabled'] ) ? 1 : 0;
 
 		// Webhooks — array of rows from the Connect tab repeater. Empty

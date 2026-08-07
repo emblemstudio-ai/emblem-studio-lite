@@ -49,7 +49,7 @@ class ES_Install {
 			popup_fullscreen TINYINT(1) NOT NULL DEFAULT 0,
 			popup_close_theme VARCHAR(10) NOT NULL DEFAULT 'dark',
 			track_clicks TINYINT(1) NOT NULL DEFAULT 1,
-			funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 1,
+			funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 0,
 			webhooks LONGTEXT NULL,
 			connections LONGTEXT NULL,
 			lite_disabled LONGTEXT NULL,
@@ -787,6 +787,17 @@ class ES_Install {
 				$wpdb->query( "ALTER TABLE $forms ADD INDEX archived_at (archived_at)" );
 			}
 			update_option( 'emblem_studio_db_version', '33' );
+		}
+
+		if ( version_compare( $current, '34', '<' ) ) {
+			global $wpdb;
+			$forms = self::table( 'forms' );
+			// v19 gave this column DEFAULT 1 (FunnelKit on by default) —
+			// reversed since (a new form's checkbox and every real save path
+			// already write an explicit 0/1, so this default is never actually
+			// read; it's schema hygiene, not a behavior change).
+			$wpdb->query( "ALTER TABLE $forms MODIFY COLUMN funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 0" );
+			update_option( 'emblem_studio_db_version', '34' );
 		}
 	}
 
