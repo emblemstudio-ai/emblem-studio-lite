@@ -161,4 +161,55 @@ class ES_Consent_Log {
 
 		return $links->length > 0 ? $links->item( 0 )->getAttribute( 'href' ) : null;
 	}
+
+	/**
+	 * The consent recorded for a set of leads, keyed by lead id — the read side
+	 * of everything above.
+	 *
+	 * Recording proof nobody can see is not proof. Until this existed the
+	 * evidence could only be reached by querying the database by hand, which is
+	 * exactly the situation it was built to avoid: the point is being able to
+	 * show, on demand, the wording someone agreed to at the moment they
+	 * submitted, not the wording the form carries today.
+	 *
+	 * A lead simply absent from the result had no consent control on its form,
+	 * which is legitimate — a checkbox isn't always the right lawful basis —
+	 * and is a different fact from someone declining. Callers must keep those
+	 * apart rather than defaulting a missing row to "no".
+	 *
+	 * @param array<int,int> $lead_ids
+	 * @return array<int, array{agreed: bool, text: string}>
+	 */
+	public static function for_leads( array $lead_ids ): array {
+		$lead_ids = array_values( array_unique( array_filter( array_map( 'intval', $lead_ids ) ) ) );
+		if ( ! $lead_ids ) {
+			return [];
+		}
+
+		global $wpdb;
+		$consents = ES_Install::table( 'lead_consents' );
+		$texts    = ES_Install::table( 'consent_texts' );
+		$in       = implode( ',', array_fill( 0, count( $lead_ids ), '%d' ) );
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT c.lead_id, c.checkbox_state, t.text
+				 FROM {$consents} c
+				 LEFT JOIN {$texts} t ON t.hash = c.consent_text_hash
+				 WHERE c.lead_id IN ({$in})",
+				...$lead_ids
+			),
+			ARRAY_A
+		);
+
+		$out = [];
+		foreach ( (array) $rows as $row ) {
+			$out[ (int) $row['lead_id'] ] = [
+				'agreed' => (bool) (int) $row['checkbox_state'],
+				'text'   => (string) ( $row['text'] ?? '' ),
+			];
+		}
+
+		return $out;
+	}
 }

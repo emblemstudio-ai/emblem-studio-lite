@@ -3130,3 +3130,27 @@
 	});
 	window.addEventListener('scroll', function () { if ( bubble ) { bubble.style.opacity = '0'; } active = null; }, true);
 })();
+
+/**
+ * Leads: expand a submission in place.
+ *
+ * The list only ever showed a derived display name, so every other answer a
+ * visitor gave — and the consent wording they agreed to — was invisible in the
+ * admin. Each row's full detail is already rendered (hidden) beside it, so this
+ * only unhides: no request, and it still works if this script never loads,
+ * since the panel is real markup rather than something built here.
+ */
+(function () {
+	document.addEventListener('click', function (e) {
+		var btn = e.target && e.target.closest ? e.target.closest('.es-lead-toggle') : null;
+		if (!btn) { return; }
+		e.preventDefault();
+
+		var panel = document.getElementById(btn.getAttribute('aria-controls'));
+		if (!panel) { return; }
+
+		var open = btn.getAttribute('aria-expanded') === 'true';
+		btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+		panel.hidden = open;
+	});
+})();

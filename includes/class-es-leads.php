@@ -424,12 +424,20 @@ class ES_Leads {
 		}
 		$custom_keys = array_keys( $custom_keys );
 
+		// Consent proof travels with the row. An export is what a customer hands
+		// over when someone asks what a subscriber agreed to, so leaving it only
+		// in the database made the record unusable for the one job it exists
+		// for. Appended last so every existing column keeps its position.
+		// Blank (not "no") when the form had no consent control at all — that is
+		// a different fact from someone declining, and must not read as one.
+		$consent = ES_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( (array) $rows, 'id' ) ) );
+
 		$out = fopen( 'php://output', 'w' );
 		fputs( $out, "\xEF\xBB\xBF" );
 		fputcsv( $out, array_merge(
 			[ 'id', 'created_at', 'form', 'form_slug', 'email', 'first_name', 'last_name', 'phone', 'tags' ],
 			array_map( [ self::class, 'humanize_custom_key' ], $custom_keys ),
-			[ 'funnelkit_pushed', 'funnelkit_contact_id', 'error' ]
+			[ 'funnelkit_pushed', 'funnelkit_contact_id', 'error', 'consent', 'consent_wording' ]
 		) );
 
 		foreach ( (array) $rows as $i => $r ) {
@@ -445,10 +453,18 @@ class ES_Leads {
 				$custom_cells[] = self::custom_field_display( $decoded[ $i ][ $key ] ?? '' );
 			}
 
+			$c = $consent[ (int) $r['id'] ] ?? null;
+
 			$row = array_merge(
 				[ $r['id'], $r['created_at'], $r['form_name'], $r['form_slug'], $r['email'], $first, $last, $phone, $tags ],
 				$custom_cells,
-				[ $r['funnelkit_pushed'], $r['funnelkit_contact_id'], $r['error'] ]
+				[
+					$r['funnelkit_pushed'],
+					$r['funnelkit_contact_id'],
+					$r['error'],
+					null === $c ? '' : ( $c['agreed'] ? 'yes' : 'no' ),
+					null === $c ? '' : $c['text'],
+				]
 			);
 			fputcsv( $out, array_map( [ self::class, 'neutralize_formula' ], $row ) );
 		}

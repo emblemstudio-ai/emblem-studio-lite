@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.0.24-beta
+ * Version: 1.3.1-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -31,6 +31,13 @@ if (! defined('ABSPATH')) {
 
 final class Emblem_Studio_SaaS_Connector
 {
+    /**
+     * Reported to the SaaS on every embed heartbeat, so it can tell which
+     * connector build a site is running (SER-1128 stage 4 gates on it).
+     * MUST track the `Version:` header above — bump both together.
+     */
+    const VERSION = '1.3.1-beta';
+
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
     const OPTION = 'ess_connection';
@@ -1944,14 +1951,25 @@ final class Emblem_Studio_SaaS_Connector
             .wp_json_encode($config).');</script>'."\n";
 
         foreach ($forms as $form) {
-            $id = isset($form['id']) ? (int) $form['id'] : 0;
-            if (! $id || empty($form['shells'])) {
+            // Name the asset by its opaque public code, not the SaaS row id: the
+            // id is one counter shared across every account, so printing it into
+            // live page source leaks how much exists platform-wide and can be
+            // walked to enumerate a site (SER-1128). Falls back to the id when
+            // the SaaS hasn't sent a code — an older SaaS, or a cached embed
+            // payload from before it started sending one. The SaaS accepts both
+            // until stage 4, which only stops accepting the id for sites whose
+            // reported connector version proves they no longer emit it.
+            $key = isset($form['public_key']) && $form['public_key'] !== ''
+                ? (string) $form['public_key']
+                : (string) (isset($form['id']) ? (int) $form['id'] : 0);
+
+            if ($key === '' || $key === '0' || empty($form['shells'])) {
                 continue;
             }
             foreach ((array) $form['shells'] as $shell) {
                 printf(
-                    '<div data-es-form="%d" data-es-shell="%s" style="display:none"></div>'."\n",
-                    $id,
+                    '<div data-es-form="%s" data-es-shell="%s" style="display:none"></div>'."\n",
+                    esc_attr($key),
                     esc_attr((string) $shell)
                 );
             }
@@ -2017,9 +2035,15 @@ final class Emblem_Studio_SaaS_Connector
             return $cached;
         }
 
+        // `v` rides the heartbeat this call already carries, so the SaaS knows
+        // which connector build a site is actually running. That's what lets
+        // SER-1128 stage 4 stop accepting the SaaS row id per-site, for sites
+        // proven to have stopped emitting it, instead of one global switch that
+        // would take down every site that hasn't updated yet.
         $url = $cfg['api_base'].'/v1/sites/'.$cfg['site_id']
             .'/embed?token='.rawurlencode($cfg['site_token'])
-            .'&funnelkit='.(self::funnelkit_available() ? '1' : '0');
+            .'&funnelkit='.(self::funnelkit_available() ? '1' : '0')
+            .'&v='.rawurlencode(self::VERSION);
 
         $res = wp_remote_get($url, [
             'timeout' => 5,

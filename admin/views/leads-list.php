@@ -12,6 +12,12 @@ $rows   = $result['rows'];
 $total  = $result['total'];
 $pages  = max( 1, (int) ceil( $total / ES_Leads::PER_PAGE ) );
 
+// Consent for everything on this page, in one query rather than one per row.
+// Shown in each row's detail panel — recording proof nobody can see isn't
+// proof, and the point is showing the wording someone agreed to at the time,
+// not the wording the form happens to carry today.
+$consents = ES_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( (array) $rows, 'id' ) ) );
+
 // Per-tab counts honor every active filter EXCEPT kind, so the badge
 // shows "if you flipped tabs, this is what you'd see".
 $counts = ES_Leads::counts_by_kind( $filters );
@@ -213,7 +219,9 @@ $status_labels = [
 				<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?><?php echo $row_title ? ' title="' . $row_title . '"' : ''; ?>>
 					<td>
 						<?php if ( $is_bot_row ) : ?><span class="es-bot-tag" aria-label="<?php esc_attr_e( 'Bot lead', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Caught by the hidden honeypot field — not sent to your CRM.', 'emblem-studio' ); ?>"><?php esc_html_e( 'BOT', 'emblem-studio' ); ?></span> <?php endif; ?>
-						<?php echo esc_html( ES_Leads::display_name( $r->extra_fields ) ); ?>
+						<button type="button" class="es-lead-toggle" aria-expanded="false" aria-controls="es-lead-detail-<?php echo (int) $r->id; ?>">
+							<?php echo esc_html( ES_Leads::display_name( $r->extra_fields ) ); ?>
+						</button>
 					</td>
 					<td><?php echo esc_html( $r->email ); ?></td>
 					<td class="es-leads-col-form">
@@ -253,6 +261,72 @@ $status_labels = [
 						<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_lead&id=' . (int) $r->id ), 'es_delete_lead_' . (int) $r->id ) ); ?>"
 						   onclick="return confirm('<?php esc_attr_e( 'Permanently delete this lead from Emblem Studio? (Contact in FunnelKit is not affected.)', 'emblem-studio' ); ?>');"
 						   style="color:var(--es-danger,#b32d2e);"><?php esc_html_e( 'Delete', 'emblem-studio' ); ?></a>
+					</td>
+				</tr>
+				<?php
+				// The full submission. Everything here is already loaded for the
+				// row above, so opening one costs no extra request — it just
+				// unhides. The list only ever showed a derived display name, so
+				// every answer beyond name/email was invisible in the admin.
+				$detail_extra = $r->extra_fields ? json_decode( $r->extra_fields, true ) : [];
+				$detail_extra = is_array( $detail_extra ) ? $detail_extra : [];
+				$detail_consent = $consents[ (int) $r->id ] ?? null;
+				?>
+				<tr id="es-lead-detail-<?php echo (int) $r->id; ?>" class="es-lead-detail" hidden>
+					<td colspan="6">
+						<div class="es-lead-detail-grid">
+							<div>
+								<h4><?php esc_html_e( 'Submitted fields', 'emblem-studio' ); ?></h4>
+								<?php if ( $detail_extra ) : ?>
+									<dl class="es-lead-fields">
+										<?php foreach ( $detail_extra as $key => $value ) : ?>
+											<dt><?php echo esc_html( ucwords( str_replace( [ '_', '-' ], ' ', (string) $key ) ) ); ?></dt>
+											<dd><?php echo esc_html( is_array( $value ) ? implode( ', ', array_map( 'strval', $value ) ) : (string) $value ); ?></dd>
+										<?php endforeach; ?>
+									</dl>
+								<?php else : ?>
+									<p class="es-lead-detail-none"><?php esc_html_e( 'Only an email address was captured.', 'emblem-studio' ); ?></p>
+								<?php endif; ?>
+							</div>
+
+							<div>
+								<h4><?php esc_html_e( 'Delivery', 'emblem-studio' ); ?></h4>
+								<dl class="es-lead-fields">
+									<dt><?php esc_html_e( 'FunnelKit', 'emblem-studio' ); ?></dt>
+									<dd>
+										<?php
+										if ( $r->funnelkit_pushed ) {
+											echo esc_html(
+												$r->funnelkit_contact_id
+													/* translators: %d: FunnelKit contact id. */
+													? sprintf( __( 'Synced (contact #%d)', 'emblem-studio' ), (int) $r->funnelkit_contact_id )
+													: __( 'Synced', 'emblem-studio' )
+											);
+										} else {
+											echo esc_html( $r->error ? $r->error : __( 'Pending', 'emblem-studio' ) );
+										}
+										?>
+									</dd>
+									<?php if ( ! empty( $r->ip ) ) : ?>
+										<dt><?php esc_html_e( 'IP', 'emblem-studio' ); ?></dt>
+										<dd><code><?php echo esc_html( (string) $r->ip ); ?></code></dd>
+									<?php endif; ?>
+								</dl>
+
+								<h4><?php esc_html_e( 'Consent', 'emblem-studio' ); ?></h4>
+								<?php if ( null === $detail_consent ) : ?>
+									<p class="es-lead-detail-none"><?php esc_html_e( 'This form had no consent checkbox, so there is nothing recorded. That is not the same as someone declining.', 'emblem-studio' ); ?></p>
+								<?php else : ?>
+									<p class="es-lead-consent-state <?php echo $detail_consent['agreed'] ? 'is-agreed' : 'is-declined'; ?>">
+										<?php echo esc_html( $detail_consent['agreed'] ? __( 'Agreed at the time of submitting', 'emblem-studio' ) : __( 'Not ticked', 'emblem-studio' ) ); ?>
+									</p>
+									<?php if ( '' !== $detail_consent['text'] ) : ?>
+										<blockquote class="es-lead-consent-text"><?php echo esc_html( $detail_consent['text'] ); ?></blockquote>
+									<?php endif; ?>
+									<p class="es-lead-detail-none"><?php esc_html_e( 'This is the exact wording shown when they submitted, kept unchanged even if the form was edited since.', 'emblem-studio' ); ?></p>
+								<?php endif; ?>
+							</div>
+						</div>
 					</td>
 				</tr>
 			<?php endforeach; ?>
