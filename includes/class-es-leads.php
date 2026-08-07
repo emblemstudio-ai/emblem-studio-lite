@@ -453,7 +453,11 @@ class ES_Leads {
 				$custom_cells[] = self::custom_field_display( $decoded[ $i ][ $key ] ?? '' );
 			}
 
-			$c = $consent[ (int) $r['id'] ] ?? null;
+			// A submission can carry several separate agreements. Joined rather
+			// than one column pair per consent field, which would make the header
+			// shift depending on which leads the filter happened to catch. Each
+			// entry names its checkbox so the two columns line up row by row.
+			$cs = $consent[ (int) $r['id'] ] ?? [];
 
 			$row = array_merge(
 				[ $r['id'], $r['created_at'], $r['form_name'], $r['form_slug'], $r['email'], $first, $last, $phone, $tags ],
@@ -462,8 +466,8 @@ class ES_Leads {
 					$r['funnelkit_pushed'],
 					$r['funnelkit_contact_id'],
 					$r['error'],
-					null === $c ? '' : ( $c['agreed'] ? 'yes' : 'no' ),
-					null === $c ? '' : $c['text'],
+					implode( '; ', array_map( static fn( $c ) => $c['field'] . ': ' . ( $c['agreed'] ? 'yes' : 'no' ), $cs ) ),
+					implode( ' | ', array_map( static fn( $c ) => $c['text'], array_filter( $cs, static fn( $c ) => '' !== $c['text'] ) ) ),
 				]
 			);
 			fputcsv( $out, array_map( [ self::class, 'neutralize_formula' ], $row ) );

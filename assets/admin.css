@@ -5423,3 +5423,11 @@
 	font-style: italic;
 	word-break: break-word;
 }
+
+/* The per-consent "View wording" link sits inline in its own line, so it
+   shouldn't take the bolder treatment the row-name toggle gets. */
+.es-consent-toggle {
+	margin-left: 6px;
+	font-size: 11px;
+	font-weight: 400 !important;
+}

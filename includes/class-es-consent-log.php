@@ -30,39 +30,59 @@ class ES_Consent_Log {
 	 *                                     checkbox is simply absent, per HTML form semantics)
 	 */
 	public static function record( int $form_id, string $form_html, int $lead_id, array $fields, ?int $post_id, ?string $variant_slot = null ): void {
-		$html    = self::rendered_html( $form_id, $form_html, $variant_slot );
-		$consent = self::extract_consent( $html );
-		if ( ! $consent ) {
+		$html     = self::rendered_html( $form_id, $form_html, $variant_slot );
+		$consents = self::extract_consents( $html );
+		if ( ! $consents ) {
 			return;
 		}
 
 		global $wpdb;
-		$hash = hash( 'sha256', $consent['text'] );
+		$texts_table   = ES_Install::table( 'consent_texts' );
+		$consent_table = ES_Install::table( 'lead_consents' );
+		// Best-effort convenience pointer only — form_revisions is pruned to the
+		// last 50 per form (ES_Form_Revisions::KEEP_PER_FORM), so this can go
+		// dangling. Never load-bearing; the hash is the durable proof. Resolved
+		// once for all of them.
+		$revision_id = self::latest_revision_id( $form_id );
+		$page_url    = $post_id ? (string) get_permalink( $post_id ) : null;
 
-		$texts_table = ES_Install::table( 'consent_texts' );
-		$exists      = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$texts_table} WHERE hash = %s", $hash ) );
-		if ( ! $exists ) {
-			$wpdb->insert( $texts_table, [
-				'hash'       => $hash,
-				'text'       => $consent['text'],
-				'created_at' => current_time( 'mysql' ),
+		foreach ( $consents as $consent ) {
+			$hash = hash( 'sha256', $consent['text'] );
+
+			$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$texts_table} WHERE hash = %s", $hash ) );
+			if ( ! $exists ) {
+				$wpdb->insert( $texts_table, [
+					'hash'       => $hash,
+					'text'       => $consent['text'],
+					'created_at' => current_time( 'mysql' ),
+				] );
+			}
+
+			// A replayed submission must never append a second row for the same
+			// agreement, nor overwrite the first — this table is evidence and is
+			// append-only. The unique index is (lead_id, field_name).
+			$already = $wpdb->get_var( $wpdb->prepare(
+				"SELECT id FROM {$consent_table} WHERE lead_id = %d AND field_name = %s",
+				$lead_id,
+				$consent['field']
+			) );
+			if ( $already ) {
+				continue;
+			}
+
+			$value   = $fields[ $consent['field'] ] ?? null;
+			$checked = $value !== null && $value !== '' && ! in_array( strtolower( (string) $value ), [ 'off', 'false' ], true );
+
+			$wpdb->insert( $consent_table, [
+				'lead_id'           => $lead_id,
+				'field_name'        => $consent['field'],
+				'consent_text_hash' => $hash,
+				'checkbox_state'    => $checked ? 1 : 0,
+				'page_url'          => $page_url,
+				'form_revision_id'  => $revision_id,
+				'created_at'        => current_time( 'mysql' ),
 			] );
 		}
-
-		$value   = $fields[ $consent['field'] ] ?? null;
-		$checked = $value !== null && $value !== '' && ! in_array( strtolower( (string) $value ), [ 'off', 'false' ], true );
-
-		$wpdb->insert( ES_Install::table( 'lead_consents' ), [
-			'lead_id'           => $lead_id,
-			'consent_text_hash' => $hash,
-			'checkbox_state'    => $checked ? 1 : 0,
-			'page_url'          => $post_id ? (string) get_permalink( $post_id ) : null,
-			// Best-effort convenience pointer only — form_revisions is pruned to
-			// the last 50 per form (ES_Form_Revisions::KEEP_PER_FORM), so this
-			// can go dangling. Never load-bearing; the hash above is the durable proof.
-			'form_revision_id' => self::latest_revision_id( $form_id ),
-			'created_at'       => current_time( 'mysql' ),
-		] );
 	}
 
 	/** The HTML actually served to this visitor: their A/B slot if one was live, else the form's own. */
@@ -92,15 +112,28 @@ class ES_Consent_Log {
 	}
 
 	/**
-	 * Find the consent checkbox and pull its field name plus the exact text
-	 * the visitor saw: the enclosing <label>'s text, with any link's href
-	 * appended so a changed policy-link target changes the hash too.
+	 * Every consent checkbox in the form — each one's field name plus the exact
+	 * text the visitor saw: the enclosing <label>'s text, with any link's href
+	 * appended so a changed policy target changes the hash too.
 	 *
-	 * @return array{field: string, text: string}|null
+	 * ALL of them, not the first: a visitor can agree to several separate things
+	 * in one submission (store my data / email me about the beta), and recording
+	 * only one misrepresents what they actually agreed to.
+	 *
+	 * The data-esf-consent marker is the ONLY thing that makes a checkbox a
+	 * consent. This used to also treat any required checkbox as one, which was
+	 * wrong in both directions: an optional "email me" IS an agreement and was
+	 * missed, while a required "I have read the instructions" is NOT one and was
+	 * recorded as if it were. Whether something is an agreement is the author's
+	 * call, so it belongs on the checkbox, not in a guess here.
+	 *
+	 * Same detection rule as the SaaS's ConsentLog — kept in sync deliberately.
+	 *
+	 * @return array<int, array{field: string, text: string}>
 	 */
-	private static function extract_consent( string $html ): ?array {
+	private static function extract_consents( string $html ): array {
 		if ( trim( $html ) === '' ) {
-			return null;
+			return [];
 		}
 
 		$prev = libxml_use_internal_errors( true );
@@ -109,17 +142,16 @@ class ES_Consent_Log {
 		libxml_clear_errors();
 		libxml_use_internal_errors( $prev );
 
+		$found = [];
+		$seen  = [];
+
 		foreach ( $dom->getElementsByTagName( 'input' ) as $input ) {
-			$type = strtolower( $input->getAttribute( 'type' ) );
 			$name = $input->getAttribute( 'name' );
-			if ( ! $name ) {
+			if ( ! $name || ! $input->hasAttribute( 'data-esf-consent' ) ) {
 				continue;
 			}
-
-			$is_required_checkbox = ( $type === 'checkbox' && $input->hasAttribute( 'required' ) );
-			$has_consent_marker   = $input->hasAttribute( 'data-esf-consent' );
-			if ( ! $is_required_checkbox && ! $has_consent_marker ) {
-				continue;
+			if ( isset( $seen[ $name ] ) ) {
+				continue; // one record per field name, matching the unique index
 			}
 
 			$label = self::closest_label( $input );
@@ -131,13 +163,52 @@ class ES_Consent_Log {
 				continue; // no wording to prove — skip rather than log an empty hash
 			}
 
-			return [
+			$seen[ $name ] = true;
+			$found[]       = [
 				'field' => $name,
 				'text'  => $text,
 			];
 		}
 
-		return null;
+		return $found;
+	}
+
+	/**
+	 * Required checkboxes in this form that are NOT marked as consents.
+	 *
+	 * The marker is now the only thing that records a consent, which is the
+	 * correct rule but a silent one: a form that relied on "required" simply
+	 * stops being logged, and nobody finds out until they need the evidence and
+	 * it isn't there.
+	 *
+	 * Not every required checkbox is a miss — "I have read the instructions" is
+	 * a legitimately unmarked required box — so this reports, it never assumes.
+	 *
+	 * @return array<int, string> field names
+	 */
+	public static function unmarked_required_checkboxes( string $html ): array {
+		if ( trim( $html ) === '' ) {
+			return [];
+		}
+
+		$prev = libxml_use_internal_errors( true );
+		$dom  = new DOMDocument();
+		$dom->loadHTML( '<?xml encoding="UTF-8"?><div>' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+
+		$names = [];
+		foreach ( $dom->getElementsByTagName( 'input' ) as $input ) {
+			$name = $input->getAttribute( 'name' );
+			if ( ! $name || strtolower( $input->getAttribute( 'type' ) ) !== 'checkbox' ) {
+				continue;
+			}
+			if ( $input->hasAttribute( 'required' ) && ! $input->hasAttribute( 'data-esf-consent' ) ) {
+				$names[ $name ] = true;
+			}
+		}
+
+		return array_keys( $names );
 	}
 
 	private static function closest_label( DOMElement $node ): ?DOMElement {
@@ -177,8 +248,11 @@ class ES_Consent_Log {
 	 * and is a different fact from someone declining. Callers must keep those
 	 * apart rather than defaulting a missing row to "no".
 	 *
+	 * Each lead maps to a LIST: a visitor can agree to several separate things
+	 * in one submission, and each is recorded against its own checkbox.
+	 *
 	 * @param array<int,int> $lead_ids
-	 * @return array<int, array{agreed: bool, text: string}>
+	 * @return array<int, array<int, array{field: string, agreed: bool, text: string}>>
 	 */
 	public static function for_leads( array $lead_ids ): array {
 		$lead_ids = array_values( array_unique( array_filter( array_map( 'intval', $lead_ids ) ) ) );
@@ -193,10 +267,11 @@ class ES_Consent_Log {
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT c.lead_id, c.checkbox_state, t.text
+				"SELECT c.lead_id, c.field_name, c.checkbox_state, t.text
 				 FROM {$consents} c
 				 LEFT JOIN {$texts} t ON t.hash = c.consent_text_hash
-				 WHERE c.lead_id IN ({$in})",
+				 WHERE c.lead_id IN ({$in})
+				 ORDER BY c.id",
 				...$lead_ids
 			),
 			ARRAY_A
@@ -204,7 +279,8 @@ class ES_Consent_Log {
 
 		$out = [];
 		foreach ( (array) $rows as $row ) {
-			$out[ (int) $row['lead_id'] ] = [
+			$out[ (int) $row['lead_id'] ][] = [
+				'field'  => (string) ( $row['field_name'] ?? '' ),
 				'agreed' => (bool) (int) $row['checkbox_state'],
 				'text'   => (string) ( $row['text'] ?? '' ),
 			];

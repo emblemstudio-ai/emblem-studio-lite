@@ -215,6 +215,7 @@ class ES_Install {
 		$lead_consents = "CREATE TABLE {$prefix}emblemstudio_lead_consents (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			lead_id BIGINT(20) UNSIGNED NOT NULL,
+			field_name VARCHAR(191) NOT NULL DEFAULT '',
 			consent_text_hash VARCHAR(64) NOT NULL,
 			checkbox_state TINYINT(1) NOT NULL,
 			page_url VARCHAR(255) NULL,
@@ -222,7 +223,7 @@ class ES_Install {
 			form_revision_id BIGINT(20) UNSIGNED NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY lead_id (lead_id),
+			UNIQUE KEY lead_field (lead_id, field_name),
 			KEY consent_text_hash (consent_text_hash)
 		) $charset_collate;";
 
@@ -849,6 +850,7 @@ class ES_Install {
 			dbDelta( "CREATE TABLE {$lead_consents} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				lead_id BIGINT(20) UNSIGNED NOT NULL,
+				field_name VARCHAR(191) NOT NULL DEFAULT '',
 				consent_text_hash VARCHAR(64) NOT NULL,
 				checkbox_state TINYINT(1) NOT NULL,
 				page_url VARCHAR(255) NULL,
@@ -856,10 +858,41 @@ class ES_Install {
 				form_revision_id BIGINT(20) UNSIGNED NULL,
 				created_at DATETIME NOT NULL,
 				PRIMARY KEY  (id),
-				UNIQUE KEY lead_id (lead_id),
+				UNIQUE KEY lead_field (lead_id, field_name),
 				KEY consent_text_hash (consent_text_hash)
 			) $charset_collate;" );
 			update_option( 'emblem_studio_db_version', '35' );
+		}
+
+		// v36 — one submission can carry several consents (SER-1140). A visitor
+		// can agree to separate things at once (store my data / email me about
+		// X); the unique index on lead_id made the second one impossible to
+		// store, and nothing recorded WHICH checkbox a row belonged to.
+		//
+		// dbDelta cannot change an existing unique index, so the swap is done by
+		// hand. Existing rows keep field_name = '' rather than being guessed at:
+		// each is a real agreement whose checkbox name simply wasn't captured at
+		// the time, and inventing one would be putting words into evidence.
+		if ( version_compare( $current, '36', '<' ) ) {
+			global $wpdb;
+			$lead_consents = self::table( 'lead_consents' );
+
+			$has_field = $wpdb->get_var( "SHOW COLUMNS FROM {$lead_consents} LIKE 'field_name'" );
+			if ( ! $has_field ) {
+				$wpdb->query( "ALTER TABLE {$lead_consents} ADD COLUMN field_name VARCHAR(191) NOT NULL DEFAULT '' AFTER lead_id" );
+			}
+
+			$has_old_index = $wpdb->get_var( "SHOW INDEX FROM {$lead_consents} WHERE Key_name = 'lead_id'" );
+			if ( $has_old_index ) {
+				$wpdb->query( "ALTER TABLE {$lead_consents} DROP INDEX lead_id" );
+			}
+
+			$has_new_index = $wpdb->get_var( "SHOW INDEX FROM {$lead_consents} WHERE Key_name = 'lead_field'" );
+			if ( ! $has_new_index ) {
+				$wpdb->query( "ALTER TABLE {$lead_consents} ADD UNIQUE KEY lead_field (lead_id, field_name)" );
+			}
+
+			update_option( 'emblem_studio_db_version', '36' );
 		}
 	}
 

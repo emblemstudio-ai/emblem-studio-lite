@@ -60,8 +60,11 @@ HTML
 - A form asset includes exactly one <input type="email" name="email"
   required>; a form-less announcement has no fields — skip it.
 - Pair each input with a <label for="..."> and an autocomplete value.
-- GDPR: a required checkbox — name="gdpr_consent", data-esf-consent —
-  with a link to your privacy policy.
+- Consent: mark EVERY checkbox that asks the visitor to agree to something
+  with data-esf-consent, inside a <label> carrying the exact wording (and a
+  link to the relevant policy). That marker is the only thing that records
+  the agreement — being "required" doesn't make a checkbox a consent, and a
+  consent needn't be required. Name it whatever fits; consent isn't only GDPR.
 - A submit <button type="submit"> (form assets only).
 - Thank-you state (optional, form assets only): one element marked
   data-esf-thankyou hidden — shown after a successful submit, with the
@@ -156,9 +159,15 @@ HTML — FIELDS
   asset has no fields — skip this.
 - Give every input a matching <label for="..."> and an "autocomplete"
   value (email, given-name, family-name, tel).
-- GDPR consent — include a required checkbox inside a <label>:
-  <input type="checkbox" name="gdpr_consent" required data-esf-consent>
-  with a link to your privacy policy.
+- Consent — mark every checkbox that asks the visitor to AGREE to something,
+  inside a <label> carrying the exact wording plus a link to the relevant
+  policy:
+  <input type="checkbox" name="marketing_consent" required data-esf-consent>
+  The data-esf-consent marker is the ONLY thing that records the agreement as
+  proof. "required" alone does not make a checkbox a consent, and a consent
+  does not have to be required. A form may ask for several separate
+  agreements — mark each one; each is recorded separately. The name is yours
+  to choose; consent is not only about GDPR.
 - Submit with <button type="submit">.
 
 HTML — THE THANK-YOU STATE (optional; form assets only)

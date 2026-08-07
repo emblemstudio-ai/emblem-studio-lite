@@ -270,7 +270,7 @@ $status_labels = [
 				// every answer beyond name/email was invisible in the admin.
 				$detail_extra = $r->extra_fields ? json_decode( $r->extra_fields, true ) : [];
 				$detail_extra = is_array( $detail_extra ) ? $detail_extra : [];
-				$detail_consent = $consents[ (int) $r->id ] ?? null;
+				$detail_consent = $consents[ (int) $r->id ] ?? [];
 				?>
 				<tr id="es-lead-detail-<?php echo (int) $r->id; ?>" class="es-lead-detail" hidden>
 					<td colspan="6">
@@ -314,15 +314,27 @@ $status_labels = [
 								</dl>
 
 								<h4><?php esc_html_e( 'Consent', 'emblem-studio' ); ?></h4>
-								<?php if ( null === $detail_consent ) : ?>
+								<?php if ( ! $detail_consent ) : ?>
 									<p class="es-lead-detail-none"><?php esc_html_e( 'This form had no consent checkbox, so there is nothing recorded. That is not the same as someone declining.', 'emblem-studio' ); ?></p>
 								<?php else : ?>
-									<p class="es-lead-consent-state <?php echo $detail_consent['agreed'] ? 'is-agreed' : 'is-declined'; ?>">
-										<?php echo esc_html( $detail_consent['agreed'] ? __( 'Agreed at the time of submitting', 'emblem-studio' ) : __( 'Not ticked', 'emblem-studio' ) ); ?>
-									</p>
-									<?php if ( '' !== $detail_consent['text'] ) : ?>
-										<blockquote class="es-lead-consent-text"><?php echo esc_html( $detail_consent['text'] ); ?></blockquote>
-									<?php endif; ?>
+									<?php
+									// One entry per thing agreed to — a submission can carry
+									// several. The wording opens on demand rather than sitting
+									// inline: with several consents the panel becomes
+									// unreadable, and the same wording repeats across leads.
+									foreach ( $detail_consent as $ci => $c ) :
+										?>
+										<p class="es-lead-consent-state <?php echo $c['agreed'] ? 'is-agreed' : 'is-declined'; ?>">
+											<?php echo esc_html( ucwords( str_replace( [ '_', '-' ], ' ', $c['field'] ) ) ); ?>:
+											<?php echo esc_html( $c['agreed'] ? __( 'agreed', 'emblem-studio' ) : __( 'not ticked', 'emblem-studio' ) ); ?>
+											<?php if ( '' !== $c['text'] ) : ?>
+												<button type="button" class="es-lead-toggle es-consent-toggle" aria-expanded="false" aria-controls="es-consent-<?php echo (int) $r->id; ?>-<?php echo (int) $ci; ?>"><?php esc_html_e( 'View wording', 'emblem-studio' ); ?></button>
+											<?php endif; ?>
+										</p>
+										<?php if ( '' !== $c['text'] ) : ?>
+											<blockquote id="es-consent-<?php echo (int) $r->id; ?>-<?php echo (int) $ci; ?>" class="es-lead-consent-text" hidden><?php echo esc_html( $c['text'] ); ?></blockquote>
+										<?php endif; ?>
+									<?php endforeach; ?>
 									<p class="es-lead-detail-none"><?php esc_html_e( 'This is the exact wording shown when they submitted, kept unchanged even if the form was edited since.', 'emblem-studio' ); ?></p>
 								<?php endif; ?>
 							</div>
