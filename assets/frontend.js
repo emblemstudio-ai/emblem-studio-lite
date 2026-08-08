@@ -35,22 +35,36 @@
 	// reset above them in the same rule.
 	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;isolation:isolate!important;}';
 
-	// The blinking text cursor follows the colour of the text beside it.
+	// Form fields keep the colours the ASSET chose, not the ones the visitor's
+	// browser decides on.
 	//
-	// A visitor whose OS/browser is in dark mode can get a WHITE caret painted
-	// into a white field, because the browser decides the control is dark even
-	// though the asset set its own light background. The field then looks
-	// broken: you type and nothing blinks. Deliberately NOT fixed by forcing
-	// `color-scheme: light`, which is what a hand-written asset tends to do —
-	// that would wreck a genuinely dark design (white text on black), where a
-	// light caret is the correct one. currentColor is right either way.
+	// A visitor whose OS/browser is in dark mode gets a WHITE caret painted into
+	// a white field: the browser auto-darkens the control even though the asset
+	// set its own light background, so you type and nothing blinks. It reads as
+	// a broken field, not a theming quirk.
 	//
-	// `:where()` so the whole thing carries ZERO specificity: it is a default,
-	// and any rule an author writes beats it without needing !important. The
-	// non-shadow copy is scoped to the host, since that CSS lands in the
+	// TWO declarations, and both are needed — an earlier attempt shipped only
+	// the second and did nothing:
+	//   - `color-scheme: light` is the actual fix. It tells the browser to stop
+	//     auto-darkening this control. Without it the browser overrides at paint
+	//     time and no caret-color you set matters.
+	//   - `caret-color: currentColor` is what makes it safe for a DARK asset
+	//     too. `color-scheme` only stops the browser interfering; the author's
+	//     own `color` still applies, so the caret tracks their real text colour.
+	//     White text on black gets a white caret, dark text a dark one. This is
+	//     why forcing light scheme is not the "assume everything is light"
+	//     mistake it looks like: it disables interference, it doesn't pick a
+	//     palette.
+	//
+	// An asset that genuinely wants the browser's dark rendering (rather than
+	// styling its own fields, which the authoring spec asks for) can still set
+	// `color-scheme: dark` — both rules carry ZERO specificity via `:where()`,
+	// so any author declaration beats them without needing !important.
+	//
+	// The non-shadow copy is scoped to the host, since that CSS lands in the
 	// theme's own document and must never touch the site's other inputs.
-	const CARET_CSS = ':where(input,textarea,select){caret-color:currentColor;}';
-	const CARET_CSS_SCOPED = ':where(.esf-host) :where(input,textarea,select){caret-color:currentColor;}';
+	const FIELD_CSS = ':where(input,textarea,select){color-scheme:light;caret-color:currentColor;}';
+	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea,select){color-scheme:light;caret-color:currentColor;}';
 
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
@@ -147,7 +161,7 @@
 			css = css.slice(m.index + m[0].length);
 		}
 		// Both defaults go BEFORE the asset's own CSS, so the author always wins.
-		return (withBoot ? BOOT_CSS + CARET_CSS : CARET_CSS_SCOPED) + css;
+		return (withBoot ? BOOT_CSS + FIELD_CSS : FIELD_CSS_SCOPED) + css;
 	}
 
 	// ============================================================
