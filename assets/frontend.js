@@ -62,7 +62,12 @@
 	// Zero specificity via `:where()`, so an asset can set its own `cursor` and
 	// win without !important. The non-shadow copy is scoped to the host, since
 	// that CSS lands in the theme's own document.
-	const IBEAM = "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cg%20stroke='%23fff'%20stroke-width='3.5'%3E%3Cline%20x1='5'%20y1='2'%20x2='11'%20y2='2'/%3E%3Cline%20x1='5'%20y1='14'%20x2='11'%20y2='14'/%3E%3Cline%20x1='8'%20y1='2'%20x2='8'%20y2='14'/%3E%3C/g%3E%3Cg%20stroke='%231d2327'%20stroke-width='1.5'%3E%3Cline%20x1='5'%20y1='2'%20x2='11'%20y2='2'/%3E%3Cline%20x1='5'%20y1='14'%20x2='11'%20y2='14'/%3E%3Cline%20x1='8'%20y1='2'%20x2='8'%20y2='14'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\") 8 8, text";
+	// Drawn slim on purpose: a 1px core with a soft 3px white halo at 85%
+	// opacity, serifs 4px wide, all on half-pixel coordinates so the strokes
+	// land on whole device pixels instead of straddling two and blurring. An
+	// earlier version used a 1.5px core inside a hard 3.5px halo, which on a
+	// 16px canvas reads as a fat cross rather than an I-beam.
+	const IBEAM = "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23fff'%20stroke-width='3'%20stroke-opacity='.85'%20d='M6.5%202.5h4M6.5%2013.5h4M8.5%202.5v11'/%3E%3Cpath%20stroke='%231d2327'%20stroke-width='1'%20d='M6.5%202.5h4M6.5%2013.5h4M8.5%202.5v11'/%3E%3C/g%3E%3C/svg%3E\") 8 8, text";
 	const FIELD_CSS = ':where(input,textarea){cursor:' + IBEAM + ';}';
 	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea){cursor:' + IBEAM + ';}';
 
