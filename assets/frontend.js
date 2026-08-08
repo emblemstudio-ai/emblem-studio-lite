@@ -35,30 +35,36 @@
 	// reset above them in the same rule.
 	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;isolation:isolate!important;}';
 
-	// Give form fields an EXPLICIT caret colour.
+	// Ship our own I-beam MOUSE POINTER over text fields.
 	//
-	// Chrome on Windows 11 draws the caret using the OS cursor theme, which
-	// defaults to white — so a white caret lands in a light field and you type
-	// with nothing blinking. It is NOT a dark-mode problem, which is what two
-	// earlier attempts here assumed; it bites on LIGHT backgrounds, which is
-	// exactly why "make the caret follow the text colour" changed nothing.
+	// This is the mouse pointer, NOT the blinking caret — a distinction that
+	// cost three wrong fixes here (caret-color: currentColor, then
+	// color-scheme: light, then an explicit caret colour). All three shipped,
+	// none did anything, because the caret was never the problem.
 	//
-	// Full write-up: the SaaS repo's docs/WINDOWS-CARET-QUIRK.md. Same quirk the
-	// admin already fixes in three places — see the
-	// CodeMirror rules in admin.css and inspector.css, which also ship a
-	// hand-drawn SVG I-beam because the mouse pointer disappears the same way,
-	// and the SaaS's own resources/css/app.css. Every one of those fixes works
-	// by forcing an explicit colour value. `currentColor` does not do it:
-	// Chrome treats it like the `auto` default and stays on the quirky path.
+	// Windows 11 ships a WHITE mouse cursor by default. Over a light form field
+	// the I-beam is white on white and simply disappears — the field looks dead
+	// until you click it. It happens on every site, on a machine in LIGHT theme
+	// throughout, which is what finally identified it, and it is why no colour
+	// property helped: the OS cursor theme wins unless the page supplies its
+	// own cursor image.
 	//
-	// Hence a real colour, via a variable so a dark-designed asset isn't stuck
-	// with it: set `--esf-caret` (or just `caret-color`) and yours wins. Zero
-	// specificity via `:where()`, so no !important needed to beat this.
+	// This plugin already fixes exactly this for its code editors, the same way
+	// — see admin.css and inspector.css. Full write-up in the SaaS repo's
+	// docs/WINDOWS-CARET-QUIRK.md.
 	//
-	// The non-shadow copy is scoped to the host, since that CSS lands in the
-	// theme's own document and must never touch the site's other inputs.
-	const FIELD_CSS = ':where(input,textarea,select){caret-color:var(--esf-caret,#1d2327);}';
-	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea,select){caret-color:var(--esf-caret,#1d2327);}';
+	// One deliberate difference from those: this I-beam is drawn dark over a
+	// thicker WHITE halo, so it stays visible on a dark-designed asset too. The
+	// admin's is a flat dark shape, fine on a permanently white editor but
+	// invisible on a black form. Falls back to `text` if a browser policy
+	// blocks data-URI cursors. Hotspot centred at 8,8.
+	//
+	// Zero specificity via `:where()`, so an asset can set its own `cursor` and
+	// win without !important. The non-shadow copy is scoped to the host, since
+	// that CSS lands in the theme's own document.
+	const IBEAM = "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cg%20stroke='%23fff'%20stroke-width='3.5'%3E%3Cline%20x1='5'%20y1='2'%20x2='11'%20y2='2'/%3E%3Cline%20x1='5'%20y1='14'%20x2='11'%20y2='14'/%3E%3Cline%20x1='8'%20y1='2'%20x2='8'%20y2='14'/%3E%3C/g%3E%3Cg%20stroke='%231d2327'%20stroke-width='1.5'%3E%3Cline%20x1='5'%20y1='2'%20x2='11'%20y2='2'/%3E%3Cline%20x1='5'%20y1='14'%20x2='11'%20y2='14'/%3E%3Cline%20x1='8'%20y1='2'%20x2='8'%20y2='14'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\") 8 8, text";
+	const FIELD_CSS = ':where(input,textarea){cursor:' + IBEAM + ';}';
+	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea){cursor:' + IBEAM + ';}';
 
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
