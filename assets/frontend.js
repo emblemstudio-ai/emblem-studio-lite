@@ -299,9 +299,12 @@
 		// reach the form and the form's CSS is part of the page. NOTE: this
 		// also means the form's CSS can leak — author's responsibility to
 		// scope it (e.g. wrap selectors with the form's container).
-		if (payload.css) {
+		// Unconditional: prepareCss also supplies the field defaults (see
+		// FIELD_CSS), so gating this on the asset having its own CSS meant an
+		// asset with none got no defaults either.
+		{
 			const style = document.createElement('style');
-			style.textContent = prepareCss(payload.css, false);
+			style.textContent = prepareCss(payload.css || '', false);
 			host.appendChild(style);
 		}
 		const tpl = document.createElement('template');
