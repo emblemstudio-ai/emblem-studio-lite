@@ -78,6 +78,8 @@ CSS
   it can't inherit from the theme — style everything it needs.
 - Keep colours, fonts and spacing in --esf-* variables at the top.
 - Single-class selectors. No IDs. No !important (except [hidden]).
+- Text fields get a dark cursor by default; on a DARK form set
+  .esf-form { --esf-caret: #fff; } or it vanishes.
 - Design ~480px wide; add a @media (max-width: 480px) block.
 
 NOTES
@@ -189,6 +191,10 @@ CSS
   so they are easy to retune in one place.
 - Use single-class selectors. No IDs. No !important (except the
   [hidden] rule above).
+- Text fields get a dark blinking cursor by default (Chrome on Windows 11
+  otherwise draws it white and invisible). On a DARK form, set a light one
+  or it disappears against your background:
+    .esf-form { --esf-caret: #fff; }
 - The shell supplies the popup backdrop, positioning and close button —
   never add your own overlay, modal wrapper or full-bleed background.
   Style the single .esf-form root directly: put its background, padding,

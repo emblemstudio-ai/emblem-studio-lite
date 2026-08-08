@@ -35,36 +35,30 @@
 	// reset above them in the same rule.
 	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;isolation:isolate!important;}';
 
-	// Form fields keep the colours the ASSET chose, not the ones the visitor's
-	// browser decides on.
+	// Give form fields an EXPLICIT caret colour.
 	//
-	// A visitor whose OS/browser is in dark mode gets a WHITE caret painted into
-	// a white field: the browser auto-darkens the control even though the asset
-	// set its own light background, so you type and nothing blinks. It reads as
-	// a broken field, not a theming quirk.
+	// Chrome on Windows 11 draws the caret using the OS cursor theme, which
+	// defaults to white — so a white caret lands in a light field and you type
+	// with nothing blinking. It is NOT a dark-mode problem, which is what two
+	// earlier attempts here assumed; it bites on LIGHT backgrounds, which is
+	// exactly why "make the caret follow the text colour" changed nothing.
 	//
-	// TWO declarations, and both are needed — an earlier attempt shipped only
-	// the second and did nothing:
-	//   - `color-scheme: light` is the actual fix. It tells the browser to stop
-	//     auto-darkening this control. Without it the browser overrides at paint
-	//     time and no caret-color you set matters.
-	//   - `caret-color: currentColor` is what makes it safe for a DARK asset
-	//     too. `color-scheme` only stops the browser interfering; the author's
-	//     own `color` still applies, so the caret tracks their real text colour.
-	//     White text on black gets a white caret, dark text a dark one. This is
-	//     why forcing light scheme is not the "assume everything is light"
-	//     mistake it looks like: it disables interference, it doesn't pick a
-	//     palette.
+	// Full write-up: the SaaS repo's docs/WINDOWS-CARET-QUIRK.md. Same quirk the
+	// admin already fixes in three places — see the
+	// CodeMirror rules in admin.css and inspector.css, which also ship a
+	// hand-drawn SVG I-beam because the mouse pointer disappears the same way,
+	// and the SaaS's own resources/css/app.css. Every one of those fixes works
+	// by forcing an explicit colour value. `currentColor` does not do it:
+	// Chrome treats it like the `auto` default and stays on the quirky path.
 	//
-	// An asset that genuinely wants the browser's dark rendering (rather than
-	// styling its own fields, which the authoring spec asks for) can still set
-	// `color-scheme: dark` — both rules carry ZERO specificity via `:where()`,
-	// so any author declaration beats them without needing !important.
+	// Hence a real colour, via a variable so a dark-designed asset isn't stuck
+	// with it: set `--esf-caret` (or just `caret-color`) and yours wins. Zero
+	// specificity via `:where()`, so no !important needed to beat this.
 	//
 	// The non-shadow copy is scoped to the host, since that CSS lands in the
 	// theme's own document and must never touch the site's other inputs.
-	const FIELD_CSS = ':where(input,textarea,select){color-scheme:light;caret-color:currentColor;}';
-	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea,select){color-scheme:light;caret-color:currentColor;}';
+	const FIELD_CSS = ':where(input,textarea,select){caret-color:var(--esf-caret,#1d2327);}';
+	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea,select){caret-color:var(--esf-caret,#1d2327);}';
 
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
