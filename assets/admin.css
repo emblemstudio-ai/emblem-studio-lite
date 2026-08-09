@@ -270,19 +270,35 @@
 .emblem-studio-wrap .CodeMirror-cursor {
 	border-left: 1.5px solid #1d2327 !important;
 }
-/* Chrome on Windows occasionally draws the I-beam mouse pointer as pure
-   white with no outline (Windows 11's white default cursor theme + a
-   Chrome rendering quirk we hit on drag handles in v0.48.x too). The
-   I-beam ends up invisible on the white editor background. Ship our own
-   SVG I-beam so the OS cursor theme can't make it disappear. Hotspot is
-   centered at 8,8 in a 16x16 viewBox. Fallback to 'text' if data-URI
-   cursors are blocked by a browser policy. */
+/* ── The text I-beam ──────────────────────────────────────────────────────
+   Windows 11 ships a WHITE mouse cursor by default, so the I-beam over a
+   light field is white on white and disappears — the field looks dead until
+   you click it. Supplying our own cursor image is the only thing that stops
+   the OS theme winning. Full write-up: the SaaS repo's
+   docs/WINDOWS-CARET-QUIRK.md.
+
+   Shape tuned by hand in the SaaS repo's public/cursor-lab.html. inspector.css
+   here, the SaaS's resources/css/app.css, and the IBEAM constant in both
+   repos' embed runtimes all carry an identical copy — change them together. */
+.emblem-studio-wrap {
+	--es-ibeam: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23ffffff'%20stroke-width='2'%20stroke-opacity='0.85'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3Cpath%20stroke='%2352585b'%20stroke-width='1'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3C/g%3E%3C/svg%3E") 8 8, text;
+}
+
+/* Every text-entry surface on our admin screens, not just the code editor.
+   Checkboxes, radios and buttons are excluded — not text, so they keep their
+   own pointer. */
+.emblem-studio-wrap input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=range]):not([type=image]),
+.emblem-studio-wrap textarea,
+.emblem-studio-wrap [contenteditable] {
+	cursor: var(--es-ibeam);
+}
+
 .emblem-studio-wrap .CodeMirror,
 .emblem-studio-wrap .CodeMirror-scroll,
 .emblem-studio-wrap .CodeMirror-lines,
 .emblem-studio-wrap .CodeMirror-line,
 .emblem-studio-wrap .CodeMirror-lines pre {
-	cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cline x1='5' y1='2' x2='11' y2='2' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='5' y1='14' x2='11' y2='14' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='8' y1='2' x2='8' y2='14' stroke='%231d2327' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 8 8, text;
+	cursor: var(--es-ibeam);
 }
 .emblem-studio-wrap .es-form-editor textarea.code { font-family: Menlo, Consolas, monospace; }
 .emblem-studio-wrap .es-success-field { display: none; }

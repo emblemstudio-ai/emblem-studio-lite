@@ -67,9 +67,16 @@
 	// land on whole device pixels instead of straddling two and blurring. An
 	// earlier version used a 1.5px core inside a hard 3.5px halo, which on a
 	// 16px canvas reads as a fat cross rather than an I-beam.
-	const IBEAM = "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23fff'%20stroke-width='3'%20stroke-opacity='.85'%20d='M6.5%202.5h4M6.5%2013.5h4M8.5%202.5v11'/%3E%3Cpath%20stroke='%231d2327'%20stroke-width='1'%20d='M6.5%202.5h4M6.5%2013.5h4M8.5%202.5v11'/%3E%3C/g%3E%3C/svg%3E\") 8 8, text";
-	const FIELD_CSS = ':where(input,textarea){cursor:' + IBEAM + ';}';
-	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(input,textarea){cursor:' + IBEAM + ';}';
+	// Shape tuned by hand in the SaaS repo's public/cursor-lab.html — keep the
+	// two repos and the admin stylesheets identical when it changes.
+	const IBEAM = "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23ffffff'%20stroke-width='2'%20stroke-opacity='0.85'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3Cpath%20stroke='%2352585b'%20stroke-width='1'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3C/g%3E%3C/svg%3E\") 8 8, text";
+	// Text-entry surfaces only. Checkboxes, radios and buttons are not text and
+	// must keep their own pointer. Scoped deliberately narrowly here: this CSS
+	// can land in the THEME's document, so it must never restyle the cursor
+	// anywhere but inside our own asset.
+	const TEXTY = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=range]):not([type=image]),textarea,[contenteditable]';
+	const FIELD_CSS = ':where(' + TEXTY + '){cursor:' + IBEAM + ';}';
+	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
