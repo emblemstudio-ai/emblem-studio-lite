@@ -617,9 +617,17 @@ class ES_Ajax {
 	 * A/B slot ('A'/'B') the visitor is bucketed into for this form, or '' when
 	 * no test runs. A/B is account-gated, so the Lite build (no ES_AB) has no
 	 * variant — always ''.
+	 *
+	 * The cast is load-bearing: ES_AB::slot_from_cookie() is `?string` and
+	 * returns NULL for the common case — a visitor with no esf_ab_<id> cookie,
+	 * which is EVERY visitor to a form that has no running two-variant test.
+	 * Returning that null straight out of a `: string` method is a TypeError,
+	 * and this method is called unconditionally by page_view, view, click and
+	 * submit, so the fatal took the whole beacon (and the submit response) with
+	 * it. Covered by tests/unit/AjaxAbSlotTest.php.
 	 */
 	private function ab_slot( int $form_id ): string {
-		return class_exists( 'ES_AB' ) ? ES_AB::slot_from_cookie( $form_id ) : '';
+		return class_exists( 'ES_AB' ) ? (string) ES_AB::slot_from_cookie( $form_id ) : '';
 	}
 
 	/**
