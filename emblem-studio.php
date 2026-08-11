@@ -1,8 +1,8 @@
-﻿<?php
+<?php
 /**
  * Plugin Name:       Emblem Studio Lite
- * Description:       On-site forms, popups and ribbons that convert â€” hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.3.11-beta
+ * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
+ * Version:           1.3.12-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.3.11-beta' );
+define( 'EMBLEM_STUDIO_VERSION', '1.3.12-beta' );
 define( 'EMBLEM_STUDIO_DB_VERSION', '36' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
@@ -36,11 +36,11 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-repo.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-ajax.php';
 // Revisions: loaded in EVERY edition. Lite RECORDS revisions (they quietly
 // accumulate in the DB, ready the moment a free account is connected) but gates
-// the VIEW â€” the editor shows a locked Revisions tab with a connect upsell. The
+// the VIEW — the editor shows a locked Revisions tab with a connect upsell. The
 // viewing/restore admin handlers stay behind the 'revisions' capability.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-revisions.php';
 // Consent proof (SER-853): loaded in EVERY edition, same reasoning as
-// revisions above â€” this is compliance infrastructure, not a paid feature.
+// revisions above — this is compliance infrastructure, not a paid feature.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-consent-log.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-templates.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-event-recorder.php';
@@ -83,7 +83,7 @@ if ( ES_Caps::has( 'linked_forms' ) ) {
 if ( ES_Caps::has( 'auto_shells' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-auto-shells.php';
 }
-// Design System (Pro/full only) â€” shared per-install CSS every form inherits.
+// Design System (Pro/full only) — shared per-install CSS every form inherits.
 // Lite omits these files; class_exists() guards at the render call sites keep
 // the core safe when they're absent.
 if ( ES_Caps::has( 'design_system' ) ) {
@@ -91,7 +91,7 @@ if ( ES_Caps::has( 'design_system' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-design-system.php';
 }
 
-// Admin-only classes â€” skip the parse + load cost on front-end page
+// Admin-only classes — skip the parse + load cost on front-end page
 // views. is_admin() is true for wp-admin, admin-ajax and admin-post,
 // which covers everywhere ES_Admin's handlers actually run. ES_Admin
 // (the plugin's largest file) is never touched by the front end, so a
@@ -105,6 +105,6 @@ register_activation_hook( __FILE__, [ 'ES_Install', 'activate' ] );
 
 add_action( 'plugins_loaded', [ 'ES_Install', 'maybe_migrate' ], 5 );
 // Wrapped in a closure so nothing is returned to the action dispatcher
-// â€” ES_Plugin::instance() hands back the singleton, which an action
+// — ES_Plugin::instance() hands back the singleton, which an action
 // callback shouldn't do.
 add_action( 'plugins_loaded', static function () { ES_Plugin::instance(); } );
