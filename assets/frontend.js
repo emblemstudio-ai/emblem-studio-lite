@@ -78,6 +78,15 @@
 	const FIELD_CSS = ':where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 
+	// How long the submit button stays visibly busy before the thank-you takes
+	// over. This is NOT a network wait — the request is already in flight — it is
+	// a deliberate beat, because a state change on the same frame as the click
+	// reads as a glitch rather than a response: the form vanishes and nothing
+	// appears to have happened. ~400ms is long enough to register as "working"
+	// and short enough that nobody is waiting. One number, tune it here; it is
+	// used by the live path and the editor preview alike.
+	const SUBMIT_BEAT_MS = 400;
+
 	// Built-in busy state for the submit button, active while a submission is in
 	// flight (`.esf-submitting` lands on the <form>). The class is an authoring
 	// hook, but an asset that doesn't style it must still LOOK like it is working
@@ -831,25 +840,34 @@
 
 	async function handleSubmit(host, shadow, form, e) {
 		e.preventDefault();
+		// Already in flight — ignore. Cleared only when a submission FAILS, so a
+		// successful one can never be sent twice. Checked before the preview
+		// branch too, so a double-click in the editor behaves like the real thing.
+		if (form._esBusy) return;
+
 		// In preview mode, simulate the success state visually and DON'T POST —
 		// unless the "Submit for real" preview toggle is on, in which case we fall
 		// through to the real submission path (creates a lead, pushes to the CRM).
+		// The same busy beat as live, so what the author feels here is what a
+		// visitor gets. Without it the preview is instant in a way the real thing
+		// never is, and the author tunes their copy against a lie.
 		if (window.EmblemStudio && window.EmblemStudio.preview && !window.EmblemStudio.previewSend) {
 			const mode = host.getAttribute('data-esf-success-mode') || 'inline_state';
-			if (mode === 'redirect') {
-				alert('(Preview) Would redirect to the configured URL.');
-			} else if (mode === 'custom_message') {
-				showCustomMessage(shadow, '<em>(Preview)</em> Your custom success message would show here.');
-			} else {
-				showInlineThankYou(shadow);
-			}
+			setSubmittingState(form, true);
+			setTimeout(function () {
+				setSubmittingState(form, false);
+				if (mode === 'redirect') {
+					alert('(Preview) Would redirect to the configured URL.');
+				} else if (mode === 'custom_message') {
+					showCustomMessage(shadow, '<em>(Preview)</em> Your custom success message would show here.');
+				} else {
+					showInlineThankYou(shadow);
+				}
+			}, SUBMIT_BEAT_MS);
 			return;
 		}
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
-		// Already in flight — ignore. Cleared only when a submission FAILS, so a
-		// successful one can never be sent twice.
-		if (form._esBusy) return;
 
 		setSubmittingState(form, true);
 
@@ -869,10 +887,14 @@
 		// re-checks the capability before honoring it).
 		if (window.EmblemStudio && window.EmblemStudio.preview) data.append('es_preview', '1');
 
-		// OPTIMISTIC THANK-YOU. The visitor sees it the moment they submit rather
-		// than a round trip later, which is the whole point — by the time anyone
-		// reads it the lead has landed anyway. Everything the FormData needs has
-		// already been read out of the DOM above, so hiding the form here is safe.
+		// OPTIMISTIC THANK-YOU, after a short deliberate beat. The reveal is NOT
+		// waiting on the network — the request is already on its way — but it does
+		// not happen on the same frame as the click either. A state change under
+		// ~200ms reads as a glitch rather than a response: the form simply vanishes
+		// and nothing appears to have been processed. So the button holds its busy
+		// state for SUBMIT_BEAT_MS and the thank-you takes over after it, giving the
+		// sequence people expect (clicked, working, done) at a pace that never
+		// varies with the connection.
 		//
 		// Only for `inline_state`: the other two modes need something the browser
 		// doesn't have yet — the redirect URL, or the custom message text — both of
@@ -880,11 +902,26 @@
 		// thank-you element, otherwise the "reveal" is just the form vanishing with
 		// nothing in its place.
 		//
-		// If the POST then fails we undo it and show the error, so a lost lead is
-		// still reported rather than being papered over by a thank-you.
+		// If the POST fails we cancel or undo the reveal and show the error, so a
+		// lost lead is still reported rather than papered over by a thank-you.
 		const successMode = host.getAttribute('data-esf-success-mode') || 'inline_state';
 		const optimistic = successMode === 'inline_state' && hasInlineThankYou(shadow);
-		if (optimistic) showInlineThankYou(shadow);
+		let revealed = false;
+		let revealTimer = null;
+		if (optimistic) {
+			revealTimer = setTimeout(function () {
+				revealTimer = null;
+				revealed = true;
+				showInlineThankYou(shadow);
+			}, SUBMIT_BEAT_MS);
+		}
+		// Undo whichever stage the reveal reached: still pending (cancel the timer,
+		// so a fast failure never flashes a thank-you it already knows is wrong), or
+		// already on screen (put the form back).
+		const abandonReveal = function () {
+			if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
+			if (revealed) { undoInlineThankYou(shadow); revealed = false; }
+		};
 
 		// Silently enrich with IP-derived country/state/city/timezone, but only
 		// for keys not already present (a visible input always wins). This step
@@ -896,7 +933,7 @@
 			.then(({ ok, json }) => {
 				if (!ok || !json || !json.success) {
 					const msg = (json && json.data && json.data.message) || 'Something went wrong. Please try again.';
-					if (optimistic) undoInlineThankYou(shadow);
+					abandonReveal();
 					showInlineError(form, msg);
 					setSubmittingState(form, false);
 					return;
@@ -914,13 +951,14 @@
 					showCustomMessage(shadow, d.success_message);
 					return;
 				}
-				// Already on screen when we showed it optimistically — showing it
+				// When the reveal is optimistic it is already on screen, or is about
+				// to be by its own timer — either way leave it alone. Showing it
 				// again would re-snapshot the (already mutated) DOM as the undo
-				// baseline, so don't.
+				// baseline, and firing early would defeat the beat.
 				if (!optimistic) showInlineThankYou(shadow);
 			})
 			.catch(() => {
-				if (optimistic) undoInlineThankYou(shadow);
+				abandonReveal();
 				showInlineError(form, 'Network error. Please try again.');
 				setSubmittingState(form, false);
 			});
