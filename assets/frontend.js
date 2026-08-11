@@ -78,6 +78,28 @@
 	const FIELD_CSS = ':where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 
+	// Built-in busy state for the submit button, active while a submission is in
+	// flight (`.esf-submitting` lands on the <form>). The class is an authoring
+	// hook, but an asset that doesn't style it must still LOOK like it is working
+	// — otherwise a slow connection reads as a dead button and gets clicked again.
+	// `:where()` holds specificity at zero, so any author rule beats all of this.
+	// The spinner is a ::after, so it reaches <button type=submit> but not
+	// <input type=submit>, which can't carry pseudo-elements; the cursor and the
+	// dimming still apply to both.
+	function busyCss(scoped) {
+		const p = scoped ? ':where(.esf-host) ' : '';
+		return '@keyframes es-btn-spin{to{transform:rotate(360deg)}}'
+			+ p + ':where(.esf-submitting [type="submit"]){cursor:progress;opacity:.72;}'
+			+ p + ':where(.esf-submitting button[type="submit"])::after{content:"";display:inline-block;'
+			+ 'width:.85em;height:.85em;margin-inline-start:.55em;vertical-align:-.12em;'
+			+ 'border:2px solid currentColor;border-top-color:transparent;border-radius:50%;'
+			+ 'animation:es-btn-spin .6s linear infinite;}'
+			// Slowed rather than stopped: a frozen ring reads as broken, and this
+			// is feedback the visitor needs, not decoration.
+			+ '@media (prefers-reduced-motion:reduce){' + p
+			+ ':where(.esf-submitting button[type="submit"])::after{animation-duration:2.4s;}}';
+	}
+
 	// A leading @import is only valid as the FIRST rule, but a valid @import is
 	// ALSO render-blocking — the browser holds back the whole stylesheet until
 	// the import loads, which on a slow/blocked font host leaves the asset
@@ -173,7 +195,7 @@
 			css = css.slice(m.index + m[0].length);
 		}
 		// Both defaults go BEFORE the asset's own CSS, so the author always wins.
-		return (withBoot ? BOOT_CSS + FIELD_CSS : FIELD_CSS_SCOPED) + css;
+		return (withBoot ? BOOT_CSS + FIELD_CSS : FIELD_CSS_SCOPED) + busyCss(!withBoot) + css;
 	}
 
 	// ============================================================
@@ -716,33 +738,64 @@
 		(form.parentNode || form).insertBefore(wrap, form.nextSibling);
 	}
 
+	function hasInlineThankYou(shadow) {
+		return !!shadow.querySelector('[data-esf-thankyou], [data-esf-success], [data-osf-thankyou], [data-osf-success]');
+	}
+
+	// Every mutation is snapshotted onto `shadow._esThankYouUndo` first, so an
+	// OPTIMISTIC reveal (shown before the server has answered) can be rolled back
+	// if the submission turns out to have failed. Add a mutation here and you must
+	// snapshot it, or the undo silently leaves it applied.
 	function showInlineThankYou(shadow) {
 		// Includes the legacy `data-osf-*` markers from pre-rename assets.
 		const el = shadow.querySelector('[data-esf-thankyou], [data-esf-success], [data-osf-thankyou], [data-osf-success]');
 		const form = shadow.querySelector('form');
+		const undo = [];
+		const snap = function (n) {
+			undo.push({ n: n, hidden: n.hidden, attr: n.hasAttribute('hidden'), display: n.style ? n.style.display : '' });
+		};
 		if (el) {
+			snap(el);
 			el.hidden = false;
 			el.removeAttribute('hidden');
 			el.style.display = '';
 		}
-		if (!form) return;
+		if (!form) { shadow._esThankYouUndo = undo; return; }
 		if (el && form.contains(el)) {
 			// The thank-you lives INSIDE the form (the common authored pattern, e.g.
 			// the starter markup). Hiding the whole form would hide it too — instead
 			// hide the form's other top-level branches and keep the chain down to the
 			// thank-you visible.
 			Array.prototype.forEach.call(form.children, function (child) {
-				if (!child.contains(el)) child.style.display = 'none';
+				if (!child.contains(el)) { snap(child); child.style.display = 'none'; }
 			});
 			let n = el;
 			while (n && n !== form) {
+				snap(n);
 				n.hidden = false;
 				if (n.style && n.style.display === 'none') n.style.display = '';
 				n = n.parentElement;
 			}
 		} else {
+			snap(form);
 			form.style.display = 'none';
 		}
+		shadow._esThankYouUndo = undo;
+	}
+
+	// Put the form back after an optimistic reveal that the server then rejected.
+	// Replays the snapshots in reverse, so a node touched twice lands on the value
+	// it had before the FIRST mutation.
+	function undoInlineThankYou(shadow) {
+		const undo = shadow._esThankYouUndo;
+		if (!undo) return;
+		for (let i = undo.length - 1; i >= 0; i--) {
+			const r = undo[i];
+			if (r.attr) r.n.setAttribute('hidden', ''); else r.n.removeAttribute('hidden');
+			r.n.hidden = r.hidden;
+			if (r.n.style) r.n.style.display = r.display;
+		}
+		shadow._esThankYouUndo = null;
 	}
 
 	function showCustomMessage(shadow, message) {
@@ -769,6 +822,11 @@
 		const btn = form.querySelector('button[type="submit"], input[type="submit"]');
 		if (btn) btn.disabled = isSubmitting;
 		form.classList.toggle('esf-submitting', isSubmitting);
+		// The real re-entry guard. Disabling the button is not enough on its own:
+		// pressing Enter in a text field still fires submit in several browsers
+		// even when the submit button is disabled, and an asset may have no submit
+		// button we can find. handleSubmit checks this flag before doing anything.
+		form._esBusy = isSubmitting;
 	}
 
 	async function handleSubmit(host, shadow, form, e) {
@@ -789,6 +847,9 @@
 		}
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
+		// Already in flight — ignore. Cleared only when a submission FAILS, so a
+		// successful one can never be sent twice.
+		if (form._esBusy) return;
 
 		setSubmittingState(form, true);
 
@@ -808,6 +869,23 @@
 		// re-checks the capability before honoring it).
 		if (window.EmblemStudio && window.EmblemStudio.preview) data.append('es_preview', '1');
 
+		// OPTIMISTIC THANK-YOU. The visitor sees it the moment they submit rather
+		// than a round trip later, which is the whole point — by the time anyone
+		// reads it the lead has landed anyway. Everything the FormData needs has
+		// already been read out of the DOM above, so hiding the form here is safe.
+		//
+		// Only for `inline_state`: the other two modes need something the browser
+		// doesn't have yet — the redirect URL, or the custom message text — both of
+		// which come back with the response. And only when the asset actually has a
+		// thank-you element, otherwise the "reveal" is just the form vanishing with
+		// nothing in its place.
+		//
+		// If the POST then fails we undo it and show the error, so a lost lead is
+		// still reported rather than being papered over by a thank-you.
+		const successMode = host.getAttribute('data-esf-success-mode') || 'inline_state';
+		const optimistic = successMode === 'inline_state' && hasInlineThankYou(shadow);
+		if (optimistic) showInlineThankYou(shadow);
+
 		// Silently enrich with IP-derived country/state/city/timezone, but only
 		// for keys not already present (a visible input always wins). This step
 		// is best-effort — any error here MUST NOT block submission.
@@ -818,6 +896,7 @@
 			.then(({ ok, json }) => {
 				if (!ok || !json || !json.success) {
 					const msg = (json && json.data && json.data.message) || 'Something went wrong. Please try again.';
+					if (optimistic) undoInlineThankYou(shadow);
 					showInlineError(form, msg);
 					setSubmittingState(form, false);
 					return;
@@ -835,9 +914,13 @@
 					showCustomMessage(shadow, d.success_message);
 					return;
 				}
-				showInlineThankYou(shadow);
+				// Already on screen when we showed it optimistically — showing it
+				// again would re-snapshot the (already mutated) DOM as the undo
+				// baseline, so don't.
+				if (!optimistic) showInlineThankYou(shadow);
 			})
 			.catch(() => {
+				if (optimistic) undoInlineThankYou(shadow);
 				showInlineError(form, 'Network error. Please try again.');
 				setSubmittingState(form, false);
 			});

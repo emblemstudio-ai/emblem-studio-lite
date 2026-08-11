@@ -69,7 +69,9 @@ HTML
 - Thank-you state (optional, form assets only): one element marked
   data-esf-thankyou hidden — shown after a successful submit, with the
   form hidden. Optional: the asset's success behaviour can instead show a
-  custom message or redirect.
+  custom message or redirect. It appears the instant someone submits, not
+  when the server answers, so write it as a self-contained message. If the
+  submission fails the form comes back with the error.
 - No honeypot needed; one is added automatically.
 
 CSS
@@ -80,6 +82,9 @@ CSS
 - Single-class selectors. No IDs. No !important (except [hidden]).
 - Text fields get a supplied I-beam mouse pointer (Windows 11's white default
   cursor is invisible over a light field). Override with `cursor:` if needed.
+- While a submit is in flight the form carries .esf-submitting and the button
+  is disabled. A dim + spinner busy state comes free; style that class to
+  replace it.
 - Design ~480px wide; add a @media (max-width: 480px) block.
 
 NOTES
@@ -179,6 +184,15 @@ HTML — THE THANK-YOU STATE (optional; form assets only)
   <div class="esf-success" data-esf-thankyou hidden> ... </div>
   It is NOT mandatory: the asset's success behaviour can instead show a
   custom message or redirect. A form-less announcement asset omits it.
+- It appears the INSTANT the visitor submits, not when the server answers.
+  The submission almost always succeeds, and making someone watch a spinner
+  to be told "thanks" is the wrong trade. If it does fail, the form comes
+  back and the error shows. Write it as a self-contained message: nothing in
+  there can depend on a server reply, because it is on screen before there
+  is one.
+- Only for the default `inline_state` behaviour. Custom-message and redirect
+  each need something that arrives WITH the reply (the text, the URL), so
+  those still wait — one more reason to prefer a thank-you element.
 
 CSS
 - The FIRST CSS rule must be:  [hidden] { display: none !important; }
@@ -194,6 +208,11 @@ CSS
 - Text fields get a supplied I-beam MOUSE POINTER, because Windows 11's white
   default cursor is invisible over a light field. It's drawn dark with a white
   halo so it works on any background. Override with `cursor:` if you must.
+- While a submission is in flight the <form> carries  .esf-submitting , and the
+  submit button is disabled so it cannot be sent twice. You get a busy state for
+  free (dimmed button, progress cursor, a small spinner after the label); style
+  `.esf-submitting` yourself to replace it — your rules always win. Mostly this
+  shows on the slow submissions, since a thank-you appears immediately.
 - The shell supplies the popup backdrop, positioning and close button —
   never add your own overlay, modal wrapper or full-bleed background.
   Style the single .esf-form root directly: put its background, padding,
