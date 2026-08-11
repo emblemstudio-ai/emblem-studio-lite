@@ -82,10 +82,16 @@
 	// over. This is NOT a network wait — the request is already in flight — it is
 	// a deliberate beat, because a state change on the same frame as the click
 	// reads as a glitch rather than a response: the form vanishes and nothing
-	// appears to have happened. ~400ms is long enough to register as "working"
-	// and short enough that nobody is waiting. One number, tune it here; it is
-	// used by the live path and the editor preview alike.
-	const SUBMIT_BEAT_MS = 400;
+	// appears to have happened.
+	//
+	// One second, set by feel on the real form. 400ms registered as a change but
+	// still went past too quickly to read as work being done. A second is at the
+	// top of the usable range: long enough to be believed, short enough that
+	// nobody starts wondering. Push it much past this and it stops being feedback
+	// and becomes a wait — which is the thing we removed in the first place.
+	//
+	// One number, tune it here; the live path and the editor preview share it.
+	const SUBMIT_BEAT_MS = 1000;
 
 	// Built-in busy state for the submit button, active while a submission is in
 	// flight (`.esf-submitting` lands on the <form>). The class is an authoring
