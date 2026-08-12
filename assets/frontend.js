@@ -721,10 +721,22 @@
 		obs.observe(host);
 	}
 
+	// The trap is NOT ASSOCIATED WITH THE FORM AT ALL. No `form` attribute, no
+	// place in the form's subtree, so it does not appear in form.elements.
+	//
+	// That is the whole point, and the previous attempt missed it. Moving the
+	// field to a sibling and tying it back with `form="…"` reads like taking it
+	// out of the form, but the attribute puts it straight back into the form's
+	// own list of controls — which is the list a browser autofills from, not the
+	// DOM subtree. So the field went on being cross-filled for real visitors, and
+	// real people went on being filed as bots.
+	//
+	// handleSubmit reads the value off `form._esHoneypot` and appends it by hand,
+	// which we can do because we build the submission ourselves and never let the
+	// browser serialise the form. Nothing is lost by cutting the association.
 	function injectHoneypot(form) {
 		if (form._esHoneypotInjected) return;
 		form._esHoneypotInjected = true;
-		if (!form.id) form.id = 'esf-hp-' + Math.random().toString(36).slice(2, 10);
 		const wrap = document.createElement('div');
 		wrap.style.cssText = 'position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;';
 		wrap.setAttribute('aria-hidden', 'true');
@@ -733,23 +745,13 @@
 		input.name = 'esf_hp';
 		input.tabIndex = -1;
 		input.autocomplete = 'off';
-		input.setAttribute('form', form.id);
 		wrap.appendChild(input);
-		// The moment the form appeared, so the server can tell a bot's
-		// near-instant fill-and-submit apart from a human's — even one whose
-		// browser autofill cross-filled the honeypot above.
-		const ts = document.createElement('input');
-		ts.type = 'hidden';
-		ts.name = 'es_ts';
-		ts.value = String(Date.now());
-		ts.setAttribute('form', form.id);
-		wrap.appendChild(ts);
-		// A SIBLING of the form, not a descendant — tied to it only via the
-		// `form` attribute (still included in FormData/submission normally).
-		// Browsers sweep autofill suggestions into fields *inside* a form's
-		// own subtree; keeping the honeypot out of that subtree stops an
-		// accepted address/profile suggestion from ever reaching it and
-		// wrongly flagging a real submission as a bot.
+		form._esHoneypot = input;
+		// The moment the form appeared. handleSubmit subtracts it from Date.now()
+		// and sends the GAP, so both readings come from this device's clock and a
+		// phone running minutes fast cannot produce a negative gap and get a real
+		// person filed as a bot.
+		form._esReadyAt = Date.now();
 		(form.parentNode || form).insertBefore(wrap, form.nextSibling);
 	}
 
@@ -880,6 +882,17 @@
 		const data = new FormData(form);
 		data.append('action', 'es_submit');
 		data.append('form_id', formId);
+
+		// The trap and its timing, appended by hand — they are deliberately not
+		// form-associated (see injectHoneypot), so FormData above cannot see them.
+		if (form._esHoneypot) data.append('esf_hp', form._esHoneypot.value);
+		if (form._esReadyAt) {
+			// How long the visitor actually took, measured end to end on THIS
+			// clock. The server prefers it over the raw es_ts timestamp precisely
+			// because it survives that clock disagreeing with the server's.
+			data.append('es_el', String(Date.now() - form._esReadyAt));
+			data.append('es_ts', String(form._esReadyAt));
+		}
 		data.append('post_id', postId);
 		data.append('vid', esVisitorId());
 

@@ -282,11 +282,20 @@ class ES_Reports {
 			$params[] = self::pad_dt( $to, 'end' );
 		}
 
+		// Split per variant alongside the total. Every event already carries its
+		// slot, so this costs one more pass over rows we are reading anyway, and
+		// it answers the question the blended table could not: is the close
+		// button doing the work on one side and the CTA on the other?
+		//
+		// `clicks` stays the TOTAL, not A + B. Events recorded before a test ever
+		// ran have no slot, so the two columns can legitimately sum to less.
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT
 				COALESCE(NULLIF(click_target,''), '__untagged__') AS target,
 				type AS shell,
 				COUNT(*) AS clicks,
+				COALESCE(SUM(CASE WHEN variant = 'A' THEN 1 ELSE 0 END), 0) AS clicks_a,
+				COALESCE(SUM(CASE WHEN variant = 'B' THEN 1 ELSE 0 END), 0) AS clicks_b,
 				MAX(created_at) AS last_at
 			FROM $events
 			$where
@@ -298,10 +307,12 @@ class ES_Reports {
 		$out = [];
 		foreach ( (array) $rows as $r ) {
 			$out[] = [
-				'target'  => (string) $r->target,
-				'shell'   => (string) $r->shell,
-				'clicks'  => (int) $r->clicks,
-				'last_at' => (string) $r->last_at,
+				'target'   => (string) $r->target,
+				'shell'    => (string) $r->shell,
+				'clicks'   => (int) $r->clicks,
+				'clicks_a' => (int) $r->clicks_a,
+				'clicks_b' => (int) $r->clicks_b,
+				'last_at'  => (string) $r->last_at,
 			];
 		}
 		return $out;

@@ -267,51 +267,90 @@ class ES_Ajax {
 		// flag to suppress their own conversion.
 		$is_preview = ! empty( $_POST['es_preview'] ) && current_user_can( 'edit_posts' );
 
-		// Honeypot — must be empty, UNLESS the submission also took a
-		// normal human amount of time. Browser autofill (an accepted
-		// address/profile suggestion cascading into every empty field on
-		// the form) can drop a stray value into the trap for a genuine
-		// visitor; a scripted bot fills and submits near-instantly, so
-		// pairing the trap with submit speed tells the two apart. `es_ts`
-		// is the client-recorded moment the form appeared (injected
-		// alongside the trap itself — see injectHoneypot in frontend.js);
-		// missing/invalid timing falls back to today's honeypot-alone rule.
+		// Honeypot — must be empty, UNLESS the submission also looks like a
+		// person. Browser autofill (an accepted address/profile suggestion
+		// cascading into other fields) can drop a stray value into the trap for a
+		// genuine visitor, so the trap on its own has never been proof.
+		//
+		// TIMING COMES FROM THE VISITOR'S OWN CLOCK, NOT FROM OURS.
+		// `es_el` is the gap frontend.js measures itself, both readings taken
+		// from the same device, so it cannot be thrown off by that device
+		// disagreeing with this server. That matters more than it sounds: the
+		// original version compared their `es_ts` against our own time, and a
+		// phone running seven minutes fast produced a NEGATIVE gap, failed the
+		// check, and got a real person filed as a bot. Every visitor with a fast
+		// clock, every time. `es_ts` stays as the fallback for a browser still
+		// holding the older cached script, with the skew guard covering it.
 		$trap_filled   = ! empty( $_POST['esf_hp'] );
 		$form_ready_at = isset( $_POST['es_ts'] ) ? (int) $_POST['es_ts'] : 0;
-		$elapsed_ms    = $form_ready_at > 0
-			? (int) round( microtime( true ) * 1000 ) - $form_ready_at
-			: null;
-		$hp_filled = $trap_filled && ! ( $elapsed_ms !== null && $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS );
+
+		if ( isset( $_POST['es_el'] ) && $_POST['es_el'] !== '' ) {
+			$timing_source = 'client';
+			$elapsed_ms    = (int) $_POST['es_el'];
+		} elseif ( $form_ready_at > 0 ) {
+			$timing_source = 'server';
+			$elapsed_ms    = (int) round( microtime( true ) * 1000 ) - $form_ready_at;
+		} else {
+			$timing_source = null;
+			$elapsed_ms    = null;
+		}
+
+		// A gap below zero can only mean the two clocks disagree — nobody submits
+		// a form before it exists. It is not a bot signature either: a script
+		// gaming this would send a timestamp making itself look SLOW, which the
+		// rule already lets through. So skew is treated as unreadable timing on a
+		// real browser, not as evidence. Only possible on the `es_ts` path.
+		$clock_skew  = $timing_source === 'server' && $elapsed_ms < 0;
+		$looks_human = $elapsed_ms !== null && $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS;
+
+		// Attribution, from the same catalog and the same ranges the bot-filter
+		// paths already put on a filtered VIEW (matched_bot_label /
+		// datacenter_provider), finally carried onto submissions.
+		$ua        = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
+		$ua_bot    = ES_Event_Recorder::matched_bot_label( $ua );
+		$dc        = ES_Event_Recorder::detect_datacenter_enabled()
+			? ES_Event_Recorder::datacenter_provider( $this->client_ip() )
+			: '';
+		$bot_label = $ua_bot !== '' ? $ua_bot : $dc;
+		$named_bot = $bot_label !== '';
+
+		// A submission that carries timing at all is one that RAN OUR SCRIPT: the
+		// gap comes from injectHoneypot. Form spam posted straight at admin-ajax
+		// never runs it and arrives with no timing whatsoever, and there the trap
+		// alone is still decisive — that is the traffic the honeypot was built
+		// for, and it is untouched.
+		//
+		// Where our script DID run and the submission merely looked quick, the
+		// trap alone is not enough any more. Autofill cross-filling the trap and a
+		// fast tap are both ordinary human behaviour, and 1200ms is a guess at
+		// where one ends. So a quick submission is only a bot when something NAMES
+		// one: a crawler in the catalog, or a datacenter address. Nothing named,
+		// ordinary connection, real browser — that is a person, and filing them as
+		// spam costs a signup the site owner never learns about.
+		$ran_our_script = $timing_source !== null;
+		$hp_filled      = $trap_filled
+			&& ! $looks_human
+			&& ! $clock_skew
+			&& ( ! $ran_our_script || $named_bot );
 
 		// Keep the evidence, not just the verdict, whenever the trap comes back
-		// filled — rescued or not. `ts_received` false means the timing never
-		// arrived and the rescue never ran (old cached JS, or a page-speed
-		// plugin rewriting the injected fields away); a small `elapsed_ms` means
-		// it did arrive and genuinely looked instant, which for a real person
-		// points at a device clock ahead of the server's.
-		//
-		// The last two are the same attribution the bot-filter paths already put
-		// on a filtered VIEW (matched_bot_label / datacenter_provider), finally
-		// carried onto submissions. They CORROBORATE, they never decide: a trap
-		// trip that also names GPTBot or an AWS address is a bot with a name on
-		// it, while a trap trip from an ordinary browser on a home connection is
-		// the false positive worth a human look. Deliberately kept out of the
-		// $hp_filled line above — submit stays honeypot-only, so a UA the catalog
-		// happens to match can never silently stop a real person converting.
+		// filled — flagged or not. Each way this check can land has a different
+		// cause: `ts_received` false means no timing arrived at all, `clock_skew`
+		// means the visitor's device disagrees with ours about the time, and a
+		// small `elapsed_ms` means different things depending on whether anything
+		// named a bot.
 		$bot_signals = null;
-		$bot_label   = '';
 		if ( $trap_filled ) {
-			$ua        = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
-			$ua_bot    = ES_Event_Recorder::matched_bot_label( $ua );
-			$dc        = ES_Event_Recorder::detect_datacenter_enabled()
-				? ES_Event_Recorder::datacenter_provider( $this->client_ip() )
-				: '';
-			$bot_label = $ua_bot !== '' ? $ua_bot : $dc;
-
 			$bot_signals = [
 				'hp_filled'   => true,
-				'ts_received' => $form_ready_at > 0,
+				'ts_received' => $timing_source !== null,
 				'elapsed_ms'  => $elapsed_ms,
+				// Which clock produced that number. 'client' is the visitor
+				// measuring their own gap and is the one to trust; 'server' means
+				// they are on the older cached script and we had to subtract their
+				// timestamp from ours, which is the reading skew can wreck.
+				'timing'      => $timing_source,
+				'clock_skew'  => $clock_skew,
 				'ua_bot'      => $ua_bot !== '' ? $ua_bot : null,
 				'datacenter'  => $dc !== '' ? $dc : null,
 			];
@@ -517,7 +556,7 @@ class ES_Ajax {
 		// reserve them here; they pass through as plain custom data when not mapped.
 		$reserved      = [
 			'email', 'first_name', 'last_name', 'name', 'phone',
-			'form_id', 'esf_hp', 'es_ts', 'esf_tag', 'esf_list',
+			'form_id', 'esf_hp', 'es_ts', 'es_el', 'esf_tag', 'esf_list',
 			'action', '_wpnonce', '_wp_http_referer',
 		];
 		// Only keep fields that actually exist on the form (SER-872). Without this
@@ -830,7 +869,7 @@ class ES_Ajax {
 	private function collect_fields(): array {
 		$out = [];
 		foreach ( $_POST as $k => $v ) {
-			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_ts' ], true ) ) {
+			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_ts', 'es_el' ], true ) ) {
 				continue;
 			}
 			$out[ $k ] = is_array( $v ) ? array_map( 'sanitize_text_field', wp_unslash( $v ) ) : sanitize_text_field( wp_unslash( $v ) );

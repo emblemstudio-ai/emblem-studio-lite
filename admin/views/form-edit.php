@@ -1478,6 +1478,16 @@ $ab_archive_ct = count( $ab_archived );
 				}
 				$named_total = $tagged_count + $untagged_count;
 				$untag_pct   = $named_total > 0 ? round( $untagged_count / $named_total * 100 ) : 0;
+				// Only show the A/B split once there is something to split. An asset
+				// that has never run a test would otherwise get two columns of zeros,
+				// and the blended table it has today is the right one for it.
+				$clicks_have_variants = false;
+				foreach ( $clicks as $r ) {
+					if ( (int) ( $r['clicks_a'] ?? 0 ) > 0 || (int) ( $r['clicks_b'] ?? 0 ) > 0 ) {
+						$clicks_have_variants = true;
+						break;
+					}
+				}
 				?>
 				<h3 class="es-stats-section-heading"><?php esc_html_e( 'Clicks', 'emblem-studio' ); ?></h3>
 				<div class="es-clicks-toggle-row">
@@ -1511,6 +1521,10 @@ $ab_archive_ct = count( $ab_archived );
 								<th><?php esc_html_e( 'Element', 'emblem-studio' ); ?></th>
 								<th><?php esc_html_e( 'Shell', 'emblem-studio' ); ?></th>
 								<th class="num"><?php esc_html_e( 'Clicks', 'emblem-studio' ); ?></th>
+								<?php if ( $clicks_have_variants ) : ?>
+									<th class="num" title="<?php esc_attr_e( 'Clicks recorded while the visitor was seeing variant A.', 'emblem-studio' ); ?>"><?php esc_html_e( 'A', 'emblem-studio' ); ?></th>
+									<th class="num" title="<?php esc_attr_e( 'Clicks recorded while the visitor was seeing variant B.', 'emblem-studio' ); ?>"><?php esc_html_e( 'B', 'emblem-studio' ); ?></th>
+								<?php endif; ?>
 								<th><?php esc_html_e( 'Last seen', 'emblem-studio' ); ?></th>
 							</tr>
 						</thead>
@@ -1544,6 +1558,10 @@ $ab_archive_ct = count( $ab_archived );
 									<td><?php echo $label; // phpcs:ignore WordPress.Security.EscapeOutput ?></td>
 									<td><span class="es-shell-pill es-shell-<?php echo esc_attr( $row['shell'] ); ?>"><?php echo esc_html( $stats_shell_labels[ $row['shell'] ] ?? $row['shell'] ); ?></span></td>
 									<td class="num"><?php echo esc_html( number_format_i18n( $row['clicks'] ) ); ?></td>
+									<?php if ( $clicks_have_variants ) : ?>
+										<td class="num"><?php echo esc_html( number_format_i18n( (int) ( $row['clicks_a'] ?? 0 ) ) ); ?></td>
+										<td class="num"><?php echo esc_html( number_format_i18n( (int) ( $row['clicks_b'] ?? 0 ) ) ); ?></td>
+									<?php endif; ?>
 									<td><?php echo esc_html( mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $row['last_at'] ) ); ?></td>
 								</tr>
 							<?php endforeach; ?>
@@ -1551,6 +1569,9 @@ $ab_archive_ct = count( $ab_archived );
 					</table>
 					<p class="es-clicks-legend">
 						<?php esc_html_e( 'Rows marked “not in Clicks total” (the close button and clicking the backdrop) are dismissals. They’re listed here for reference but are deliberately left out of the Clicks numbers shown on the Stats tab and the Forms & Assets list.', 'emblem-studio' ); ?>
+						<?php if ( $clicks_have_variants ) : ?>
+							<?php esc_html_e( 'A and B count the clicks that happened while the visitor was seeing that variant. They can add up to less than the total, because clicks from before the test started belong to neither.', 'emblem-studio' ); ?>
+						<?php endif; ?>
 					</p>
 				<?php endif; ?>
 			<?php endif; ?>

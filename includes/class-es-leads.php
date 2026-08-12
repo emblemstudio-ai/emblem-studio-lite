@@ -255,16 +255,22 @@ class ES_Leads {
 		}
 
 		if ( empty( $signals['ts_received'] ) ) {
-			$trap = __( 'The hidden trap came back filled, and the page sent no timing with it, so the speed check never ran.', 'emblem-studio' );
+			$trap = __( 'The hidden trap came back filled, and the submission carried no timing at all, so it never ran our script.', 'emblem-studio' );
+		} elseif ( ! empty( $signals['clock_skew'] ) ) {
+			// Skew, not speed. Reading "sent -449.7s after it appeared" as a
+			// verdict on the visitor is the mistake this sentence has to prevent.
+			$ahead = abs( round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 ) );
+			/* translators: %s: seconds this visitor's device clock runs ahead of the server's. */
+			$trap  = sprintf( __( "The hidden trap came back filled, but this visitor's device clock runs about %ss ahead of ours, so the speed check had nothing readable to go on.", 'emblem-studio' ), $ahead );
 		} else {
 			$seconds = round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 );
-			$trap    = $is_bot
-				/* translators: %s: seconds between the form appearing and the submission. */
-				? sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after it appeared.', 'emblem-studio' ), $seconds )
-				/* translators: %s: seconds between the form appearing and the submission. */
-				: sprintf( __( 'The hidden trap came back filled, but the form was sent %ss after it appeared, so it counted as a person.', 'emblem-studio' ), $seconds );
+			/* translators: %s: seconds between the form appearing and the submission. */
+			$trap    = sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after it appeared.', 'emblem-studio' ), $seconds );
 		}
 
+		// The second sentence carries the outcome too, because the first no longer
+		// implies one: the same elapsed time means different things depending on
+		// whether anything named a bot.
 		$ua = (string) ( $signals['ua_bot'] ?? '' );
 		$dc = (string) ( $signals['datacenter'] ?? '' );
 
@@ -277,8 +283,10 @@ class ES_Leads {
 		} elseif ( $dc !== '' ) {
 			/* translators: %s: cloud provider name. */
 			$backing = sprintf( __( 'It came from a %s address, which is a server rather than a home or phone connection. That is a bot.', 'emblem-studio' ), $dc );
-		} else {
+		} elseif ( $is_bot ) {
 			$backing = __( 'Nothing else backs that up: an ordinary browser, on an ordinary connection.', 'emblem-studio' );
+		} else {
+			$backing = __( 'Nothing else identified a bot either, so it counted as a person.', 'emblem-studio' );
 		}
 
 		return $trap . ' ' . $backing;
