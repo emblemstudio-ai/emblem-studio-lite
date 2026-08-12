@@ -911,6 +911,15 @@ class ES_Install {
 				$wpdb->query( "ALTER TABLE {$leads} ADD COLUMN bot_signals TEXT NULL AFTER is_bot" );
 			}
 
+			// On a SaaS-connected site the leads come DOWN, and that pull is a
+			// forward-only cursor: a lead it already fetched never comes past
+			// again. So every lead the SaaS recorded evidence for between its
+			// deploy and this upgrade would arrive here with the verdict and
+			// nothing behind it, permanently. Rewinding the cursor once replays
+			// them; pull_leads() fills only the empty bot_signals column on a row
+			// it already has, so nothing else is touched or overwritten.
+			delete_option( 'es_saas_pull_leads_after' );
+
 			update_option( 'emblem_studio_db_version', '37' );
 		}
 	}

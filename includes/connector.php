@@ -883,7 +883,7 @@ final class Emblem_Studio_SaaS_Connector
 
         $cols = $kind === 'events'
             ? 'id, form_id, event_type, type, click_target, variant, post_id, ua, ip, visitor, created_at'
-            : 'id, form_id, email, extra_fields, funnelkit_contact_id, funnelkit_pushed, error, is_bot, ip, created_at';
+            : 'id, form_id, email, extra_fields, funnelkit_contact_id, funnelkit_pushed, error, is_bot, bot_signals, ip, created_at';
 
         // NEVER mirror a SaaS-origin row back up — the same rule mirror_forms()
         // applies to assets, which this had been missing.
@@ -967,6 +967,11 @@ final class Emblem_Studio_SaaS_Connector
             'funnelkit_pushed'     => (int) $row->funnelkit_pushed,
             'error'                => $row->error,
             'is_bot'               => (int) $row->is_bot,
+            // Travels with the verdict, in both directions. A WordPress-captured
+            // lead was flagged HERE, so this side is the only place the evidence
+            // exists — without it the dashboard shows "Bot" and cannot say why,
+            // which is the same blind spot in mirror image.
+            'bot_signals'          => $row->bot_signals ?? null,
             'ip'                   => $row->ip,
             'created_at'           => $row->created_at,
         ];
@@ -1627,7 +1632,12 @@ final class Emblem_Studio_SaaS_Connector
                 if (is_array($extra)) {
                     $extra = wp_json_encode($extra);
                 }
-                $wpdb->insert($leads, [
+                $signals = $l['bot_signals'] ?? null;
+                if (is_array($signals)) {
+                    $signals = wp_json_encode($signals);
+                }
+
+                $inserted = $wpdb->insert($leads, [
                     'saas_lead_id'         => (int) $l['saas_lead_id'],
                     'form_id'              => $form_id,
                     'email'                => (string) $l['email'],
@@ -1636,9 +1646,25 @@ final class Emblem_Studio_SaaS_Connector
                     'funnelkit_pushed'     => ! empty($l['funnelkit_pushed']) ? 1 : 0,
                     'error'                => $l['error'] ?? null,
                     'is_bot'               => ! empty($l['is_bot']) ? 1 : 0,
+                    'bot_signals'          => $signals,
                     'ip'                   => $l['ip'] ?? null,
                     'created_at'           => (string) ($l['created_at'] ?? current_time('mysql')),
                 ]);
+
+                // The row is already here from a pull that ran before we carried
+                // the bot-check evidence down (the DB v37 upgrade rewinds the
+                // cursor once so those rows come past again). Fill ONLY that one
+                // column, and only while it is still empty. A plain upsert would
+                // be simpler and wrong: it would clobber a lead someone
+                // reclassified here, which is a local decision the SaaS copy
+                // does not know about.
+                if ($inserted === false && $signals !== null) {
+                    $wpdb->query($wpdb->prepare(
+                        "UPDATE $leads SET bot_signals = %s WHERE saas_lead_id = %d AND bot_signals IS NULL",
+                        $signals,
+                        (int) $l['saas_lead_id']
+                    ));
+                }
             }
             $wpdb->suppress_errors(false);
             $after = (int) ($data['last_id'] ?? $after);
