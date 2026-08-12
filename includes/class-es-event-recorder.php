@@ -14,9 +14,11 @@ class ES_Event_Recorder {
 			'post_id'    => $post_id,
 			'created_at' => current_time( 'mysql' ),
 		];
-		// Only persist a click_target on click events. Keeps the column NULL
-		// for every other row so it's an unambiguous signal in queries.
-		if ( $event_type === 'click' && $click_target !== null && $click_target !== '' ) {
+		// Only persist a click_target on click events and on honeypot_blocked,
+		// where it carries the matched bot label — the same column, and the same
+		// labels, a filtered VIEW already uses. Every other row keeps it NULL, so
+		// it stays an unambiguous signal in queries.
+		if ( in_array( $event_type, [ 'click', 'honeypot_blocked' ], true ) && $click_target !== null && $click_target !== '' ) {
 			$row['click_target'] = mb_substr( $click_target, 0, 191 );
 		}
 		// Variant tagging — only persist 'A' / 'B'. Anything else (including

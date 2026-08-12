@@ -316,6 +316,29 @@ $status_labels = [
 									<?php endif; ?>
 								</dl>
 
+								<?php
+								// Why the bot check landed where it did. Shown for a rescued
+								// submission too, so "the trap is still being cross-filled and
+								// the rescue is working" is visible rather than something you
+								// have to infer.
+								$detail_signals   = ES_Leads::bot_signals( $r->bot_signals ?? null );
+								$detail_reason    = ES_Leads::bot_reason( $detail_signals, ! empty( $r->is_bot ) );
+								$detail_confirmed = ES_Leads::bot_confirmed( $detail_signals );
+								?>
+								<?php if ( $detail_reason ) : ?>
+									<h4>
+										<?php esc_html_e( 'Bot check', 'emblem-studio' ); ?>
+										<span class="es-lead-bot-verdict <?php echo $detail_confirmed ? 'is-confirmed' : 'is-unconfirmed'; ?>">
+											<?php
+											echo $detail_confirmed
+												? esc_html__( 'Confirmed bot', 'emblem-studio' )
+												: esc_html__( 'Not confirmed', 'emblem-studio' );
+											?>
+										</span>
+									</h4>
+									<p class="es-lead-detail-none"><?php echo esc_html( $detail_reason ); ?></p>
+								<?php endif; ?>
+
 								<h4><?php esc_html_e( 'Consent', 'emblem-studio' ); ?></h4>
 								<?php if ( ! $detail_consent ) : ?>
 									<p class="es-lead-detail-none"><?php esc_html_e( 'This form had no consent checkbox, so there is nothing recorded. That is not the same as someone declining.', 'emblem-studio' ); ?></p>

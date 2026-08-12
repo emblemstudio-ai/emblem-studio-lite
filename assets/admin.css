@@ -5428,6 +5428,20 @@
 
 .es-lead-detail-none { margin: 0; font-size: 12px; color: #646970; }
 
+/* Confirmed = a known bot name or a datacenter address, not just the trap.
+   Amber for the unconfirmed case: it is a "look at this", not a verdict. */
+.es-lead-bot-verdict {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	vertical-align: middle;
+}
+.es-lead-bot-verdict.is-confirmed { background: #f0f0f1; color: #3c434a; }
+.es-lead-bot-verdict.is-unconfirmed { background: #fcf3e3; color: #8a6100; }
+
 .es-lead-consent-state { margin: 0 0 6px; font-weight: 600; }
 .es-lead-consent-state.is-agreed { color: #007017; }
 .es-lead-consent-state.is-declined { color: #8a6100; }

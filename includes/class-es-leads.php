@@ -158,7 +158,7 @@ class ES_Leads {
 
 		$rows_sql = "SELECT l.id, l.created_at, l.email, l.extra_fields,
 				l.funnelkit_pushed, l.funnelkit_contact_id, l.error,
-				l.is_bot, l.ip,
+				l.is_bot, l.bot_signals, l.ip,
 				f.id AS form_id, f.name AS form_name, f.slug AS form_slug
 			FROM $leads l
 			LEFT JOIN $forms f ON f.id = l.form_id
@@ -169,6 +169,79 @@ class ES_Leads {
 		$rows = $wpdb->get_results( $wpdb->prepare( $rows_sql, $args ) );
 
 		return [ 'rows' => $rows ?: [], 'total' => $total ];
+	}
+
+	/**
+	 * Decode a lead's `bot_signals` JSON. Empty array when there is nothing
+	 * recorded: a clean submission, or a row captured before we kept the
+	 * evidence.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function bot_signals( ?string $json ): array {
+		if ( ! $json ) {
+			return [];
+		}
+		$s = json_decode( $json, true );
+		return ( is_array( $s ) && ! empty( $s['hp_filled'] ) ) ? $s : [];
+	}
+
+	/**
+	 * Whether anything OTHER than the trap says this was a bot: a browser name
+	 * the catalog knows (Googlebot, GPTBot, a generic crawler) or a datacenter
+	 * address.
+	 *
+	 * Corroboration, never the verdict — the same two signals are deliberately
+	 * kept out of the honeypot decision in ES_Ajax::submit. A real person carries
+	 * neither, so "flagged, nothing confirms it" is the shape a false positive
+	 * takes, and that is the thing worth being able to see.
+	 *
+	 * @param array<string, mixed> $signals
+	 */
+	public static function bot_confirmed( array $signals ): bool {
+		return ! empty( $signals['ua_bot'] ) || ! empty( $signals['datacenter'] );
+	}
+
+	/**
+	 * Plain-words account of what the bot check saw: what tripped it, then
+	 * whether anything else backs that up. Empty string when there is nothing
+	 * to say.
+	 *
+	 * @param array<string, mixed> $signals
+	 */
+	public static function bot_reason( array $signals, bool $is_bot ): string {
+		if ( ! $signals ) {
+			return '';
+		}
+
+		if ( empty( $signals['ts_received'] ) ) {
+			$trap = __( 'The hidden trap came back filled, and the page sent no timing with it, so the speed check never ran.', 'emblem-studio' );
+		} else {
+			$seconds = round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 );
+			$trap    = $is_bot
+				/* translators: %s: seconds between the form appearing and the submission. */
+				? sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after it appeared.', 'emblem-studio' ), $seconds )
+				/* translators: %s: seconds between the form appearing and the submission. */
+				: sprintf( __( 'The hidden trap came back filled, but the form was sent %ss after it appeared, so it counted as a person.', 'emblem-studio' ), $seconds );
+		}
+
+		$ua = (string) ( $signals['ua_bot'] ?? '' );
+		$dc = (string) ( $signals['datacenter'] ?? '' );
+
+		if ( $ua !== '' && $dc !== '' ) {
+			/* translators: 1: bot name from the user agent, 2: cloud provider name. */
+			$backing = sprintf( __( 'The browser called itself %1$s, from a %2$s address. That is a bot.', 'emblem-studio' ), $ua, $dc );
+		} elseif ( $ua !== '' ) {
+			/* translators: %s: bot name from the user agent. */
+			$backing = sprintf( __( 'The browser called itself %s. That is a bot.', 'emblem-studio' ), $ua );
+		} elseif ( $dc !== '' ) {
+			/* translators: %s: cloud provider name. */
+			$backing = sprintf( __( 'It came from a %s address, which is a server rather than a home or phone connection. That is a bot.', 'emblem-studio' ), $dc );
+		} else {
+			$backing = __( 'Nothing else backs that up: an ordinary browser, on an ordinary connection.', 'emblem-studio' );
+		}
+
+		return $trap . ' ' . $backing;
 	}
 
 	/**

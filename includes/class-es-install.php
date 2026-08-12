@@ -104,6 +104,7 @@ class ES_Install {
 			funnelkit_pushed TINYINT(1) NOT NULL DEFAULT 0,
 			error TEXT NULL,
 			is_bot TINYINT(1) NOT NULL DEFAULT 0,
+			bot_signals TEXT NULL,
 			ip VARCHAR(45) NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
@@ -893,6 +894,24 @@ class ES_Install {
 			}
 
 			update_option( 'emblem_studio_db_version', '36' );
+		}
+
+		if ( version_compare( $current, '37', '<' ) ) {
+			global $wpdb;
+			$leads = self::table( 'leads' );
+
+			// Why a lead got flagged, not just that it did. A bot row used to
+			// carry the verdict alone, so "these are all real people" left
+			// nothing to read: the trap being cross-filled by browser autofill
+			// and the speed check never getting a timestamp are different
+			// faults with different fixes, and the row could not say which.
+			// JSON: hp_filled / ts_received / elapsed_ms / ua_bot / datacenter.
+			$has_signals = $wpdb->get_var( "SHOW COLUMNS FROM {$leads} LIKE 'bot_signals'" );
+			if ( ! $has_signals ) {
+				$wpdb->query( "ALTER TABLE {$leads} ADD COLUMN bot_signals TEXT NULL AFTER is_bot" );
+			}
+
+			update_option( 'emblem_studio_db_version', '37' );
 		}
 	}
 

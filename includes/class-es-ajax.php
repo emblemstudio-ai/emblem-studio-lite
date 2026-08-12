@@ -276,15 +276,45 @@ class ES_Ajax {
 		// is the client-recorded moment the form appeared (injected
 		// alongside the trap itself — see injectHoneypot in frontend.js);
 		// missing/invalid timing falls back to today's honeypot-alone rule.
-		$hp_filled = ! empty( $_POST['esf_hp'] );
-		if ( $hp_filled ) {
-			$form_ready_at = isset( $_POST['es_ts'] ) ? (int) $_POST['es_ts'] : 0;
-			if ( $form_ready_at > 0 ) {
-				$elapsed_ms = (int) round( microtime( true ) * 1000 ) - $form_ready_at;
-				if ( $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS ) {
-					$hp_filled = false;
-				}
-			}
+		$trap_filled   = ! empty( $_POST['esf_hp'] );
+		$form_ready_at = isset( $_POST['es_ts'] ) ? (int) $_POST['es_ts'] : 0;
+		$elapsed_ms    = $form_ready_at > 0
+			? (int) round( microtime( true ) * 1000 ) - $form_ready_at
+			: null;
+		$hp_filled = $trap_filled && ! ( $elapsed_ms !== null && $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS );
+
+		// Keep the evidence, not just the verdict, whenever the trap comes back
+		// filled — rescued or not. `ts_received` false means the timing never
+		// arrived and the rescue never ran (old cached JS, or a page-speed
+		// plugin rewriting the injected fields away); a small `elapsed_ms` means
+		// it did arrive and genuinely looked instant, which for a real person
+		// points at a device clock ahead of the server's.
+		//
+		// The last two are the same attribution the bot-filter paths already put
+		// on a filtered VIEW (matched_bot_label / datacenter_provider), finally
+		// carried onto submissions. They CORROBORATE, they never decide: a trap
+		// trip that also names GPTBot or an AWS address is a bot with a name on
+		// it, while a trap trip from an ordinary browser on a home connection is
+		// the false positive worth a human look. Deliberately kept out of the
+		// $hp_filled line above — submit stays honeypot-only, so a UA the catalog
+		// happens to match can never silently stop a real person converting.
+		$bot_signals = null;
+		$bot_label   = '';
+		if ( $trap_filled ) {
+			$ua        = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
+			$ua_bot    = ES_Event_Recorder::matched_bot_label( $ua );
+			$dc        = ES_Event_Recorder::detect_datacenter_enabled()
+				? ES_Event_Recorder::datacenter_provider( $this->client_ip() )
+				: '';
+			$bot_label = $ua_bot !== '' ? $ua_bot : $dc;
+
+			$bot_signals = [
+				'hp_filled'   => true,
+				'ts_received' => $form_ready_at > 0,
+				'elapsed_ms'  => $elapsed_ms,
+				'ua_bot'      => $ua_bot !== '' ? $ua_bot : null,
+				'datacenter'  => $dc !== '' ? $dc : null,
+			];
 		}
 
 		// Record the trip as an event AND save a bot-flagged lead so admins
@@ -298,8 +328,12 @@ class ES_Ajax {
 			if ( ! in_array( $hp_shell, ES_Form_Repo::valid_types(), true ) ) {
 				$hp_shell = 'inline';
 			}
-			ES_Event_Recorder::record( $form_id, 'honeypot_blocked', null, $hp_shell );
-			$this->save_bot_lead( $form_id );
+			// The label goes in the same click_target column, with the same
+			// catalog labels, that a filtered VIEW already uses — so a blocked
+			// submission can finally be asked "which bot?" instead of only
+			// being counted. NULL when nothing matched, which is its own answer.
+			ES_Event_Recorder::record( $form_id, 'honeypot_blocked', null, $hp_shell, $bot_label !== '' ? $bot_label : null );
+			$this->save_bot_lead( $form_id, $bot_signals );
 			wp_send_json_success( [ 'mode' => 'inline_state' ] );
 		}
 
@@ -513,6 +547,11 @@ class ES_Ajax {
 				// lead is identifiable in the lead record.
 				$is_preview ? [ '_es_test' => 1 ] : []
 			) ),
+			// Normally NULL. Set only when the trap WAS filled and the speed
+			// check rescued the submission — worth recording, because "still
+			// being cross-filled, rescue working" and "trap gone quiet" look
+			// identical without it.
+			'bot_signals'  => $bot_signals !== null ? wp_json_encode( $bot_signals ) : null,
 			'created_at'   => current_time( 'mysql' ),
 		] );
 		$lead_id = (int) $wpdb->insert_id;
@@ -825,7 +864,11 @@ class ES_Ajax {
 	 * field (so we can inspect what attackers fill in) and the IP. Best
 	 * effort — never throws, never blocks the response.
 	 */
-	private function save_bot_lead( int $form_id ): void {
+	/**
+	 * @param array<string, mixed>|null $bot_signals What the bot check saw, for
+	 *                                               the Bots tab to explain itself.
+	 */
+	private function save_bot_lead( int $form_id, ?array $bot_signals = null ): void {
 		global $wpdb;
 		// Reuse the same field collector the human path uses so we get the
 		// same raw shape; strip silent geo keys (they don't belong with
@@ -888,6 +931,7 @@ class ES_Ajax {
 				$captured
 			) ),
 			'is_bot'       => 1,
+			'bot_signals'  => $bot_signals !== null ? wp_json_encode( $bot_signals ) : null,
 			'ip'           => $this->client_ip(),
 			'created_at'   => current_time( 'mysql' ),
 		] );
