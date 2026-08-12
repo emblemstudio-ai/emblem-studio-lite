@@ -951,7 +951,11 @@ final class Emblem_Studio_SaaS_Connector
             'ua'           => $row->ua,
             'ip'           => $row->ip,
             'visitor'      => $row->visitor,
-            'created_at'   => $row->created_at,
+            // Sent as UTC, because that is what the SaaS stores. This column is WP
+            // local time, so handing it over raw filed every mirrored event under
+            // the site's offset — the matching half of the conversion pull_stats()
+            // does coming the other way.
+            'created_at'   => get_gmt_from_date((string) $row->created_at),
         ];
     }
 
@@ -973,7 +977,9 @@ final class Emblem_Studio_SaaS_Connector
             // which is the same blind spot in mirror image.
             'bot_signals'          => $row->bot_signals ?? null,
             'ip'                   => $row->ip,
-            'created_at'           => $row->created_at,
+            // Sent as UTC — see map_event(). Same column, same conversion, so a
+            // lead reads at the same moment on both sides.
+            'created_at'           => get_gmt_from_date((string) $row->created_at),
         ];
     }
 
@@ -1590,7 +1596,13 @@ final class Emblem_Studio_SaaS_Connector
                     'ua'            => $e['ua'] ?? null,
                     'ip'            => $e['ip'] ?? null,
                     'visitor'       => $e['visitor'] ?? null,
-                    'created_at'    => (string) ($e['created_at'] ?? current_time('mysql')),
+                    // Same conversion as pull_leads(): the export sends UTC, and
+                    // every locally recorded event in this table is WP local time.
+                    // Mixing the two puts mirrored stats in the wrong day for any
+                    // site that isn't on UTC, which quietly skews the reports.
+                    'created_at'    => isset($e['created_at'])
+                        ? get_date_from_gmt((string) $e['created_at'])
+                        : current_time('mysql'),
                 ]);
             }
             $wpdb->suppress_errors(false);
@@ -1648,7 +1660,14 @@ final class Emblem_Studio_SaaS_Connector
                     'is_bot'               => ! empty($l['is_bot']) ? 1 : 0,
                     'bot_signals'          => $signals,
                     'ip'                   => $l['ip'] ?? null,
-                    'created_at'           => (string) ($l['created_at'] ?? current_time('mysql')),
+                    // The export sends UTC. Everything else in this table is WP
+                    // local time (a WordPress-captured lead uses current_time),
+                    // and the Leads screen renders the column as local either
+                    // way. Storing the raw UTC put every mirrored lead out by the
+                    // site's offset, sitting next to native rows that were right.
+                    'created_at'           => isset($l['created_at'])
+                        ? get_date_from_gmt((string) $l['created_at'])
+                        : current_time('mysql'),
                 ]);
 
                 // The row is already here from a pull that ran before we carried
