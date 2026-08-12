@@ -172,6 +172,46 @@ class ES_Leads {
 	}
 
 	/**
+	 * Narrow a list of assets to the ones that can actually appear on this
+	 * screen, for the asset filter.
+	 *
+	 * Offering a ribbon or a slide-in there is offering a filter that can only
+	 * ever return nothing: an asset with no form in its markup cannot produce a
+	 * lead. "Or already has one" is the other half, and it is not defensive
+	 * padding — an asset that captured leads and later had its form edited out
+	 * still owns those rows, and dropping it would leave real leads visible in
+	 * the list with no way to filter down to them.
+	 *
+	 * One query for the whole set, not a count per asset. Uses
+	 * ES_Form_Repo::primary_metric (core, so Lite keeps it) rather than the A/B
+	 * module's wrapper.
+	 *
+	 * @param  array<int, object> $forms
+	 * @return array<int, object>
+	 */
+	public static function lead_capable_forms( array $forms ): array {
+		if ( ! $forms ) {
+			return [];
+		}
+
+		global $wpdb;
+		$ids = array_map( static fn( object $f ): int => (int) $f->id, $forms );
+		$in  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $in is a placeholder list.
+		$with_leads = $wpdb->get_col( $wpdb->prepare(
+			'SELECT DISTINCT form_id FROM ' . ES_Install::table( 'leads' ) . " WHERE form_id IN ($in)",
+			$ids
+		) );
+		$with_leads = array_flip( array_map( 'intval', $with_leads ?: [] ) );
+
+		return array_values( array_filter(
+			$forms,
+			static fn( object $f ): bool => isset( $with_leads[ (int) $f->id ] )
+				|| ES_Form_Repo::primary_metric( (string) ( $f->html ?? '' ) ) === 'conversions'
+		) );
+	}
+
+	/**
 	 * Decode a lead's `bot_signals` JSON. Empty array when there is nothing
 	 * recorded: a clean submission, or a row captured before we kept the
 	 * evidence.

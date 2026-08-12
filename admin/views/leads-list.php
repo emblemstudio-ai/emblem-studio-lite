@@ -3,7 +3,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$forms   = ES_Form_Repo::all();
+// Only assets that can actually show up here: one with a form in its markup, or
+// one that already captured leads before its form was edited out.
+$forms   = ES_Leads::lead_capable_forms( ES_Form_Repo::all() );
 $filters = ES_Leads::parse_filters( $_GET );
 $paged   = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
 
