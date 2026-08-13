@@ -17,6 +17,30 @@ class ES_Ajax {
 	// visitor — even one whose browser autofill cross-filled the trap — takes
 	// at least this long to see the form and click submit.
 	private const MIN_HUMAN_SUBMIT_MS = 1200;
+	/**
+	 * An email address a message could actually be delivered to: an @, and a
+	 * domain whose final label is at least two characters, starts with a letter
+	 * and ends with a letter or digit ("com", "uk", "xn--p1ai" — but not "c",
+	 * not "123", and not a trailing hyphen).
+	 *
+	 * WordPress's is_email() already wants a dot in the domain, so this mostly
+	 * agrees with it. It is here anyway because the SaaS needs the rule spelled
+	 * out (PHP's and Laravel's own email checks both accept "name@examle", a
+	 * domain with no dot, which is legal by the RFC and undeliverable in
+	 * practice) and the two products must accept and refuse exactly the same
+	 * addresses. It also settles the one place is_email() is looser: it takes a
+	 * single-letter ending like "a@b.c".
+	 *
+	 * FOUR TWINS, KEEP THEM IN STEP: this, assets/frontend.js (EMAIL_SHAPE), and
+	 * the SaaS's App\Rules\DeliverableEmail + public/embed/embed.js.
+	 */
+	public const EMAIL_SHAPE = '/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)*\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])$/';
+
+	/** Is this an address worth keeping? See {@see self::EMAIL_SHAPE}. */
+	public static function is_deliverable_email( string $email ): bool {
+		$email = trim( $email );
+		return $email !== '' && is_email( $email ) && (bool) preg_match( self::EMAIL_SHAPE, $email );
+	}
 
 	public function __construct() {
 		add_action( 'wp_ajax_es_page_view',           [ $this, 'page_view' ] );
@@ -470,7 +494,7 @@ class ES_Ajax {
 		};
 
 		$email = self::normalize_email( $value_for( 'col:email', ES_Field_Matcher::EMAIL_NAME_VARIANTS, 'email' ) );
-		if ( ! $email || ! is_email( $email ) ) {
+		if ( ! self::is_deliverable_email( $email ) ) {
 			wp_send_json_error( [ 'message' => 'Please enter a valid email address.' ], 422 );
 		}
 

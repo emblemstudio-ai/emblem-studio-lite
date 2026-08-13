@@ -835,6 +835,37 @@
 		err.textContent = message;
 	}
 
+	// Wipes a message from an earlier attempt without adding the element when
+	// there has never been one.
+	function clearInlineError(form) {
+		const err = form.querySelector('.esf-error');
+		if (err) err.textContent = '';
+	}
+
+	// An email a message could actually be delivered to: an @, and a domain whose
+	// final label is at least two characters, starts with a letter and ends with
+	// a letter or digit ("com", "uk", "xn--p1ai" — but not "c" and not "123").
+	//
+	// We check this ourselves rather than leaning on the browser, for two
+	// reasons. Authored markup carries `novalidate` (the authoring spec asks for
+	// it), so the browser checks nothing on submit. And even with validation on,
+	// `type="email"` accepts "name@examle" — a domain with no dot is legal by the
+	// RFC and undeliverable in practice.
+	//
+	// TWIN of ES_Ajax::EMAIL_SHAPE and of the SaaS's App\Rules\DeliverableEmail
+	// + public/embed/embed.js. Change one and you must change all four, or the
+	// same address is accepted by one client and refused by another.
+	const EMAIL_SHAPE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)*\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])$/;
+
+	// Returns the offending input when the form has an email field the visitor
+	// has not filled in properly, or null when there is nothing to complain
+	// about (including a form-less asset, which has no email field at all).
+	function findBadEmailInput(form) {
+		const input = form.querySelector('input[name="email"], input[type="email"]');
+		if (!input) return null;
+		return EMAIL_SHAPE.test(String(input.value || '').trim()) ? null : input;
+	}
+
 	function setSubmittingState(form, isSubmitting) {
 		const btn = form.querySelector('button[type="submit"], input[type="submit"]');
 		if (btn) btn.disabled = isSubmitting;
@@ -874,6 +905,19 @@
 			}, SUBMIT_BEAT_MS);
 			return;
 		}
+		// Nothing leaves the page until the address could actually receive the
+		// thing the visitor just asked for. Checked here, before the POST, so a
+		// typo is a correction rather than a silent dead lead — and so the
+		// optimistic thank-you below is never shown for a submission we already
+		// know the server will refuse.
+		const badEmail = findBadEmailInput(form);
+		if (badEmail) {
+			showInlineError(form, 'Please enter a valid email address.');
+			try { badEmail.focus(); } catch (err) { /* not focusable — the message stands on its own */ }
+			return;
+		}
+		clearInlineError(form);
+
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
 

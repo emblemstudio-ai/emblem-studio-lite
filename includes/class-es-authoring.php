@@ -164,6 +164,13 @@ HTML — FIELDS
 - A form asset always includes exactly one
   <input type="email" name="email" required>. A form-less announcement
   asset has no fields — skip this.
+- Do NOT write your own email validation: no pattern=, no oninvalid handler,
+  no "please enter a valid email" text of your own. Emblem Studio checks the
+  address before it posts, and refuses one with no @ or no dot-something
+  ending — "name@examle" is undeliverable, and the browser's own type="email"
+  lets it through. Yours would only be a second, disagreeing opinion. The
+  message appears in a .esf-error element added at the end of the form; style
+  that class to match your design, but do not author the element.
 - Give every input a matching <label for="..."> and an "autocomplete"
   value (email, given-name, family-name, tel).
 - Consent — mark every checkbox that asks the visitor to AGREE to something,
