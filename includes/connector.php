@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.3.9-beta
+ * Version: 1.3.20-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.9-beta';
+    const VERSION = '1.3.20-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -49,7 +49,7 @@ final class Emblem_Studio_SaaS_Connector
      * constant wins over this, and on its own only changes the prefill (a manual
      * connection needs ESS_SITE_ID and ESS_SITE_TOKEN too).
      */
-    const DEFAULT_API_BASE = 'https://emblem-studio-beta.serenichron.agency';
+    const DEFAULT_API_BASE = 'https://emblemstudio.ai';
 
     /** Post-decouple background catch-up (SER-950) — see run_postdecouple_pull(). */
     const POSTDECOUPLE_OPTION = 'es_postdecouple_cfg';

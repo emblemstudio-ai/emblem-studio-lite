@@ -655,6 +655,22 @@
 		hideConnectedOnPage(host);
 	}
 
+	/**
+	 * Subscribing here silences its linked peers on THIS page, with no reload.
+	 *
+	 * Hiding is only half of it, and for an auto shell it is the useless half. A
+	 * popup, ribbon or slide-in sits in the page as a bootstrap element that is
+	 * ALREADY display:none — a marker, not the thing the visitor sees. Setting it
+	 * to none again changes nothing, and its trigger is still armed: when exit
+	 * intent fires a minute later it clones the template into a brand new overlay
+	 * and appends it to the body, which no amount of hiding the marker prevents.
+	 *
+	 * So the trigger has to be disarmed, not the marker hidden. The flag set here
+	 * is what each auto shell's fire() checks before it opens.
+	 *
+	 * Both are kept: the hide covers an inline peer or an overlay that is already
+	 * open, the flag covers one that has not fired yet.
+	 */
 	function hideConnectedOnPage(host) {
 		const sup = host.getAttribute('data-esf-conn-suppress');
 		if (!sup) return;
@@ -663,8 +679,21 @@
 				// Hide the mounted host, its bootstrap, or any open overlay/bar.
 				const wrap = el.closest && el.closest('.esf-popup-overlay, .esf-ribbon, .esf-slide-in');
 				(wrap || el).style.display = 'none';
+				// Disarm anything not yet fired, including this element's own
+				// bootstrap sibling when we matched the template's inner host.
+				el.setAttribute('data-esf-conn-silenced', '1');
+				document.querySelectorAll(
+					'.esf-popup-auto-bootstrap[data-esf-id="' + id + '"],' +
+					'.esf-ribbon-bootstrap[data-esf-id="' + id + '"],' +
+					'.esf-slide-in-bootstrap[data-esf-id="' + id + '"]'
+				).forEach(b => b.setAttribute('data-esf-conn-silenced', '1'));
 			});
 		});
+	}
+
+	/** Has a peer on this page silenced this auto shell since it was armed? */
+	function isConnSilenced(boot) {
+		return !!boot && boot.getAttribute('data-esf-conn-silenced') === '1';
 	}
 
 	// Replace mode: show the author's [data-esf-subscribed] block instead of
@@ -1189,7 +1218,14 @@
 		}
 
 		const showClose = config.close_button !== false;
-		const fire = () => openPopup(popupId, {
+		// The guard runs at FIRE time, not at arm time. A visitor who subscribes to
+		// a linked form after this trigger was armed has silenced it, and the
+		// trigger has no other way to find out.
+		const fire = () => isConnSilenced(boot) || openPopup(popupId, {
+			// See openPopup: an exit-intent popup ignores backdrop clicks, because
+			// the gesture that summons it ends near the edge of the screen and the
+			// next stray click lands on the backdrop.
+			backdropCloses: config.trigger !== 'exit',
 			showClose: showClose,
 			onClose: function () {
 				markShellDismissed(popupId, 'popup-auto', config.dismiss_behavior || 'show_again', config.dismiss_hide_hours);
@@ -1463,7 +1499,15 @@
 		if (closeBtn) closeBtn.addEventListener('click', function () { fireClickEvent(host, '__close__'); close(); });
 		// Backdrop click closes only when there's a close button (otherwise the
 		// author probably wants the popup to stay until form-driven dismissal).
-		if (showClose) {
+		//
+		// EXIT-INTENT POPUPS OPT OUT. This one arrives because the visitor moved
+		// the pointer to leave, which is a fast movement toward the edge of the
+		// screen — exactly the gesture most likely to land on the backdrop by
+		// accident a moment later. Dismissing on that stray click throws away the
+		// one chance the popup had, and the frequency cap means they will not see
+		// it again for a day. The X is still there and Escape still works, so
+		// nobody is trapped; they just have to mean it.
+		if (showClose && opts.backdropCloses !== false) {
 			overlay.addEventListener('click', e => { if (e.target === overlay) { fireClickEvent(host, '__backdrop__'); close(); } });
 		}
 		document.addEventListener('keydown', onKey);
@@ -1527,7 +1571,8 @@
 		const position  = boot.getAttribute('data-esf-position') === 'bottom' ? 'bottom' : 'top';
 		const showClose = config.close_button !== false;
 		const sticky    = config.sticky !== false; // default true
-		const fire = () => openRibbon(ribbonId, position, {
+		// Silenced by a linked form the visitor submitted after this was armed.
+		const fire = () => isConnSilenced(boot) || openRibbon(ribbonId, position, {
 			showClose: showClose,
 			sticky: sticky,
 			onClose: function () {
@@ -1786,7 +1831,8 @@
 
 		const corner    = boot.getAttribute('data-esf-corner') === 'bottom-left' ? 'bottom-left' : 'bottom-right';
 		const showClose = config.close_button !== false;
-		const fire = () => openSlideIn(slideInId, corner, {
+		// Silenced by a linked form the visitor submitted after this was armed.
+		const fire = () => isConnSilenced(boot) || openSlideIn(slideInId, corner, {
 			showClose: showClose,
 			onClose: function () {
 				markShellDismissed(slideInId, 'slide-in', config.dismiss_behavior || 'show_again', config.dismiss_hide_hours);
