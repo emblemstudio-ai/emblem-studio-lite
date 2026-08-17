@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.3.23-beta
+ * Version: 1.3.24-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.23-beta';
+    const VERSION = '1.3.24-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -1991,6 +1991,24 @@ final class Emblem_Studio_SaaS_Connector
             'api'       => $cfg['api_base'].'/v1',
             'wpContext' => self::context(),
         ];
+
+        // The site's public code, which is what lets the SaaS runtime ask for the
+        // whole page in one request instead of downloading every asset and only
+        // then deciding which ones belong (SaaS SER-1230). Without it that runtime
+        // falls back to the old path, so WordPress would have been the one
+        // platform still paying seven requests to show three assets — and it is
+        // the platform the problem was reported on.
+        //
+        // Not a secret: it is this site's segment in every dashboard URL, and it
+        // already sits in the page source of any plain site using the script tag.
+        //
+        // The placements printed below ride along as the page's own keys, so an
+        // asset already in the page is matched rather than added a second time.
+        // Paired with wpContext above it also lets the server decide the
+        // WordPress-specific rules, which no plain site can give it.
+        if (! empty($cfg['code'])) {
+            $config['site'] = (string) $cfg['code'];
+        }
 
         echo '<script>window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
             .wp_json_encode($config).');</script>'."\n";
