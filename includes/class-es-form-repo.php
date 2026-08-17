@@ -398,26 +398,50 @@ class ES_Form_Repo {
 	}
 
 	/**
-	 * Archive — a hidden bucket like Trash, but a separate flag (never
-	 * auto-deleted, and `status` underneath is left untouched so Restore
-	 * from Archive brings the form back exactly as it was).
+	 * Archive — a hidden bucket like Trash, but a separate flag, so an archived
+	 * form keeps its own tab and its own counter and is never auto-deleted.
+	 *
+	 * CHANGED 2026-08-17: archiving now SWITCHES THE FORM OFF as well. It used to
+	 * leave `status` untouched, so a form archived straight from Active stayed
+	 * Active underneath — a state the admin screens never show, since they display
+	 * one or the other.
+	 *
+	 * Harmless here, because is_currently_active() checks archived_at first and is
+	 * the single gate every public-side path goes through. It was NOT harmless in
+	 * the SaaS, where the list connected WordPress sites read trusted `status`
+	 * alone: three archived assets were placed on every page of a live client site
+	 * and refused on every request. Same shape of data, one client that checked it
+	 * and one that did not.
+	 *
+	 * Matched here for parity, and because a state nobody can see is a state
+	 * something will eventually trust.
 	 */
 	public static function archive( int $id ): void {
 		global $wpdb;
 		$wpdb->update(
 			self::table(),
-			[ 'archived_at' => current_time( 'mysql' ) ],
+			[
+				'archived_at' => current_time( 'mysql' ),
+				'status'      => 'inactive',
+			],
 			[ 'id' => $id ]
 		);
 		self::flush_caches();
 	}
 
-	/** Restore a form from Archive (NULLs archived_at). */
+	/**
+	 * Restore a form from Archive. Lands INACTIVE, never back on whatever it held
+	 * before: coming out of the archive is a deliberate act, and pulling last
+	 * year's sale ribbon out to copy a headline must not republish it.
+	 */
 	public static function restore_from_archive( int $id ): void {
 		global $wpdb;
 		$wpdb->update(
 			self::table(),
-			[ 'archived_at' => null ],
+			[
+				'archived_at' => null,
+				'status'      => 'inactive',
+			],
 			[ 'id' => $id ]
 		);
 		self::flush_caches();
