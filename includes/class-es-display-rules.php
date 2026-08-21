@@ -30,6 +30,84 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class ES_Display_Rules {
 
+	/**
+	 * Is this front-end request being rendered INSIDE a wp-admin screen?
+	 *
+	 * A page builder's canvas is not an admin URL, which is why is_admin() never
+	 * catches it. Elementor's editor lives at wp-admin/post.php?action=elementor,
+	 * but the canvas you design in is an <iframe> pointing at the post's own
+	 * permalink. That inner request is an ordinary front-end request: is_admin()
+	 * is false, wp_footer fires, and every self-placing shell on the site drops
+	 * itself over the widgets the author is trying to click.
+	 *
+	 * So the question to ask is not "which builder is this", it is "who opened
+	 * me". The browser answers both halves of that: Sec-Fetch-Dest says the
+	 * request is for a frame, and the referrer says the frame lives in wp-admin.
+	 * One check, and it covers every builder, the Customizer, and whatever ships
+	 * next, with no list to keep current.
+	 *
+	 * BOTH halves are required. A logged-in admin who clicks from wp-admin
+	 * through to the site also arrives carrying an admin referrer, and that is a
+	 * real page view we must not suppress.
+	 */
+	public static function is_admin_frame(): bool {
+		if ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) {
+			return true;
+		}
+
+		$dest = isset( $_SERVER['HTTP_SEC_FETCH_DEST'] )
+			? strtolower( trim( (string) wp_unslash( $_SERVER['HTTP_SEC_FETCH_DEST'] ) ) )
+			: '';
+		$referer = isset( $_SERVER['HTTP_REFERER'] )
+			? strtolower( trim( (string) wp_unslash( $_SERVER['HTTP_REFERER'] ) ) )
+			: '';
+
+		if ( ( 'iframe' === $dest || 'frame' === $dest ) && '' !== $referer ) {
+			if ( 0 === strpos( $referer, strtolower( admin_url() ) ) ) {
+				return true;
+			}
+		}
+
+		return self::has_builder_canvas_arg();
+	}
+
+	/**
+	 * Fallback for the check above, used when the browser is too old to send
+	 * Sec-Fetch-Dest or a referrer policy stripped the URL. These are the query
+	 * args a builder puts on the front-end URL when it opens its canvas. Only
+	 * presence is tested, never the value, so a builder that renames et_fb=1 to
+	 * something else next year is still caught.
+	 */
+	private static function has_builder_canvas_arg(): bool {
+		$args = [
+			'elementor-preview',             // Elementor
+			'fl_builder',                    // Beaver Builder
+			'fl_builder_preview',
+			'et_fb',                         // Divi
+			'et_pb_preview',
+			'ct_builder',                    // Oxygen
+			'oxygen_iframe',
+			'bricks',                        // Bricks
+			'brizy-edit',                    // Brizy
+			'brizy-edit-iframe',
+			'vc_editable',                   // WPBakery Page Builder
+			'vcv-editable',                  // Visual Composer Website Builder
+			'tve',                           // Thrive Architect
+			'siteorigin_panels_live_editor', // SiteOrigin Page Builder
+			'zionbuilder-preview',           // Zion Builder
+			'breakdance',                    // Breakdance
+			'cs_preview_state',              // Cornerstone
+		];
+
+		foreach ( $args as $arg ) {
+			if ( isset( $_GET[ $arg ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public const SPECIALS = [ 'front_page', 'blog', '404', 'search', 'archive' ];
 
 	/**

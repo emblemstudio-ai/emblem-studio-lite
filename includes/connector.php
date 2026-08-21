@@ -1951,6 +1951,9 @@ final class Emblem_Studio_SaaS_Connector
 
     /* ── Front-end: context + form slots + embed.js ────────────────────── */
 
+    /** Shells that place themselves on the page instead of sitting where an author put them. */
+    private const AUTO_SHELLS = ['popup-auto', 'ribbon', 'slide-in'];
+
     /** Is FunnelKit Automations available to write contacts in-process? */
     private static function funnelkit_available(): bool
     {
@@ -1986,6 +1989,14 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         $forms = self::forms($cfg);
+
+        // A page builder opens its canvas as an <iframe> pointing at the real
+        // page, so is_admin() above is false inside it and the self-placing
+        // shells would land on top of the widgets the author is editing. See
+        // ES_Display_Rules::is_admin_frame() for how that is spotted without a
+        // list of builders. Inline placements still go out: the author put those
+        // on the page, and they are part of what is being laid out.
+        $admin_frame = class_exists('ES_Display_Rules') && ES_Display_Rules::is_admin_frame();
 
         $config = [
             'api'       => $cfg['api_base'].'/v1',
@@ -2030,6 +2041,9 @@ final class Emblem_Studio_SaaS_Connector
                 continue;
             }
             foreach ((array) $form['shells'] as $shell) {
+                if ($admin_frame && in_array($shell, self::AUTO_SHELLS, true)) {
+                    continue;
+                }
                 printf(
                     '<div data-es-form="%s" data-es-shell="%s" style="display:none"></div>'."\n",
                     esc_attr($key),

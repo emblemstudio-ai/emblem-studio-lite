@@ -3,6 +3,26 @@
 
 	const ajax = (window.EmblemStudio && window.EmblemStudio.ajaxUrl) || '/wp-admin/admin-ajax.php';
 	const postId = (window.EmblemStudio && window.EmblemStudio.postId) || 0;
+	// Am I being rendered inside an admin screen?
+	//
+	// A page builder's canvas is NOT an admin URL, which is why is_admin() never
+	// catches it. Elementor's editor lives at wp-admin/post.php?action=elementor,
+	// and the canvas you design in is an <iframe> pointing at the post's own
+	// permalink, which is an ordinary front-end page.
+	//
+	// PHP already keeps the self-placing shells out of that canvas, see
+	// ES_Display_Rules::is_admin_frame(). This is the other half: an inline asset
+	// the author put on the page DOES still render there, and it must not report
+	// a view, a click or a drop-off while they are laying the page out. A canvas
+	// is not a visit.
+	const IN_ADMIN_FRAME = (function () {
+		if (window.top === window.self) return false;
+		try {
+			if (window.top.location.pathname.indexOf('/wp-admin/') !== -1) return true;
+		} catch (e) { /* cross-origin top — the referrer is all we have */ }
+		return String(document.referrer || '').indexOf('/wp-admin/') !== -1;
+	})();
+
 
 	// Boot CSS injected into every shadow root.
 	// `all: initial !important` on :host cuts inheritance from the
@@ -366,7 +386,7 @@
 		// In preview mode (form-edit's Preview button), don't fire any events —
 		// we don't want stats polluted by admin previews. Same applies to
 		// submissions handled below.
-		if (window.EmblemStudio && window.EmblemStudio.preview) return;
+		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
 		const shell = host.getAttribute('data-esf-type') || 'inline';
@@ -452,7 +472,7 @@
 	}
 
 	function fireClickEvent(host, label) {
-		if (window.EmblemStudio && window.EmblemStudio.preview) return;
+		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host && host.getAttribute('data-esf-id');
 		if (!formId) return;
 		// Honor per-form opt-out — host carries the flag from PHP.
@@ -516,7 +536,7 @@
 	function sendEvent(host, action) {
 		// In preview mode (form-edit's Preview button), don't fire — admin
 		// testing must never pollute stats.
-		if (window.EmblemStudio && window.EmblemStudio.preview) return;
+		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
 		const shell = host.getAttribute('data-esf-type') || 'inline';
