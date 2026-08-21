@@ -276,6 +276,36 @@ class ES_Shortcode {
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'postId'  => get_queried_object_id(),
 		] );
+		add_filter( 'script_loader_tag', [ $this, 'mark_script_no_delay' ], 10, 2 );
+	}
+
+	/**
+	 * Ask speed plugins not to delay our front-end script.
+	 *
+	 * Delay-JavaScript settings hold a script back until the visitor scrolls,
+	 * clicks or moves the mouse. That is a sensible default for a chat widget
+	 * and a bad one for a form that is already on screen: the visitor stares at
+	 * an empty space until they touch something. These attributes are the
+	 * opt-out that Cloudflare's Rocket Loader, Autoptimize, WP Rocket and their
+	 * relatives read.
+	 *
+	 * Not a complete fix. Some plugins exclude by URL from their own settings
+	 * list and ignore markup entirely, so a site owner may still have to add
+	 * ours by hand.
+	 *
+	 * @param string $tag    The full <script> tag.
+	 * @param string $handle The script's registered handle.
+	 */
+	public function mark_script_no_delay( string $tag, string $handle ): string {
+		if ( 'emblem-studio-frontend' !== $handle ) {
+			return $tag;
+		}
+
+		return str_replace(
+			'<script ',
+			'<script data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1" ',
+			$tag
+		);
 	}
 
 	/**

@@ -2021,7 +2021,9 @@ final class Emblem_Studio_SaaS_Connector
             $config['site'] = (string) $cfg['code'];
         }
 
-        echo '<script>window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
+        // Same opt-out on the config: an optimizer that encodes this inline
+        // script leaves embed.js with no api base to read.
+        echo '<script data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1">window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
             .wp_json_encode($config).');</script>'."\n";
 
         foreach ($forms as $form) {
@@ -2052,7 +2054,20 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
-        printf('<script src="%s" defer></script>'."\n", esc_url($cfg['api_base'].'/embed/embed.js'));
+        // Speed plugins delay or defer third-party JavaScript by default, and
+        // several of them rewrite this tag's src to data-src and hold the load
+        // until the visitor scrolls or moves the mouse. On a page whose asset is
+        // above the fold, that is the asset not loading at all until the visitor
+        // touches something. These attributes are the opt-out that Cloudflare's
+        // Rocket Loader, Autoptimize, WP Rocket and their relatives honour.
+        //
+        // They do NOT cover every plugin: some exclude by URL from a settings
+        // list and ignore markup entirely. The durable fix is not needing this
+        // script for first paint at all, which means WordPress rendering the
+        // inline asset itself from the local copy pull_assets() already keeps.
+        $skip = ' data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1"';
+
+        printf('<script%s src="%s" defer></script>'."\n", $skip, esc_url($cfg['api_base'].'/embed/embed.js'));
     }
 
     /**
