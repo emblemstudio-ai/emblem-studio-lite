@@ -448,6 +448,34 @@ class ES_Form_Repo {
 	}
 
 	/**
+	 * Set or clear archived_at ALONE, leaving status exactly as it is.
+	 *
+	 * This is the copy operation, not the user action. archive() and
+	 * restore_from_archive() above are what a person clicks in wp-admin, and
+	 * switching the form off is the right thing to do there. A mirror is
+	 * different: the SaaS has just sent both the archive flag AND the status it
+	 * wants, so applying the flag must not overwrite the answer that came with
+	 * it.
+	 *
+	 * Calling archive()/restore_from_archive() from the connector's pull forced
+	 * every mirrored asset to inactive, including every asset that was not
+	 * archived at all, because the SaaS sends archived_at as null rather than
+	 * omitting it.
+	 *
+	 * @param int         $id   The form's local id.
+	 * @param string|null $when MySQL datetime to archive at, or null to unarchive.
+	 */
+	public static function set_archived_at( int $id, ?string $when ): void {
+		global $wpdb;
+		$wpdb->update(
+			self::table(),
+			[ 'archived_at' => $when ],
+			[ 'id' => $id ]
+		);
+		self::flush_caches();
+	}
+
+	/**
 	 * Build a portable JSON-shaped array representing one form's
 	 * definition. Stats, leads, revisions, timestamps, and the row id
 	 * are intentionally excluded — only the fields that DEFINE the

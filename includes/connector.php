@@ -1399,12 +1399,16 @@ final class Emblem_Studio_SaaS_Connector
                 // part of ES_Form_Repo::save()'s field set — apply it explicitly.
                 // Only touch it when the key is present, so an older SaaS build
                 // (no archived_at in the payload yet) never un-archives on pull.
+                //
+                // set_archived_at(), NOT archive()/restore_from_archive(). Those two
+                // are the wp-admin user action and switch the form off as part of
+                // the deal, which is right when a person clicks Archive and wrong
+                // here: $status above is the answer the SaaS just gave us, and the
+                // flag must not overwrite it. The SaaS sends archived_at as null
+                // rather than omitting it, so the old code ran the unarchive path on
+                // every ordinary asset and left the whole mirror switched off.
                 if (array_key_exists('archived_at', $a)) {
-                    if (! empty($a['archived_at'])) {
-                        ES_Form_Repo::archive($new_id);
-                    } else {
-                        ES_Form_Repo::restore_from_archive($new_id);
-                    }
+                    ES_Form_Repo::set_archived_at($new_id, empty($a['archived_at']) ? null : (string) $a['archived_at']);
                 }
             }
         }
