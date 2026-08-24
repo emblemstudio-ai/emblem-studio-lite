@@ -1581,6 +1581,17 @@ class ES_Admin {
 			'active_until'         => isset( $_POST['active_until'] ) ? wp_unslash( $_POST['active_until'] ) : '',
 		];
 
+		// Archived and Trash are states the form is IN, so the status field on
+		// the edit screen is not a way out of either. Unarchive or restore the
+		// form first. Without this, an archived form saved as Active reads
+		// Active and Archived at once, which is the state SER-1234 ended.
+		if ( $id && $data['status'] === 'active' ) {
+			$current = ES_Form_Repo::find( $id );
+			if ( $current && ( ! empty( $current->archived_at ) || ! empty( $current->trashed_at ) ) ) {
+				$data['status'] = 'inactive';
+			}
+		}
+
 		// Click tracking toggle only lives on the Stats tab, which is hidden
 		// on brand-new forms. Only propagate when we know the form was the one
 		// that rendered the toggle (i.e. we're editing an existing form);
@@ -1875,6 +1886,16 @@ class ES_Admin {
 					case 'activate':
 					case 'inactive':
 						global $wpdb;
+						// Bulk Activate skips archived and trashed forms rather
+						// than switching them on behind their own state. Selecting
+						// a whole page and pressing Activate is the likeliest way
+						// to create a pile of Active-and-Archived forms at once.
+						if ( $action === 'activate' ) {
+							$current = ES_Form_Repo::find( $id );
+							if ( ! $current || ! empty( $current->archived_at ) || ! empty( $current->trashed_at ) ) {
+								break;
+							}
+						}
 						$wpdb->update(
 							ES_Form_Repo::table(),
 							[ 'status' => $action === 'activate' ? 'active' : 'inactive', 'updated_at' => current_time( 'mysql' ) ],

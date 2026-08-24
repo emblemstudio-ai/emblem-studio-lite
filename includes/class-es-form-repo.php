@@ -373,25 +373,39 @@ class ES_Form_Repo {
 	 * Soft-delete: send a form to the trash. The form is hidden from the
 	 * regular list and its shortcodes stop rendering on the frontend, but
 	 * its row and stats are kept until permanently deleted.
+	 *
+	 * CHANGED 2026-08-24: trashing SWITCHES THE FORM OFF as well, the same way
+	 * archive() has since 2026-08-17. A form is in ONE state at a time, and
+	 * Trash is a state a form is IN, not a label sitting on top of Active.
 	 */
 	public static function trash( int $id ): void {
 		global $wpdb;
 		$wpdb->update(
 			self::table(),
-			[ 'trashed_at' => current_time( 'mysql' ) ],
+			[
+				'trashed_at' => current_time( 'mysql' ),
+				'status'     => 'inactive',
+			],
 			[ 'id' => $id ]
 		);
 		self::flush_caches();
 	}
 
 	/**
-	 * Restore a trashed form (NULLs trashed_at).
+	 * Restore a trashed form (NULLs trashed_at). Lands INACTIVE, for the same
+	 * reason restore_from_archive() does: coming out of the trash is a
+	 * deliberate act, and the form going live the same second is not what
+	 * anyone means by it. Before this, a form trashed while live came back live
+	 * on restore, with nobody asking for it and nothing on screen saying so.
 	 */
 	public static function restore( int $id ): void {
 		global $wpdb;
 		$wpdb->update(
 			self::table(),
-			[ 'trashed_at' => null ],
+			[
+				'trashed_at' => null,
+				'status'     => 'inactive',
+			],
 			[ 'id' => $id ]
 		);
 		self::flush_caches();

@@ -922,6 +922,28 @@ class ES_Install {
 
 			update_option( 'emblem_studio_db_version', '37' );
 		}
+
+		if ( version_compare( $current, '38', '<' ) ) {
+			global $wpdb;
+			$forms = self::table( 'forms' );
+
+			// A form is in ONE state at a time. Trashing only ever wrote
+			// trashed_at, so a form trashed while live kept reading Active
+			// underneath and came straight back live on Restore, with nobody
+			// asking for it. Fixed forward in ES_Form_Repo::trash() and
+			// ::restore(); this corrects the rows that already exist.
+			//
+			// The archived half is re-run here as a belt and braces: the admin
+			// edit screen could still write Active onto an archived form until
+			// this release, so v33's sweep is not proof the state is gone.
+			//
+			// Idempotent: it only touches rows that are both filed away and
+			// active, and leaves none behind.
+			$wpdb->query( "UPDATE {$forms} SET status = 'inactive' WHERE trashed_at IS NOT NULL AND status = 'active'" );
+			$wpdb->query( "UPDATE {$forms} SET status = 'inactive' WHERE archived_at IS NOT NULL AND status = 'active'" );
+
+			update_option( 'emblem_studio_db_version', '38' );
+		}
 	}
 
 	/**
