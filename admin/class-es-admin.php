@@ -1289,7 +1289,7 @@ class ES_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$valid_filters = [ 'all', 'active', 'inactive', 'archived', 'trash' ];
+		$valid_filters = [ 'all', 'active', 'inactive', 'scheduled', 'expired', 'archived', 'trash' ];
 		$filter        = isset( $_GET['filter'] ) ? sanitize_key( (string) $_GET['filter'] ) : 'all';
 		if ( ! in_array( $filter, $valid_filters, true ) ) {
 			$filter = 'all';

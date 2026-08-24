@@ -32,15 +32,17 @@ class ES_Form_Repo {
 	/**
 	 * Fetch forms. By default, only non-trashed, non-archived rows.
 	 *
-	 * Filter values: 'all' | 'active' | 'inactive' | 'archived' | 'trash'.
-	 * 'all'/'active'/'inactive' exclude both trashed AND archived rows (archived
-	 * has its own tab, same as trash); 'archived' returns only archived (and
-	 * never-trashed — a trashed row wins over an archived one); 'trash' returns
-	 * only trashed.
+	 * Filter values: 'all' | 'active' | 'inactive' | 'scheduled' | 'expired' |
+	 * 'archived' | 'trash'. Archived and Trash have their own tabs, so they are
+	 * excluded from the other five and no form is ever counted twice. A trashed
+	 * row wins over an archived one.
 	 */
 	public static function all( string $filter = 'all' ): array {
 		global $wpdb;
 		$t = self::table();
+		// Bring the stored statuses in line with the clock first, so the list a
+		// person reads matches what the site is actually doing (SER-1270).
+		self::reconcile_statuses();
 		if ( $filter === 'trash' ) {
 			return $wpdb->get_results( "SELECT * FROM $t WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC" );
 		}
@@ -49,7 +51,7 @@ class ES_Form_Repo {
 		}
 		$where  = 'trashed_at IS NULL AND archived_at IS NULL';
 		$params = [];
-		if ( in_array( $filter, [ 'active', 'inactive' ], true ) ) {
+		if ( in_array( $filter, [ 'active', 'inactive', 'scheduled', 'expired' ], true ) ) {
 			$where   .= ' AND status = %s';
 			$params[] = $filter;
 		}
@@ -72,21 +74,26 @@ class ES_Form_Repo {
 	public static function counts_by_filter(): array {
 		global $wpdb;
 		$t = self::table();
+		self::reconcile_statuses();
 		$row = $wpdb->get_row(
 			"SELECT
-				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL THEN 1 ELSE 0 END)                             AS all_count,
-				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'active'   THEN 1 ELSE 0 END)     AS active_count,
-				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'inactive' THEN 1 ELSE 0 END)     AS inactive_count,
-				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NOT NULL THEN 1 ELSE 0 END)                        AS archived_count,
-				SUM(CASE WHEN trashed_at IS NOT NULL THEN 1 ELSE 0 END)                                                AS trash_count
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL THEN 1 ELSE 0 END)                              AS all_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'active'    THEN 1 ELSE 0 END)     AS active_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'inactive'  THEN 1 ELSE 0 END)     AS inactive_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'scheduled' THEN 1 ELSE 0 END)     AS scheduled_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NULL AND status = 'expired'   THEN 1 ELSE 0 END)     AS expired_count,
+				SUM(CASE WHEN trashed_at IS NULL AND archived_at IS NOT NULL THEN 1 ELSE 0 END)                         AS archived_count,
+				SUM(CASE WHEN trashed_at IS NOT NULL THEN 1 ELSE 0 END)                                                 AS trash_count
 			FROM $t"
 		);
 		return [
-			'all'      => (int) ( $row->all_count      ?? 0 ),
-			'active'   => (int) ( $row->active_count   ?? 0 ),
-			'inactive' => (int) ( $row->inactive_count ?? 0 ),
-			'archived' => (int) ( $row->archived_count ?? 0 ),
-			'trash'    => (int) ( $row->trash_count    ?? 0 ),
+			'all'       => (int) ( $row->all_count       ?? 0 ),
+			'active'    => (int) ( $row->active_count    ?? 0 ),
+			'inactive'  => (int) ( $row->inactive_count  ?? 0 ),
+			'scheduled' => (int) ( $row->scheduled_count ?? 0 ),
+			'expired'   => (int) ( $row->expired_count   ?? 0 ),
+			'archived'  => (int) ( $row->archived_count  ?? 0 ),
+			'trash'     => (int) ( $row->trash_count     ?? 0 ),
 		];
 	}
 
@@ -170,8 +177,14 @@ class ES_Form_Repo {
 		// Coalesce once: in_array() must see a defined value AND the
 		// ternary's true-branch must not re-read a possibly-absent key
 		// (that re-read raised an "Undefined array key" warning).
-		$status       = $data['status'] ?? 'inactive';
-		$status       = in_array( $status, [ 'active', 'inactive' ], true ) ? $status : 'inactive';
+		// The SWITCH, not the state. A caller sends 'active' or 'inactive' (or
+		// `enabled` directly); where that leaves the form once the dates are
+		// applied is worked out below, by resolve_status(). Nobody sets
+		// 'scheduled' or 'expired' by hand — a caller sending one of those is
+		// describing a state, and means the switch is on (SER-1270).
+		$enabled = array_key_exists( 'enabled', $data )
+			? (bool) $data['enabled']
+			: in_array( ( $data['status'] ?? 'inactive' ), [ 'active', 'scheduled', 'expired' ], true );
 		$success_mode = $data['success_mode'] ?? 'inline_state';
 		$success_mode = in_array( $success_mode, [ 'inline_state', 'custom_message', 'redirect' ], true ) ? $success_mode : 'inline_state';
 
@@ -180,7 +193,10 @@ class ES_Form_Repo {
 			'slug'                 => $data['slug'] ?? '',
 			'html'                 => ES_HTML_Sanitizer::sanitize( (string) ( $data['html'] ?? '' ) ),
 			'css'                  => ES_HTML_Sanitizer::sanitize_css( (string) ( $data['css'] ?? '' ) ),
-			'status'               => $status,
+			'enabled'              => $enabled ? 1 : 0,
+			// Placeholder — replaced below with the resolved state, once the
+			// schedule fields on $row are known.
+			'status'               => $enabled ? 'active' : 'inactive',
 			'funnelkit_list_id'    => $lists ? $lists[0] : null,
 			'funnelkit_lists'      => $lists ? wp_json_encode( $lists ) : null,
 			'funnelkit_tags'       => $tags  ? wp_json_encode( $tags )  : null,
@@ -273,6 +289,20 @@ class ES_Form_Repo {
 			$row['active_until'] = self::normalize_datetime( $data['active_until'], true );
 		}
 
+		// Derive the state from the switch and the dates, now that both are on
+		// $row. A partial save that sends no schedule fields keeps whatever the
+		// row already had, so those are read back off the existing form rather
+		// than assumed absent (SER-1270).
+		$existing = $id ? self::find( $id ) : null;
+		$resolved = (object) [
+			'enabled'      => $row['enabled'],
+			'trashed_at'   => $existing->trashed_at  ?? null,
+			'archived_at'  => $existing->archived_at ?? null,
+			'active_from'  => array_key_exists( 'active_from', $row )  ? $row['active_from']  : ( $existing->active_from  ?? null ),
+			'active_until' => array_key_exists( 'active_until', $row ) ? $row['active_until'] : ( $existing->active_until ?? null ),
+		];
+		$row['status'] = self::resolve_status( $resolved );
+
 		// A blank name defaults to "Asset <id>" (matches the field's placeholder).
 		// The id is known for an update; for a new form it's assigned after insert.
 		$name_blank = trim( (string) $row['name'] ) === '';
@@ -288,6 +318,14 @@ class ES_Form_Repo {
 			self::record_pre_save_revision( $id, $row, $data );
 			$wpdb->update( $t, $row, [ 'id' => $id ] );
 			self::flush_caches();
+			// The form may have just gone off or come back on. A test attached
+			// to it follows (SER-1271).
+			if ( class_exists( 'ES_AB' ) ) {
+				$after = self::find( $id );
+				if ( $after ) {
+					ES_AB::sync_pause_with_form( $after );
+				}
+			}
 			return $id;
 		}
 
@@ -384,6 +422,7 @@ class ES_Form_Repo {
 			self::table(),
 			[
 				'trashed_at' => current_time( 'mysql' ),
+				'enabled'    => 0,
 				'status'     => 'inactive',
 			],
 			[ 'id' => $id ]
@@ -404,6 +443,7 @@ class ES_Form_Repo {
 			self::table(),
 			[
 				'trashed_at' => null,
+				'enabled'    => 0,
 				'status'     => 'inactive',
 			],
 			[ 'id' => $id ]
@@ -436,6 +476,7 @@ class ES_Form_Repo {
 			self::table(),
 			[
 				'archived_at' => current_time( 'mysql' ),
+				'enabled'     => 0,
 				'status'      => 'inactive',
 			],
 			[ 'id' => $id ]
@@ -454,6 +495,7 @@ class ES_Form_Repo {
 			self::table(),
 			[
 				'archived_at' => null,
+				'enabled'     => 0,
 				'status'      => 'inactive',
 			],
 			[ 'id' => $id ]
@@ -941,13 +983,115 @@ class ES_Form_Repo {
 	 * stay in ES_Display_Rules.
 	 */
 	public static function is_currently_active( object $form ): bool {
-		if ( ! empty( $form->trashed_at ) || ! empty( $form->archived_at ) ) {
-			return false;
+		return self::resolve_status( $form ) === 'active';
+	}
+
+	/**
+	 * Where the form actually IS, from the switch, the schedule window and the
+	 * archive/trash flags. The single definition of the four states (SER-1270).
+	 *
+	 *   'inactive'  — switched off by a person, or archived, or trashed.
+	 *   'scheduled' — switched on, but the start date has not arrived.
+	 *   'expired'   — switched on, but the end date has passed.
+	 *   'active'    — switched on and inside the window. The only one that renders.
+	 *
+	 * The schedule window is account-gated (Free+). Lite has no windows at all,
+	 * so Lite only ever sees active and inactive, which is correct rather than a
+	 * degraded version of this: a form with no schedule cannot be scheduled.
+	 *
+	 * `enabled` is the switch a person presses. Older rows predate the column;
+	 * they fall back to the stored status, which is what the switch used to be.
+	 */
+	public static function resolve_status( object $form ): string {
+		// `enabled` is the switch a person presses. Rows written before the
+		// column existed fall back to the stored status, which is what the
+		// switch used to be.
+		$enabled = isset( $form->enabled )
+			? (bool) $form->enabled
+			: in_array( ( $form->status ?? 'inactive' ), [ 'active', 'scheduled', 'expired' ], true );
+
+		$ignore_window = class_exists( 'ES_Caps' ) && ! ES_Caps::has( 'schedule_window' );
+
+		return self::resolve_status_at(
+			$enabled,
+			! empty( $form->trashed_at ),
+			! empty( $form->archived_at ),
+			$ignore_window ? null : ( isset( $form->active_from )  ? (string) $form->active_from  : null ),
+			$ignore_window ? null : ( isset( $form->active_until ) ? (string) $form->active_until : null ),
+			(string) current_time( 'mysql' )
+		);
+	}
+
+	/**
+	 * Pure core of resolve_status(): the switch, the two flags, the schedule
+	 * bounds and "now" (all MySQL DATETIME strings — fixed-width, so a plain
+	 * string compare orders them). "Now" is a parameter so the rule is testable
+	 * without freezing a clock, the same pattern as effective_state_at().
+	 */
+	public static function resolve_status_at( bool $enabled, bool $trashed, bool $archived, ?string $from, ?string $until, string $now ): string {
+		if ( $trashed || $archived || ! $enabled ) {
+			return 'inactive';
 		}
-		if ( ( $form->status ?? 'inactive' ) !== 'active' ) {
-			return false;
+		if ( $from && $from > $now ) {
+			return 'scheduled';
 		}
-		return self::is_in_schedule_window( $form );
+		if ( $until && $until < $now ) {
+			return 'expired';
+		}
+
+		return 'active';
+	}
+
+	/**
+	 * Move every form whose schedule boundary has passed since the last check.
+	 *
+	 * WP-Cron is the only timer a WordPress site has, and on a quiet site it does
+	 * not fire until someone visits. So this also runs whenever the admin list is
+	 * read, and the public side never depends on it at all: is_currently_active()
+	 * resolves live, so a form that has not been reconciled yet still renders (or
+	 * does not) correctly. The stored status is for counting and listing.
+	 *
+	 * Narrow by design — only rows with a date on them, or already parked in a
+	 * state only a date can produce, can move.
+	 *
+	 * @return int how many forms actually moved.
+	 */
+	public static function reconcile_statuses(): int {
+		global $wpdb;
+		$t = self::table();
+
+		$rows = $wpdb->get_results(
+			"SELECT * FROM $t
+			 WHERE trashed_at IS NULL
+			   AND archived_at IS NULL
+			   AND ( active_from IS NOT NULL OR active_until IS NOT NULL OR status IN ('scheduled','expired') )"
+		);
+		if ( ! $rows ) {
+			return 0;
+		}
+
+		$moved = 0;
+		foreach ( $rows as $row ) {
+			$resolved = self::resolve_status( $row );
+			if ( $resolved === ( $row->status ?? '' ) ) {
+				continue;
+			}
+			$wpdb->update( $t, [ 'status' => $resolved ], [ 'id' => (int) $row->id ] );
+			$moved++;
+
+			// A test follows its form: paused while it is off, resumed when it
+			// comes back. Same rule as the SaaS (SER-1271).
+			if ( class_exists( 'ES_AB' ) ) {
+				$row->status = $resolved;
+				ES_AB::sync_pause_with_form( $row );
+			}
+		}
+
+		if ( $moved > 0 ) {
+			self::flush_caches();
+		}
+
+		return $moved;
 	}
 
 	/**

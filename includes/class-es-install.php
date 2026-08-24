@@ -33,6 +33,7 @@ class ES_Install {
 			html LONGTEXT NULL,
 			css LONGTEXT NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'inactive',
+			enabled TINYINT(1) NOT NULL DEFAULT 0,
 			funnelkit_list_id BIGINT(20) UNSIGNED NULL,
 			funnelkit_lists LONGTEXT NULL,
 			funnelkit_tags LONGTEXT NULL,
@@ -169,6 +170,11 @@ class ES_Install {
 			status VARCHAR(20) NOT NULL DEFAULT 'running',
 			started_at DATETIME NOT NULL,
 			ended_at DATETIME NULL,
+			live_seconds BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			live_since DATETIME NULL,
+			paused_at DATETIME NULL,
+			pause_log LONGTEXT NULL,
+			design_changed_at DATETIME NULL,
 			winner_slot VARCHAR(2) NULL,
 			ended_by VARCHAR(20) NULL,
 			auto_declare TINYINT(1) NOT NULL DEFAULT 1,
@@ -943,6 +949,52 @@ class ES_Install {
 			$wpdb->query( "UPDATE {$forms} SET status = 'inactive' WHERE archived_at IS NOT NULL AND status = 'active'" );
 
 			update_option( 'emblem_studio_db_version', '38' );
+		}
+
+		if ( version_compare( $current, '39', '<' ) ) {
+			global $wpdb;
+			$forms = self::table( 'forms' );
+			$tests = self::table( 'tests' );
+
+			// SER-1270. `status` was carrying two different facts: what the person
+			// asked for, and what the form is actually doing. It could only say
+			// active or inactive, so a form waiting for its start date sat in the
+			// database as Active. Nothing rendered it (is_currently_active checks
+			// the window), but everything else believed it: counted as Active,
+			// listed under Active, and charging days to any A/B test on it.
+			//
+			// `enabled` is the switch, and only a person writes it. `status` is
+			// where that leaves the form: active, inactive, scheduled or expired.
+			$has_enabled = $wpdb->get_var( "SHOW COLUMNS FROM {$forms} LIKE 'enabled'" );
+			if ( ! $has_enabled ) {
+				$wpdb->query( "ALTER TABLE {$forms} ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER status" );
+				$wpdb->query( "UPDATE {$forms} SET enabled = 1 WHERE status = 'active'" );
+			}
+
+			// SER-1271. A test counted wall-clock days from started_at, so a form
+			// switched off for a month still got charged that month. A seven-day
+			// minimum could be met without the form being seen for seven days.
+			// Now it accumulates only live time, and pauses when the form is off.
+			$has_live = $wpdb->get_var( "SHOW COLUMNS FROM {$tests} LIKE 'live_seconds'" );
+			if ( ! $has_live ) {
+				$wpdb->query( "ALTER TABLE {$tests} ADD COLUMN live_seconds BIGINT(20) UNSIGNED NOT NULL DEFAULT 0 AFTER ended_at" );
+				$wpdb->query( "ALTER TABLE {$tests} ADD COLUMN live_since DATETIME NULL AFTER live_seconds" );
+				$wpdb->query( "ALTER TABLE {$tests} ADD COLUMN paused_at DATETIME NULL AFTER live_since" );
+				$wpdb->query( "ALTER TABLE {$tests} ADD COLUMN pause_log LONGTEXT NULL AFTER paused_at" );
+				$wpdb->query( "ALTER TABLE {$tests} ADD COLUMN design_changed_at DATETIME NULL AFTER pause_log" );
+				// A running test has been live since it started, as far as anyone
+				// knew before now. Nothing in flight jumps.
+				$wpdb->query( "UPDATE {$tests} SET live_since = started_at WHERE status = 'running'" );
+			}
+
+			// Put every form in the state its dates actually say it is in. Uses
+			// the app's own rule rather than SQL, because Lite has no schedule
+			// windows at all and must collapse to active/inactive.
+			if ( class_exists( 'ES_Form_Repo' ) ) {
+				ES_Form_Repo::reconcile_statuses();
+			}
+
+			update_option( 'emblem_studio_db_version', '39' );
 		}
 	}
 

@@ -38,10 +38,44 @@ class ES_Plugin {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'emblem_studio_daily_purge' );
 		}
 		add_action( 'emblem_studio_daily_purge', [ $this, 'run_daily_purge' ] );
+
+		// Move forms in and out of Scheduled and Expired as their start and end
+		// times pass (SER-1270). WP-Cron only fires when someone visits the site,
+		// so this is best effort and nothing depends on it: the public side
+		// resolves the window live on every render, and the admin list
+		// reconciles as it loads. This keeps the stored state fresh on a site
+		// nobody happens to be looking at.
+		add_filter( 'cron_schedules', [ $this, 'add_minute_schedule' ] );
+		if ( ! wp_next_scheduled( 'emblem_studio_reconcile_statuses' ) ) {
+			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'emblem_studio_minute', 'emblem_studio_reconcile_statuses' );
+		}
+		add_action( 'emblem_studio_reconcile_statuses', [ $this, 'run_status_reconcile' ] );
+	}
+
+	/**
+	 * A one-minute interval for the schedule reconciler. WordPress ships five
+	 * minutes as its shortest, and a start time five minutes late is a support
+	 * ticket waiting to happen.
+	 *
+	 * @param array<string,array{interval:int,display:string}> $schedules
+	 * @return array<string,array{interval:int,display:string}>
+	 */
+	public function add_minute_schedule( array $schedules ): array {
+		if ( ! isset( $schedules['emblem_studio_minute'] ) ) {
+			$schedules['emblem_studio_minute'] = [
+				'interval' => MINUTE_IN_SECONDS,
+				'display'  => __( 'Every minute (Emblem Studio)', 'emblem-studio' ),
+			];
+		}
+		return $schedules;
 	}
 
 	public function run_daily_purge(): void {
 		$days = (int) apply_filters( 'emblem_studio_log_retention_days', 30 );
 		ES_Logger::purge_old( $days );
+	}
+
+	public function run_status_reconcile(): void {
+		ES_Form_Repo::reconcile_statuses();
 	}
 }

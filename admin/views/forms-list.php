@@ -177,13 +177,22 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 	<?php endif; ?>
 
 	<?php
+	// Six states, six tabs, and every form in exactly one of them (SER-1270).
+	// Scheduled and Expired are not filters over Active — they are where a form
+	// IS while it waits for a start date or sits past an end date. Both are
+	// hidden where schedule windows are not available (Lite), because a form
+	// that cannot have a window cannot be in either state.
 	$views = [
 		'all'      => __( 'All',      'emblem-studio' ),
 		'active'   => __( 'Active',   'emblem-studio' ),
 		'inactive' => __( 'Inactive', 'emblem-studio' ),
-		'archived' => __( 'Archived', 'emblem-studio' ),
-		'trash'    => __( 'Trash',    'emblem-studio' ),
 	];
+	if ( ! class_exists( 'ES_Caps' ) || ES_Caps::has( 'schedule_window' ) ) {
+		$views['scheduled'] = __( 'Scheduled', 'emblem-studio' );
+		$views['expired']   = __( 'Expired',   'emblem-studio' );
+	}
+	$views['archived'] = __( 'Archived', 'emblem-studio' );
+	$views['trash']    = __( 'Trash',    'emblem-studio' );
 	?>
 	<ul class="subsubsub es-filter-pills">
 		<?php foreach ( $views as $key => $label ) :
