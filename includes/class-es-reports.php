@@ -66,7 +66,12 @@ class ES_Reports {
 			'view_rate'     => $pv > 0 ? round( $v / $pv * 100, 2 ) : 0.0,
 			'conv_rate'     => $v  > 0 ? round( $c / $v  * 100, 2 ) : 0.0,
 			'conv_rate_pv'  => $pv > 0 ? round( $c / $pv * 100, 2 ) : 0.0,
-			'ctr'           => $tv > 0 ? round( $v / $tv * 100, 2 ) : 0.0,
+			// Trigger click-through: of the people who SAW the trigger button,
+			// how many opened the popup. Only the popup-click shell fires
+			// trigger_view, so this is null on every other shell and null on an
+			// unscoped call — blending it would put inline views over
+			// click-popup triggers and produce a rate well past 100%.
+			'ctr'           => ( $shell === 'popup-click' && $tv > 0 ) ? round( $v / $tv * 100, 2 ) : null,
 		];
 	}
 
@@ -244,7 +249,12 @@ class ES_Reports {
 			// unique visitors (per person). The UI shows them as "X% / Y%".
 			'conv_rate'          => $v  > 0 ? round( $c / $v  * 100, 2 ) : 0.0,
 			'conv_rate_unique'   => $uv > 0 ? round( $c / $uv * 100, 2 ) : 0.0,
-			'ctr'                => $tv > 0 ? round( $v / $tv * 100, 2 ) : 0.0,
+			// Trigger click-through: of the people who SAW the trigger button,
+			// how many opened the popup. Only the popup-click shell fires
+			// trigger_view, so this is null on every other shell and null on an
+			// unscoped call — blending it would put inline views over
+			// click-popup triggers and produce a rate well past 100%.
+			'ctr'                => ( $shell === 'popup-click' && $tv > 0 ) ? round( $v / $tv * 100, 2 ) : null,
 			// click_rate is the success metric for non-form assets: how many
 			// engaged clicks per view. Excludes close/backdrop dismissals so
 			// "people who hit X" aren't counted as a win.

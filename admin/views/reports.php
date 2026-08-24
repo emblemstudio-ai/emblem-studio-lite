@@ -76,7 +76,9 @@ if ( $form_id ) {
 		'conv_rate_pv'  => $agg['page_views'] > 0 ? round( $agg['conversions'] / $agg['page_views'] * 100, 2 ) : 0.0,
 		'dismissals'    => $agg['dismissals'],
 		'close_rate'    => $agg['close_rate'],
-		'ctr'           => 0,
+		// null, not 0: this row spans every form and every shell, so there is no
+		// single trigger population to divide by. See ES_Reports::kpis().
+		'ctr'           => null,
 	];
 }
 
