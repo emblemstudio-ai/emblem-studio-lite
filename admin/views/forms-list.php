@@ -182,15 +182,17 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 	// IS while it waits for a start date or sits past an end date. Both are
 	// hidden where schedule windows are not available (Lite), because a form
 	// that cannot have a window cannot be in either state.
+	// Ordered by a form's life, not alphabetically: Active, then the two states
+	// the dates put it in, then the three ways a person puts it away.
 	$views = [
-		'all'      => __( 'All',      'emblem-studio' ),
-		'active'   => __( 'Active',   'emblem-studio' ),
-		'inactive' => __( 'Inactive', 'emblem-studio' ),
+		'all'    => __( 'All',    'emblem-studio' ),
+		'active' => __( 'Active', 'emblem-studio' ),
 	];
 	if ( ! class_exists( 'ES_Caps' ) || ES_Caps::has( 'schedule_window' ) ) {
 		$views['scheduled'] = __( 'Scheduled', 'emblem-studio' );
 		$views['expired']   = __( 'Expired',   'emblem-studio' );
 	}
+	$views['inactive'] = __( 'Inactive', 'emblem-studio' );
 	$views['archived'] = __( 'Archived', 'emblem-studio' );
 	$views['trash']    = __( 'Trash',    'emblem-studio' );
 	?>
