@@ -1241,11 +1241,14 @@
 		// The guard runs at FIRE time, not at arm time. A visitor who subscribes to
 		// a linked form after this trigger was armed has silenced it, and the
 		// trigger has no other way to find out.
-		const fire = () => isConnSilenced(boot) || openPopup(popupId, {
+		const fire = (autofired) => isConnSilenced(boot) || openPopup(popupId, {
 			// See openPopup: an exit-intent popup ignores backdrop clicks, because
 			// the gesture that summons it ends near the edge of the screen and the
-			// next stray click lands on the backdrop.
-			backdropCloses: config.trigger !== 'exit',
+			// next stray click lands on the backdrop. That reasoning does not hold
+			// when the exit WINDOW ran out and auto-fire opened this by itself: no
+			// exit gesture happened, the pointer is wherever the visitor left it, so
+			// a backdrop click is a real "no thanks" and closes it like any popup.
+			backdropCloses: config.trigger !== 'exit' || autofired === true,
 			showClose: showClose,
 			onClose: function () {
 				markShellDismissed(popupId, 'popup-auto', config.dismiss_behavior || 'show_again', config.dismiss_hide_hours);
@@ -1296,11 +1299,14 @@
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
 				};
-				function fireOnce() {
+				// viaWindow says the exit WINDOW ran out and auto-fire opened this,
+				// rather than the visitor making an exit gesture. The popup shell uses
+				// it to decide whether a backdrop click may close the thing.
+				function fireOnce(viaWindow) {
 					if (fired || expired) return;
 					fired = true;
 					disarm();
-					fire();
+					fire(viaWindow === true);
 				}
 				// Buffer: don't ARM exit-intent until the visitor has been on the page
 				// for exit_buffer_seconds. If they bounce inside that window nothing is
@@ -1323,7 +1329,7 @@
 				if (exitWindowMs > 0) {
 					setTimeout(() => {
 						if (fired) return;
-						if (config.exit_window_autofire) { fireOnce(); return; }
+						if (config.exit_window_autofire) { fireOnce(true); return; }
 						expired = true;
 						disarm();
 					}, exitWindowMs);
@@ -1547,6 +1553,10 @@
 		// one chance the popup had, and the frequency cap means they will not see
 		// it again for a day. The X is still there and Escape still works, so
 		// nobody is trapped; they just have to mean it.
+		//
+		// One exception, decided by the caller: an exit-intent popup that opened
+		// because its exit WINDOW ran out, not because of an exit gesture. Nothing
+		// moved the pointer toward the edge, so backdrop clicks close it normally.
 		if (showClose && opts.backdropCloses !== false) {
 			overlay.addEventListener('click', e => { if (e.target === overlay) { fireClickEvent(host, '__backdrop__'); close(); } });
 		}
@@ -1658,11 +1668,14 @@
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
 				};
-				function fireOnce() {
+				// viaWindow says the exit WINDOW ran out and auto-fire opened this,
+				// rather than the visitor making an exit gesture. The popup shell uses
+				// it to decide whether a backdrop click may close the thing.
+				function fireOnce(viaWindow) {
 					if (fired || expired) return;
 					fired = true;
 					disarm();
-					fire();
+					fire(viaWindow === true);
 				}
 				// Buffer: don't ARM exit-intent until the visitor has been on the page
 				// for exit_buffer_seconds. If they bounce inside that window nothing is
@@ -1685,7 +1698,7 @@
 				if (exitWindowMs > 0) {
 					setTimeout(() => {
 						if (fired) return;
-						if (config.exit_window_autofire) { fireOnce(); return; }
+						if (config.exit_window_autofire) { fireOnce(true); return; }
 						expired = true;
 						disarm();
 					}, exitWindowMs);
@@ -1937,11 +1950,14 @@
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
 				};
-				function fireOnce() {
+				// viaWindow says the exit WINDOW ran out and auto-fire opened this,
+				// rather than the visitor making an exit gesture. The popup shell uses
+				// it to decide whether a backdrop click may close the thing.
+				function fireOnce(viaWindow) {
 					if (fired || expired) return;
 					fired = true;
 					disarm();
-					fire();
+					fire(viaWindow === true);
 				}
 				// Buffer: don't ARM exit-intent until the visitor has been on the page
 				// for exit_buffer_seconds. If they bounce inside that window nothing is
@@ -1964,7 +1980,7 @@
 				if (exitWindowMs > 0) {
 					setTimeout(() => {
 						if (fired) return;
-						if (config.exit_window_autofire) { fireOnce(); return; }
+						if (config.exit_window_autofire) { fireOnce(true); return; }
 						expired = true;
 						disarm();
 					}, exitWindowMs);
