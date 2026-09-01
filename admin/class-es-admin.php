@@ -1413,6 +1413,8 @@ class ES_Admin {
 				'inactivity_seconds'  => $pick( 'inactivity_seconds', 30 ),
 				'exit_include_hidden' => ! empty( $pick( 'exit_include_hidden', null ) ),
 				'exit_buffer_seconds' => $pick( 'exit_buffer_seconds', 0 ),
+				'exit_window_seconds' => $pick( 'exit_window_seconds', 0 ),
+				'exit_window_autofire' => ! empty( $pick( 'exit_window_autofire', null ) ),
 			];
 			if ( $shell === 'ribbon' ) {
 				$out['position'] = sanitize_key( (string) ( $_POST['ribbon_position'] ?? 'top' ) );

@@ -1287,27 +1287,47 @@
 				//   without backgrounding the page).
 				// - Optional: include real tab/app switches via visibilitychange.
 				let fired = false;
+				let expired = false;
 				const onMouseLeave = e => { if (e.clientY <= 0) fireOnce(); };
 				const onBlur = () => { if (document.visibilityState === 'visible') fireOnce(); };
 				const onVisibility = () => { if (document.hidden) fireOnce(); };
-				function fireOnce() {
-					if (fired) return;
-					fired = true;
+				const disarm = () => {
 					document.removeEventListener('mouseleave', onMouseLeave);
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
+				};
+				function fireOnce() {
+					if (fired || expired) return;
+					fired = true;
+					disarm();
 					fire();
 				}
 				// Buffer: don't ARM exit-intent until the visitor has been on the page
 				// for exit_buffer_seconds. If they bounce inside that window nothing is
 				// armed — so the shell never opens and no impression (es_view) is logged.
 				const arm = () => {
+					if (fired || expired) return;
 					document.addEventListener('mouseleave', onMouseLeave);
 					window.addEventListener('blur', onBlur);
 					if (config.exit_include_hidden) {
 						document.addEventListener('visibilitychange', onVisibility);
 					}
 				};
+				// Window: the other end of the same idea. exit_window_seconds is how long
+				// after load this trigger stays interested. Past it we stop listening, so
+				// a visitor who leaves late sees nothing — unless exit_window_autofire is
+				// on, in which case the deadline itself opens the shell. 0 = no limit.
+				// Both timers count from load, so a window shorter than the buffer means
+				// the trigger never arms at all (autofire still fires).
+				const exitWindowMs = Math.max(0, +config.exit_window_seconds || 0) * 1000;
+				if (exitWindowMs > 0) {
+					setTimeout(() => {
+						if (fired) return;
+						if (config.exit_window_autofire) { fireOnce(); return; }
+						expired = true;
+						disarm();
+					}, exitWindowMs);
+				}
 				const exitBufferMs = Math.max(0, +config.exit_buffer_seconds || 0) * 1000;
 				if (exitBufferMs > 0) setTimeout(arm, exitBufferMs); else arm();
 				break;
@@ -1629,27 +1649,47 @@
 			}
 			case 'exit': {
 				let fired = false;
+				let expired = false;
 				const onMouseLeave = e => { if (e.clientY <= 0) fireOnce(); };
 				const onBlur = () => { if (document.visibilityState === 'visible') fireOnce(); };
 				const onVisibility = () => { if (document.hidden) fireOnce(); };
-				function fireOnce() {
-					if (fired) return;
-					fired = true;
+				const disarm = () => {
 					document.removeEventListener('mouseleave', onMouseLeave);
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
+				};
+				function fireOnce() {
+					if (fired || expired) return;
+					fired = true;
+					disarm();
 					fire();
 				}
 				// Buffer: don't ARM exit-intent until the visitor has been on the page
 				// for exit_buffer_seconds. If they bounce inside that window nothing is
 				// armed — so the shell never opens and no impression (es_view) is logged.
 				const arm = () => {
+					if (fired || expired) return;
 					document.addEventListener('mouseleave', onMouseLeave);
 					window.addEventListener('blur', onBlur);
 					if (config.exit_include_hidden) {
 						document.addEventListener('visibilitychange', onVisibility);
 					}
 				};
+				// Window: the other end of the same idea. exit_window_seconds is how long
+				// after load this trigger stays interested. Past it we stop listening, so
+				// a visitor who leaves late sees nothing — unless exit_window_autofire is
+				// on, in which case the deadline itself opens the shell. 0 = no limit.
+				// Both timers count from load, so a window shorter than the buffer means
+				// the trigger never arms at all (autofire still fires).
+				const exitWindowMs = Math.max(0, +config.exit_window_seconds || 0) * 1000;
+				if (exitWindowMs > 0) {
+					setTimeout(() => {
+						if (fired) return;
+						if (config.exit_window_autofire) { fireOnce(); return; }
+						expired = true;
+						disarm();
+					}, exitWindowMs);
+				}
 				const exitBufferMs = Math.max(0, +config.exit_buffer_seconds || 0) * 1000;
 				if (exitBufferMs > 0) setTimeout(arm, exitBufferMs); else arm();
 				break;
@@ -1888,27 +1928,47 @@
 			}
 			case 'exit': {
 				let fired = false;
+				let expired = false;
 				const onMouseLeave = e => { if (e.clientY <= 0) fireOnce(); };
 				const onBlur = () => { if (document.visibilityState === 'visible') fireOnce(); };
 				const onVisibility = () => { if (document.hidden) fireOnce(); };
-				function fireOnce() {
-					if (fired) return;
-					fired = true;
+				const disarm = () => {
 					document.removeEventListener('mouseleave', onMouseLeave);
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
+				};
+				function fireOnce() {
+					if (fired || expired) return;
+					fired = true;
+					disarm();
 					fire();
 				}
 				// Buffer: don't ARM exit-intent until the visitor has been on the page
 				// for exit_buffer_seconds. If they bounce inside that window nothing is
 				// armed — so the shell never opens and no impression (es_view) is logged.
 				const arm = () => {
+					if (fired || expired) return;
 					document.addEventListener('mouseleave', onMouseLeave);
 					window.addEventListener('blur', onBlur);
 					if (config.exit_include_hidden) {
 						document.addEventListener('visibilitychange', onVisibility);
 					}
 				};
+				// Window: the other end of the same idea. exit_window_seconds is how long
+				// after load this trigger stays interested. Past it we stop listening, so
+				// a visitor who leaves late sees nothing — unless exit_window_autofire is
+				// on, in which case the deadline itself opens the shell. 0 = no limit.
+				// Both timers count from load, so a window shorter than the buffer means
+				// the trigger never arms at all (autofire still fires).
+				const exitWindowMs = Math.max(0, +config.exit_window_seconds || 0) * 1000;
+				if (exitWindowMs > 0) {
+					setTimeout(() => {
+						if (fired) return;
+						if (config.exit_window_autofire) { fireOnce(); return; }
+						expired = true;
+						disarm();
+					}, exitWindowMs);
+				}
 				const exitBufferMs = Math.max(0, +config.exit_buffer_seconds || 0) * 1000;
 				if (exitBufferMs > 0) setTimeout(arm, exitBufferMs); else arm();
 				break;

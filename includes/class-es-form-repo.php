@@ -768,6 +768,8 @@ class ES_Form_Repo {
 	 *   inactivity_seconds  = int >= 5
 	 *   exit_include_hidden = bool
 	 *   exit_buffer_seconds = int >= 0 (exit: ignore exit-intent for N s after load)
+	 *   exit_window_seconds = int >= 0 (exit: stop watching N s after load; 0 = no limit)
+	 *   exit_window_autofire = bool (exit: show the shell when that window runs out)
 	 *
 	 * All four value fields are kept regardless of which trigger is selected, so
 	 * the user doesn't lose what they typed when they switch the radio.
@@ -841,6 +843,8 @@ class ES_Form_Repo {
 			'inactivity_seconds'  => max( 5, (int) ( $raw['inactivity_seconds'] ?? 30 ) ),
 			'exit_include_hidden' => ! empty( $raw['exit_include_hidden'] ),
 			'exit_buffer_seconds' => max( 0, (int) ( $raw['exit_buffer_seconds'] ?? 0 ) ),
+			'exit_window_seconds' => max( 0, (int) ( $raw['exit_window_seconds'] ?? 0 ) ),
+			'exit_window_autofire' => ! empty( $raw['exit_window_autofire'] ),
 			'position'            => $position,
 			'corner'              => $corner,
 			'sticky'              => $sticky,
