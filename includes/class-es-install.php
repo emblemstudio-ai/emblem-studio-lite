@@ -137,6 +137,29 @@ class ES_Install {
 			KEY form_id (form_id, created_at)
 		) $charset_collate;";
 
+		// Content changes set now and applied on a date (SER-1287). Deliberately
+		// NOT columns on form_revisions: a revision records something that
+		// happened, this is an intention that has not happened yet, and it can
+		// be edited, cancelled, skipped or fail. Same columns, opposite
+		// direction in time.
+		$scheduled = "CREATE TABLE {$prefix}emblemstudio_form_scheduled_revisions (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			html LONGTEXT NULL,
+			css LONGTEXT NULL,
+			name VARCHAR(191) NULL,
+			apply_at DATETIME NOT NULL,
+			status VARCHAR(16) NOT NULL DEFAULT 'queued',
+			applied_at DATETIME NULL,
+			reason VARCHAR(500) NULL,
+			based_on_revision_id BIGINT(20) UNSIGNED NULL,
+			created_at DATETIME NOT NULL,
+			created_by BIGINT(20) UNSIGNED NULL,
+			PRIMARY KEY  (id),
+			KEY due (status, apply_at),
+			KEY form_apply (form_id, apply_at)
+		) $charset_collate;";
+
 		$ds_revisions = "CREATE TABLE {$prefix}emblemstudio_design_system_revisions (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			css LONGTEXT NULL,
@@ -239,6 +262,7 @@ class ES_Install {
 		dbDelta( $leads );
 		dbDelta( $logs );
 		dbDelta( $revisions );
+		dbDelta( $scheduled );
 		dbDelta( $ds_revisions );
 		dbDelta( $variants );
 		dbDelta( $tests );

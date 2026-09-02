@@ -476,6 +476,35 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 									</a>
 								<?php endif; ?>
 								<?php
+								/*
+								 * A queued CONTENT change (SER-1287). Next to the asset NAME,
+								 * never in the shell rows: a content change belongs to the
+								 * asset, and one with three shells would otherwise show it
+								 * three times.
+								 *
+								 * It deliberately avoids the word "scheduled". This screen
+								 * already spends that word twice, on "Scheduled" and
+								 * "Scheduled to end", and both of those are about WHETHER an
+								 * asset shows rather than WHAT it says.
+								 */
+								$sched_n = ( ! $is_trash && class_exists( 'ES_Form_Scheduled_Revisions' ) ) ? ES_Form_Scheduled_Revisions::queued_count( (int) $f->id ) : 0;
+								if ( $sched_n > 0 ) :
+									$sched_next = ES_Form_Scheduled_Revisions::next_at( (int) $f->id );
+								?>
+									<a class="es-sched-badge"
+									   href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) . '#revisions' ); ?>"
+									   title="<?php echo esc_attr( sprintf( __( 'Content changes queued: %1$d. The next is %2$s.', 'emblem-studio' ), $sched_n, mysql2date( $dt_fmt, (string) $sched_next ) ) ); ?>">
+										<?php
+										printf(
+											/* translators: %s = a short date, e.g. "Sep 7" */
+											esc_html__( 'Changes %s', 'emblem-studio' ),
+											esc_html( mysql2date( 'M j', (string) $sched_next ) )
+										);
+										echo $sched_n > 1 ? ' +' . (int) ( $sched_n - 1 ) : '';
+										?>
+									</a>
+								<?php endif; ?>
+								<?php
 								// "Edit lock" indicator — someone currently has this asset open.
 								$lock_uid = $is_trash ? 0 : ES_Locks::holder_of_row( $f );
 								if ( $lock_uid ) :

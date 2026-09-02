@@ -1591,10 +1591,129 @@ $ab_archive_ct = count( $ab_archived );
 				</div>
 			<?php else :
 				$revisions = ES_Form_Revisions::list_for_form( (int) $f->id );
+
+				/*
+				 * Past is what was. Scheduled is what will be. Same content,
+				 * opposite direction in time, so they sit under one tab.
+				 *
+				 * The screen opens on Scheduled when anything is queued, because
+				 * a change that has not happened yet is the one you came to
+				 * check. Otherwise it opens on Past, which is what this tab has
+				 * always been (SER-1287).
+				 */
+				$scheduled     = class_exists( 'ES_Form_Scheduled_Revisions' ) ? ES_Form_Scheduled_Revisions::list_for_form( (int) $f->id ) : [];
+				$sched_queued  = array_values( array_filter( $scheduled, static fn( $s ) => ES_Form_Scheduled_Revisions::QUEUED === $s->status ) );
+				$sched_history = array_values( array_filter( $scheduled, static fn( $s ) => ES_Form_Scheduled_Revisions::QUEUED !== $s->status ) );
+				$sched_half    = ( ! empty( $sched_queued ) || isset( $_GET['es_sched'] ) ) ? 'scheduled' : 'past';
+				$sched_result  = isset( $_GET['es_sched'] ) ? sanitize_text_field( wp_unslash( $_GET['es_sched'] ) ) : '';
+				$sched_ab      = class_exists( 'ES_AB' ) && ES_AB::running_test_for_form( (int) $f->id );
+				$date_fmt      = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
 				if ( isset( $_GET['restored'] ) ) :
 			?>
 				<div class="notice notice-success inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'Revision restored. The previous current version is preserved at the top of the list.', 'emblem-studio' ); ?></p></div>
 			<?php endif; ?>
+
+			<div class="es-sched-tabs" style="margin:0 0 1.2em;">
+				<button type="button" class="button es-sched-tab<?php echo 'past' === $sched_half ? ' button-primary' : ''; ?>" data-half="past"><?php esc_html_e( 'Past revisions', 'emblem-studio' ); ?></button>
+				<button type="button" class="button es-sched-tab<?php echo 'scheduled' === $sched_half ? ' button-primary' : ''; ?>" data-half="scheduled">
+					<?php esc_html_e( 'Scheduled revisions', 'emblem-studio' ); ?><?php echo ! empty( $sched_queued ) ? ' (' . count( $sched_queued ) . ')' : ''; ?>
+				</button>
+			</div>
+
+			<div class="es-sched-half" data-half="scheduled"<?php echo 'scheduled' === $sched_half ? '' : ' hidden'; ?>>
+				<?php if ( 'queued' === $sched_result ) : ?>
+					<div class="notice notice-success inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'Queued. Nothing on the live form has changed yet.', 'emblem-studio' ); ?></p></div>
+				<?php elseif ( 'applied' === $sched_result ) : ?>
+					<div class="notice notice-success inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'Applied. The version it replaced is in Past revisions, so you can undo it.', 'emblem-studio' ); ?></p></div>
+				<?php elseif ( 'cancelled' === $sched_result ) : ?>
+					<div class="notice notice-info inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'Cancelled. That change will not run.', 'emblem-studio' ); ?></p></div>
+				<?php elseif ( 'badtime' === $sched_result ) : ?>
+					<div class="notice notice-error inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'That time has already passed, or was not a date and time. Pick a moment in the future.', 'emblem-studio' ); ?></p></div>
+				<?php elseif ( 'ab' === $sched_result || 'skipped' === $sched_result ) : ?>
+					<div class="notice notice-error inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'An A/B test is running on this form. While it runs, visitors are shown variants rather than the form’s own content, so a change to it would be applied to something nobody sees.', 'emblem-studio' ); ?></p></div>
+				<?php endif; ?>
+
+				<?php if ( $sched_ab ) : ?>
+					<div class="notice notice-warning inline" style="margin:0 0 1em;"><p><?php esc_html_e( 'An A/B test is running. New changes cannot be scheduled, and anything already queued will be skipped rather than applied when its time comes.', 'emblem-studio' ); ?></p></div>
+				<?php endif; ?>
+
+				<p class="description">
+					<?php esc_html_e( 'Times are on this site’s clock. A change runs on the first page load after its time, so on a quiet site it may run a few minutes late. It runs late rather than not at all.', 'emblem-studio' ); ?>
+				</p>
+
+				<?php if ( ! $sched_ab ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="es-sched-new" style="margin:1em 0; padding:1em; border:1px solid #dcdcde; background:#fff;">
+					<input type="hidden" name="action" value="es_schedule_change">
+					<input type="hidden" name="form_id" value="<?php echo (int) $f->id; ?>">
+					<?php wp_nonce_field( 'es_schedule_change_' . (int) $f->id ); ?>
+					<p style="margin:0 0 .6em;"><strong><?php esc_html_e( 'Schedule the form’s current content for a date', 'emblem-studio' ); ?></strong></p>
+					<p class="description" style="margin:0 0 .8em;"><?php esc_html_e( 'Save your edits first, then queue them here. The live form keeps what it has until the date you pick.', 'emblem-studio' ); ?></p>
+					<label style="margin-right:1em;">
+						<?php esc_html_e( 'When', 'emblem-studio' ); ?>
+						<input type="datetime-local" name="apply_at" required>
+					</label>
+					<label style="margin-right:1em;">
+						<?php esc_html_e( 'Name', 'emblem-studio' ); ?>
+						<input type="text" name="change_name" maxlength="191" placeholder="<?php esc_attr_e( 'Plain thank-you, no sale', 'emblem-studio' ); ?>">
+					</label>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Schedule', 'emblem-studio' ); ?></button>
+				</form>
+				<?php endif; ?>
+
+				<?php if ( empty( $scheduled ) ) : ?>
+					<div class="es-tab-empty"><p><?php esc_html_e( 'Nothing scheduled yet.', 'emblem-studio' ); ?></p></div>
+				<?php else : ?>
+					<?php foreach ( $sched_queued as $s ) :
+						$moved  = ES_Form_Scheduled_Revisions::has_moved_on( $s );
+						$cancel = wp_nonce_url(
+							admin_url( 'admin-post.php?action=es_cancel_scheduled_change&form_id=' . (int) $f->id . '&change_id=' . (int) $s->id ),
+							'es_cancel_scheduled_change_' . (int) $f->id . '_' . (int) $s->id
+						);
+						$apply = wp_nonce_url(
+							admin_url( 'admin-post.php?action=es_apply_scheduled_change&form_id=' . (int) $f->id . '&change_id=' . (int) $s->id ),
+							'es_apply_scheduled_change_' . (int) $f->id . '_' . (int) $s->id
+						);
+					?>
+						<div style="margin:0 0 .8em; padding:.9em 1em; border:1px solid #dcdcde; background:#fff;">
+							<p style="margin:0 0 .4em;">
+								<strong><?php echo esc_html( mysql2date( $date_fmt, $s->apply_at ) ); ?></strong>
+								&mdash; <?php echo esc_html( $s->name ? $s->name : __( 'Untitled change', 'emblem-studio' ) ); ?>
+							</p>
+							<?php if ( true === $moved ) : ?>
+								<p class="description" style="color:#8a6100;">
+									<?php esc_html_e( 'Built before your latest save. Applying it will undo whatever you changed since. Cancel it and schedule a fresh one if that is not what you want.', 'emblem-studio' ); ?>
+								</p>
+							<?php elseif ( null === $moved ) : ?>
+								<p class="description">
+									<?php esc_html_e( 'Cannot tell whether the form has changed since this was built.', 'emblem-studio' ); ?>
+								</p>
+							<?php endif; ?>
+							<p style="margin:.5em 0 0;">
+								<a href="<?php echo esc_url( $apply ); ?>" class="button" onclick="return confirm('<?php esc_attr_e( 'Apply this change to the live form now, instead of waiting for its date?', 'emblem-studio' ); ?>');"><?php esc_html_e( 'Apply now', 'emblem-studio' ); ?></a>
+								<a href="<?php echo esc_url( $cancel ); ?>" class="button" onclick="return confirm('<?php esc_attr_e( 'Call this change off? It will not be applied.', 'emblem-studio' ); ?>');"><?php esc_html_e( 'Cancel this change', 'emblem-studio' ); ?></a>
+							</p>
+						</div>
+					<?php endforeach; ?>
+
+					<?php if ( ! empty( $sched_history ) ) : ?>
+						<p class="description" style="margin-top:1.4em;"><strong><?php esc_html_e( 'Already run', 'emblem-studio' ); ?></strong></p>
+						<?php foreach ( $sched_history as $s ) : ?>
+							<div style="margin:0 0 .5em; padding:.7em 1em; border:1px solid #f0f0f1; background:#fafafa;">
+								<p style="margin:0;">
+									<strong><?php echo esc_html( ucfirst( (string) $s->status ) ); ?></strong>
+									&mdash; <?php echo esc_html( $s->name ? $s->name : __( 'Untitled change', 'emblem-studio' ) ); ?>
+									<span class="description"><?php echo esc_html( sprintf( __( 'due %s', 'emblem-studio' ), mysql2date( $date_fmt, $s->apply_at ) ) ); ?></span>
+								</p>
+								<?php if ( ! empty( $s->reason ) ) : ?>
+									<p class="description" style="margin:.3em 0 0;"><?php echo esc_html( (string) $s->reason ); ?></p>
+								<?php endif; ?>
+							</div>
+						<?php endforeach; ?>
+					<?php endif; ?>
+				<?php endif; ?>
+			</div>
+
+			<div class="es-sched-half" data-half="past"<?php echo 'past' === $sched_half ? '' : ' hidden'; ?>>
 				<?php if ( empty( $revisions ) ) : ?>
 					<div class="es-tab-empty">
 						<p><?php esc_html_e( 'No revisions yet. The first one will appear here after your next save that changes HTML or CSS.', 'emblem-studio' ); ?></p>
@@ -1702,6 +1821,18 @@ $ab_archive_ct = count( $ab_archived );
 										<?php if ( ! $ab_running ) : ?>
 											<a href="<?php echo esc_url( $restore_as_variant_url ); ?>" class="button es-revision-restore-as-variant" title="<?php esc_attr_e( 'Start a new A/B test using this revision as variant B; the current design becomes variant A.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Restore as variant', 'emblem-studio' ); ?></a>
 										<?php endif; ?>
+										<?php if ( ! $sched_ab ) : ?>
+											<span class="es-revision-schedule" style="display:inline-flex; align-items:center; gap:.3em;">
+												<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline-flex; align-items:center; gap:.3em;">
+													<input type="hidden" name="action" value="es_schedule_change">
+													<input type="hidden" name="form_id" value="<?php echo (int) $f->id; ?>">
+													<input type="hidden" name="revision_id" value="<?php echo (int) $rev->id; ?>">
+													<?php wp_nonce_field( 'es_schedule_change_' . (int) $f->id ); ?>
+													<input type="datetime-local" name="apply_at" required aria-label="<?php esc_attr_e( 'Put this version back at', 'emblem-studio' ); ?>">
+													<button type="submit" class="button" title="<?php esc_attr_e( 'Put this version back on a date you choose, instead of now.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Schedule this version', 'emblem-studio' ); ?></button>
+												</form>
+											</span>
+										<?php endif; ?>
 										<a href="<?php echo esc_url( $export_revision_url ); ?>" class="button" title="<?php esc_attr_e( 'Download this revision as a JSON file. Uses the revision\'s HTML/CSS plus the form\'s current settings.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Export', 'emblem-studio' ); ?></a>
 										<button type="button" class="button es-revision-copy" data-copy-source="html" data-revision-id="<?php echo (int) $rev->id; ?>"><?php esc_html_e( 'Copy HTML', 'emblem-studio' ); ?></button>
 										<button type="button" class="button es-revision-copy" data-copy-source="css"  data-revision-id="<?php echo (int) $rev->id; ?>"><?php esc_html_e( 'Copy CSS',  'emblem-studio' ); ?></button>
@@ -1716,6 +1847,23 @@ $ab_archive_ct = count( $ab_archived );
 						<?php endforeach; ?>
 					</ul>
 				<?php endif; ?>
+			</div>
+			<script>
+			/* The two halves of the Revisions tab. Plain show/hide: the data for
+			   both is already on the page, so switching is instant and there is
+			   nothing to fetch. */
+			( function () {
+				var tabs = document.querySelectorAll( '.es-sched-tab' );
+				var halves = document.querySelectorAll( '.es-sched-half' );
+				tabs.forEach( function ( t ) {
+					t.addEventListener( 'click', function () {
+						var want = t.getAttribute( 'data-half' );
+						tabs.forEach( function ( x ) { x.classList.toggle( 'button-primary', x === t ); } );
+						halves.forEach( function ( h ) { h.hidden = h.getAttribute( 'data-half' ) !== want; } );
+					} );
+				} );
+			} )();
+			</script>
 			<?php endif; ?>
 		</section>
 

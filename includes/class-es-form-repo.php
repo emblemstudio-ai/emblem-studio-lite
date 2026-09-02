@@ -427,6 +427,12 @@ class ES_Form_Repo {
 			],
 			[ 'id' => $id ]
 		);
+		// A queued content change on a form nobody can see is a surprise waiting
+		// for whoever restores it (SER-1287). Revisions deliberately survive a
+		// trash-and-restore round trip; an INTENTION should not.
+		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
+			ES_Form_Scheduled_Revisions::cancel_for_form( $id, __( 'The form was moved to the trash.', 'emblem-studio' ) );
+		}
 		self::flush_caches();
 	}
 
@@ -481,6 +487,9 @@ class ES_Form_Repo {
 			],
 			[ 'id' => $id ]
 		);
+		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
+			ES_Form_Scheduled_Revisions::cancel_for_form( $id, __( 'The form was archived.', 'emblem-studio' ) );
+		}
 		self::flush_caches();
 	}
 
@@ -667,6 +676,9 @@ class ES_Form_Repo {
 		// cascade so the history survives "Move to Trash → Restore".
 		if ( class_exists( 'ES_Form_Revisions' ) ) {
 			ES_Form_Revisions::delete_for_form( $id );
+		}
+		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
+			ES_Form_Scheduled_Revisions::delete_for_form( $id );
 		}
 		self::flush_caches();
 	}

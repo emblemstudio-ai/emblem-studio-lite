@@ -50,6 +50,29 @@ class ES_Plugin {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'emblem_studio_minute', 'emblem_studio_reconcile_statuses' );
 		}
 		add_action( 'emblem_studio_reconcile_statuses', [ $this, 'run_status_reconcile' ] );
+
+		// Apply content changes whose scheduled time has arrived (SER-1287).
+		// A SEPARATE hook from the one above on purpose: that decides whether a
+		// form shows, this decides what it says, and a fault in one must not
+		// stop the other.
+		//
+		// WP-Cron only fires on a page load, so on a quiet site a change WILL
+		// run late. It runs late rather than never, which is the deliberate
+		// rule: a promo panel that comes down late is untidy, one that never
+		// comes down is a lie on a live page. Unlike the reconciler above,
+		// nothing else covers this — there is no render-time fallback, because
+		// applying a change is a write, not a reading of state.
+		if ( ! wp_next_scheduled( 'emblem_studio_apply_scheduled_revisions' ) ) {
+			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'emblem_studio_minute', 'emblem_studio_apply_scheduled_revisions' );
+		}
+		add_action( 'emblem_studio_apply_scheduled_revisions', [ $this, 'run_scheduled_revisions' ] );
+	}
+
+	/** Apply any content changes that are due. See the note where this is hooked. */
+	public function run_scheduled_revisions(): void {
+		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
+			ES_Form_Scheduled_Revisions::apply_due();
+		}
 	}
 
 	/**

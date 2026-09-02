@@ -41,6 +41,10 @@ class ES_Admin {
 			add_action( 'admin_post_es_revision_note',           [ $this, 'handle_revision_note'           ] );
 			add_action( 'admin_post_es_export_revision',         [ $this, 'handle_export_revision'         ] );
 			add_action( 'admin_post_es_restore_revision_as_new', [ $this, 'handle_restore_revision_as_new' ] );
+			// Scheduled content changes — the future half of the same tab (SER-1287).
+			add_action( 'admin_post_es_schedule_change',        [ $this, 'handle_schedule_change'        ] );
+			add_action( 'admin_post_es_cancel_scheduled_change', [ $this, 'handle_cancel_scheduled_change' ] );
+			add_action( 'admin_post_es_apply_scheduled_change',  [ $this, 'handle_apply_scheduled_change'  ] );
 		}
 		add_action( 'admin_post_es_export_form',  [ $this, 'handle_export_form'  ] );
 		add_action( 'admin_post_es_export_all',   [ $this, 'handle_export_all'   ] );
@@ -1025,6 +1029,114 @@ class ES_Admin {
 		);
 
 		wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $form_id . '&restored=1#revisions' ) );
+		exit;
+	}
+
+	/* ── Scheduled content changes (SER-1287) ──────────────────────────────
+	 *
+	 * The future half of the Revisions tab. A queued change carries HTML, CSS
+	 * and a time, and nothing about settings: a form already owns its own start
+	 * and end dates, so "stop showing this on the 8th" is something the form
+	 * does rather than something a change to its content does.
+	 */
+
+	/**
+	 * Queue a change for a date: either the form's current content, or a past
+	 * revision put back later instead of now.
+	 */
+	public function handle_schedule_change(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
+		}
+		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
+		if ( ! $form_id ) {
+			wp_die( esc_html__( 'Missing parameters.', 'emblem-studio' ), '', [ 'response' => 400 ] );
+		}
+		check_admin_referer( 'es_schedule_change_' . $form_id );
+
+		$form = ES_Form_Repo::find( $form_id );
+		if ( ! $form ) {
+			wp_die( esc_html__( 'Form not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
+		}
+
+		// Refused rather than queued. A change set now would be SKIPPED when its
+		// time came, and a fortnight is a long way to find that out.
+		if ( class_exists( 'ES_AB' ) && ES_AB::running_test_for_form( $form_id ) ) {
+			$this->back_to_scheduled( $form_id, 'ab' );
+		}
+
+		$apply_at    = isset( $_POST['apply_at'] ) ? sanitize_text_field( wp_unslash( $_POST['apply_at'] ) ) : '';
+		$name        = isset( $_POST['change_name'] ) ? sanitize_text_field( wp_unslash( $_POST['change_name'] ) ) : '';
+		$revision_id = isset( $_POST['revision_id'] ) ? (int) $_POST['revision_id'] : 0;
+
+		// From a past revision, or from what the form says right now.
+		if ( $revision_id ) {
+			$rev = ES_Form_Revisions::find( $revision_id );
+			if ( ! $rev || (int) $rev->form_id !== $form_id ) {
+				wp_die( esc_html__( 'Revision not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
+			}
+			$html = (string) $rev->html;
+			$css  = (string) $rev->css;
+			$name = '' !== $name ? $name : __( 'From a saved version', 'emblem-studio' );
+		} else {
+			$html = (string) $form->html;
+			$css  = (string) $form->css;
+		}
+
+		$new_id = ES_Form_Scheduled_Revisions::insert( $form_id, $html, $css, $apply_at, $name );
+		$this->back_to_scheduled( $form_id, $new_id ? 'queued' : 'badtime' );
+	}
+
+	public function handle_cancel_scheduled_change(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
+		}
+		$form_id   = isset( $_GET['form_id'] ) ? (int) $_GET['form_id'] : 0;
+		$change_id = isset( $_GET['change_id'] ) ? (int) $_GET['change_id'] : 0;
+		if ( ! $form_id || ! $change_id ) {
+			wp_die( esc_html__( 'Missing parameters.', 'emblem-studio' ), '', [ 'response' => 400 ] );
+		}
+		check_admin_referer( 'es_cancel_scheduled_change_' . $form_id . '_' . $change_id );
+
+		$row = ES_Form_Scheduled_Revisions::find( $change_id );
+		if ( ! $row || (int) $row->form_id !== $form_id ) {
+			wp_die( esc_html__( 'Scheduled change not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
+		}
+
+		ES_Form_Scheduled_Revisions::cancel( $change_id, __( 'Cancelled from the admin screen.', 'emblem-studio' ) );
+		$this->back_to_scheduled( $form_id, 'cancelled' );
+	}
+
+	/**
+	 * Apply a queued change now instead of waiting for its date. Goes through
+	 * exactly the same gates as the cron run, so it cannot be used to get past
+	 * a running A/B test.
+	 */
+	public function handle_apply_scheduled_change(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
+		}
+		$form_id   = isset( $_GET['form_id'] ) ? (int) $_GET['form_id'] : 0;
+		$change_id = isset( $_GET['change_id'] ) ? (int) $_GET['change_id'] : 0;
+		if ( ! $form_id || ! $change_id ) {
+			wp_die( esc_html__( 'Missing parameters.', 'emblem-studio' ), '', [ 'response' => 400 ] );
+		}
+		check_admin_referer( 'es_apply_scheduled_change_' . $form_id . '_' . $change_id );
+
+		$row = ES_Form_Scheduled_Revisions::find( $change_id );
+		if ( ! $row || (int) $row->form_id !== $form_id ) {
+			wp_die( esc_html__( 'Scheduled change not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
+		}
+
+		$status = ES_Form_Scheduled_Revisions::apply( $change_id );
+		$this->back_to_scheduled( $form_id, ES_Form_Scheduled_Revisions::APPLIED === $status ? 'applied' : $status );
+	}
+
+	/** Back to the Scheduled half of the Revisions tab, with a word about what happened. */
+	private function back_to_scheduled( int $form_id, string $result ): void {
+		wp_safe_redirect( admin_url(
+			'admin.php?page=emblem-studio&action=edit&id=' . $form_id . '&es_sched=' . rawurlencode( $result ) . '#revisions'
+		) );
 		exit;
 	}
 
