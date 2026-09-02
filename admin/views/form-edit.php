@@ -1656,7 +1656,13 @@ $ab_archive_ct = count( $ab_archived );
 						<?php esc_html_e( 'Name', 'emblem-studio' ); ?>
 						<input type="text" name="change_name" maxlength="191" placeholder="<?php esc_attr_e( 'Plain thank-you, no sale', 'emblem-studio' ); ?>">
 					</label>
-					<button type="submit" class="button button-primary"><?php esc_html_e( 'Schedule', 'emblem-studio' ); ?></button>
+					<?php
+					// "Schedule revision", not "Schedule". The Settings tab on this
+					// same screen already carries a "Schedule" heading, and that one
+					// is the form's own start and end dates. The bare word here
+					// would read as the same thing.
+					?>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Schedule revision', 'emblem-studio' ); ?></button>
 				</form>
 				<?php endif; ?>
 
