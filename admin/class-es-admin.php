@@ -1760,6 +1760,37 @@ class ES_Admin {
 
 		$new_id = ES_Form_Repo::save( $data, $id ?: null );
 
+		// The periods this form runs for (SER-1292). AFTER the save, because the
+		// stored status is derived from them and a brand-new form has no id
+		// until the line above returns one.
+		//
+		// Saved as a whole list rather than a row at a time: every rule is about
+		// the list, so ES_Form_Schedule::replace() judges it in one go and hands
+		// back the reason when it refuses. Re-saved afterwards so the derived
+		// status catches up with the list that just moved.
+		if ( $new_id > 0 && class_exists( 'ES_Form_Schedule' ) && ES_Caps::has( 'schedule_window' ) && isset( $_POST['periods'] ) && is_array( $_POST['periods'] ) ) {
+			$periods_in = [];
+			foreach ( wp_unslash( $_POST['periods'] ) as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$periods_in[] = [
+					'starts_at' => sanitize_text_field( (string) ( $row['starts_at'] ?? '' ) ),
+					'ends_at'   => sanitize_text_field( (string) ( $row['ends_at'] ?? '' ) ),
+				];
+			}
+
+			$periods_result = ES_Form_Schedule::replace( $new_id, $periods_in );
+			if ( true !== $periods_result ) {
+				// A refusal is the person's answer, not a silent no-op. It comes
+				// back as the reason, carried in the redirect so the screen can
+				// say which rule stopped it.
+				$periods_error = $periods_result;
+			} else {
+				ES_Form_Repo::save( [], $new_id ); // recompute the derived status
+			}
+		}
+
 		// A/B testing — per-form variant + test-lifecycle actions.
 		$ab_action     = isset( $_POST['ab_action'] ) ? sanitize_key( (string) $_POST['ab_action'] ) : '';
 		$started_test  = false;
@@ -1826,6 +1857,12 @@ class ES_Admin {
 		];
 		if ( $started_test ) {
 			$redirect_args['test_started'] = 1;
+		}
+		// A refused period list is the person's answer, not a silent no-op
+		// (SER-1292). The rest of the save still stands; only the periods did
+		// not take, and the screen says which rule stopped them.
+		if ( ! empty( $periods_error ) ) {
+			$redirect_args['periods_error'] = rawurlencode( $periods_error );
 		}
 		// "Open editor" on a brand-new asset saves first, then re-opens into
 		// the takeover editor on the reloaded (now-saved) edit screen.

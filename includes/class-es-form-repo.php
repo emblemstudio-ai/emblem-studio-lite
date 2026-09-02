@@ -680,6 +680,9 @@ class ES_Form_Repo {
 		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
 			ES_Form_Scheduled_Revisions::delete_for_form( $id );
 		}
+		if ( class_exists( 'ES_Form_Schedule' ) ) {
+			ES_Form_Schedule::delete_for_form( $id );
+		}
 		self::flush_caches();
 	}
 
@@ -1130,6 +1133,28 @@ class ES_Form_Repo {
 		// Schedule window is account-gated (Free+); Lite ignores it, so the
 		// effective state collapses to active/inactive (no scheduled/expired/ending).
 		$ignore_window = class_exists( 'ES_Caps' ) && ! ES_Caps::has( 'schedule_window' );
+
+		// A form can hold a LIST of periods now (SER-1292). When it does, that
+		// list is the answer: "scheduled" also covers a gap between two of them,
+		// and "expired" means past the LAST one rather than past the only one.
+		// The pair below stays for a form not yet migrated and for anything the
+		// SaaS mirror still sends.
+		if ( ! $ignore_window && class_exists( 'ES_Form_Schedule' ) && ! empty( $form->id ) ) {
+			$from_periods = ES_Form_Schedule::state_for( (int) $form->id );
+			if ( null !== $from_periods ) {
+				if ( ! empty( $form->trashed_at ) || ! empty( $form->archived_at ) || 'active' !== ( $form->status ?? 'inactive' ) ) {
+					return 'inactive';
+				}
+				if ( 'active' === $from_periods ) {
+					// "Ending" is live now with a stop still ahead, which with a
+					// list means the period running now has an end.
+					$current = ES_Form_Schedule::current( (int) $form->id );
+					return ( $current && ! empty( $current->ends_at ) ) ? 'ending' : 'active';
+				}
+				return $from_periods;
+			}
+		}
+
 		return self::effective_state_at(
 			( $form->status ?? 'inactive' ),
 			! empty( $form->trashed_at ),

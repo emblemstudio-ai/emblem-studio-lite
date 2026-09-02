@@ -254,6 +254,9 @@ $ab_archive_ct = count( $ab_archived );
 	<?php if ( isset( $_GET['restored_as_new'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Restored from a revision as a new form. The original form is untouched. Status is set to Inactive — flip it to Active when ready.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
+	<?php if ( isset( $_GET['periods_error'] ) ) : ?>
+		<div class="notice notice-error is-dismissible"><p><?php echo esc_html( sanitize_text_field( wp_unslash( $_GET['periods_error'] ) ) ); ?></p></div>
+	<?php endif; ?>
 	<?php if ( isset( $_GET['test_started'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'A/B test started. Variants A and B are seeded with the current design — switch to variant B in the Design tab to edit it.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
@@ -1921,6 +1924,12 @@ $ab_archive_ct = count( $ab_archived );
 			</table>
 
 			<?php if ( ES_Caps::has( 'schedule_window' ) ) : ?>
+			<?php
+			// The periods list is what decides now (SER-1292). The single window
+			// below it is the older pair, kept while the SaaS mirror still speaks
+			// it. A form with any period here ignores the pair entirely.
+			include EMBLEM_STUDIO_PATH . 'admin/views/_partials/schedule-periods.php';
+			?>
 			<?php include EMBLEM_STUDIO_PATH . 'admin/views/_partials/schedule-window.php'; ?>
 			<?php else : ?>
 			<h2><?php esc_html_e( 'Schedule', 'emblem-studio' ); ?></h2>

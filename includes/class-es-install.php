@@ -137,6 +137,22 @@ class ES_Install {
 			KEY form_id (form_id, created_at)
 		) $charset_collate;";
 
+		// The periods a form runs for (SER-1292), replacing the single
+		// active_from / active_until window. A list has an order, a length and
+		// members that can each be edited, and none of that fits two columns.
+		// Site-local DATETIME, same clock as everything else here.
+		$segments = "CREATE TABLE {$prefix}emblemstudio_form_schedule_segments (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			starts_at DATETIME NULL,
+			ends_at DATETIME NULL,
+			position INT UNSIGNED NOT NULL DEFAULT 0,
+			never_ran_reason VARCHAR(191) NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY form_start (form_id, starts_at)
+		) $charset_collate;";
+
 		// Content changes set now and applied on a date (SER-1287). Deliberately
 		// NOT columns on form_revisions: a revision records something that
 		// happened, this is an intention that has not happened yet, and it can
@@ -262,6 +278,7 @@ class ES_Install {
 		dbDelta( $leads );
 		dbDelta( $logs );
 		dbDelta( $revisions );
+		dbDelta( $segments );
 		dbDelta( $scheduled );
 		dbDelta( $ds_revisions );
 		dbDelta( $variants );
@@ -1019,6 +1036,40 @@ class ES_Install {
 			}
 
 			update_option( 'emblem_studio_db_version', '39' );
+		}
+
+		// A form's schedule becomes a LIST of periods (SER-1292). Every form
+		// carrying a window keeps exactly the schedule it has, as one period.
+		// Forms with neither date get no row at all, which is the same thing as
+		// "always on" and keeps the common case free of rows.
+		if ( version_compare( $current, '41', '<' ) ) {
+			global $wpdb;
+			$forms    = self::table( 'forms' );
+			$segments = self::table( 'form_schedule_segments' );
+			$now      = current_time( 'mysql' );
+
+			$rows = $wpdb->get_results(
+				"SELECT id, active_from, active_until FROM {$forms} WHERE active_from IS NOT NULL OR active_until IS NOT NULL"
+			);
+			foreach ( (array) $rows as $row ) {
+				// Idempotent: a re-run must not double a form's schedule.
+				$already = (int) $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$segments} WHERE form_id = %d",
+					(int) $row->id
+				) );
+				if ( $already > 0 ) {
+					continue;
+				}
+				$wpdb->insert( $segments, [
+					'form_id'    => (int) $row->id,
+					'starts_at'  => $row->active_from,
+					'ends_at'    => $row->active_until,
+					'position'   => 0,
+					'created_at' => $now,
+				] );
+			}
+
+			update_option( 'emblem_studio_db_version', '41' );
 		}
 	}
 

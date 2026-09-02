@@ -428,17 +428,39 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 					} elseif ( $row_blank || ! $is_enabled ) {
 						$status_label = __( 'Inactive', 'emblem-studio' );
 					} elseif ( $eff === 'scheduled' ) {
-						$status_label = sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $f->active_from ) );
+						// Scheduled covers a GAP between periods as well as "not
+						// started yet", so the date is the NEXT start, which is a
+						// different period from the one that just finished.
+						$es_next  = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::next( (int) $f->id ) : null;
+						$es_start = ( $es_next && ! empty( $es_next->starts_at ) ) ? (string) $es_next->starts_at : (string) $f->active_from;
+
+						$status_label = sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $short_fmt, $es_start ) );
 						$status_class = 'es-status-scheduled';
-						$status_title = sprintf( __( 'Set Active, but its schedule starts %s — not showing yet.', 'emblem-studio' ), mysql2date( $dt_fmt, (string) $f->active_from ) );
+						$status_title = sprintf( __( 'Set Active, but its schedule starts %s — not showing yet.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_start ) );
 					} elseif ( $eff === 'expired' ) {
-						$status_label = sprintf( __( 'Ended %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $f->active_until ) );
+						// Past the LAST period, so the date is that one's end.
+						$es_live = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::live( (int) $f->id ) : [];
+						$es_last = ! empty( $es_live ) ? end( $es_live ) : null;
+						$es_gone = ( $es_last && ! empty( $es_last->ends_at ) ) ? (string) $es_last->ends_at : (string) $f->active_until;
+
+						$status_label = sprintf( __( 'Ended %s', 'emblem-studio' ), mysql2date( $short_fmt, $es_gone ) );
 						$status_class = 'es-status-expired';
-						$status_title = sprintf( __( 'Set Active, but its schedule ended %s — no longer showing.', 'emblem-studio' ), mysql2date( $dt_fmt, (string) $f->active_until ) );
+						$status_title = sprintf( __( 'Set Active, but its schedule ended %s — no longer showing.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_gone ) );
 					} elseif ( $eff === 'ending' ) {
-						$status_label = sprintf( __( 'Ends %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $f->active_until ) );
+						// With a LIST of periods, the end of the one running now is
+						// only half the story: if another is coming, the form is
+						// not finished, and a badge naming only the end says it is
+						// (SER-1292).
+						$es_cur  = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::current( (int) $f->id ) : null;
+						$es_next = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::next( (int) $f->id ) : null;
+						$es_end  = ( $es_cur && ! empty( $es_cur->ends_at ) ) ? (string) $es_cur->ends_at : (string) $f->active_until;
+
+						$status_label = sprintf( __( 'Ends %s', 'emblem-studio' ), mysql2date( $short_fmt, $es_end ) );
+						if ( $es_next && ! empty( $es_next->starts_at ) ) {
+							$status_label .= ' · ' . sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $es_next->starts_at ) );
+						}
 						$status_class = 'es-status-ending';
-						$status_title = sprintf( __( 'Showing now, but scheduled to end %s.', 'emblem-studio' ), mysql2date( $dt_fmt, (string) $f->active_until ) );
+						$status_title = sprintf( __( 'Showing now, but scheduled to end %s.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_end ) );
 					} else {
 						$status_label = __( 'Active', 'emblem-studio' );
 						$status_class = 'es-status-active';
