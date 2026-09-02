@@ -406,6 +406,20 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 					$status_class = 'es-status-inactive';
 					$status_title = '';
 					$dt_fmt       = get_option( 'date_format' ) . ' g:i A';
+					/*
+					 * A verb and a date, matching the queued-change badge next to
+					 * the form's name ("Changes Sep 7"). Three of the states below
+					 * are ABOUT a date, so naming the state without naming the date
+					 * left the one useful fact in a tooltip nobody hovers.
+					 *
+					 * "Starts" and "Ends" rather than "Scheduled" and "Scheduled to
+					 * end": the shorter word says the same thing, and it stops this
+					 * screen spending "scheduled" on three different ideas. The
+					 * filter tabs still say Scheduled and Expired, which is where a
+					 * category name belongs, and the badge colour still ties each
+					 * one back to its tab. The full date and time stay in the title.
+					 */
+					$short_fmt = 'M j';
 					if ( ! empty( $f->archived_at ) ) {
 						$status_label = __( 'Archived', 'emblem-studio' );
 						$status_class = 'es-status-archived';
@@ -414,15 +428,15 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 					} elseif ( $row_blank || ! $is_enabled ) {
 						$status_label = __( 'Inactive', 'emblem-studio' );
 					} elseif ( $eff === 'scheduled' ) {
-						$status_label = __( 'Scheduled', 'emblem-studio' );
+						$status_label = sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $f->active_from ) );
 						$status_class = 'es-status-scheduled';
 						$status_title = sprintf( __( 'Set Active, but its schedule starts %s — not showing yet.', 'emblem-studio' ), mysql2date( $dt_fmt, (string) $f->active_from ) );
 					} elseif ( $eff === 'expired' ) {
-						$status_label = __( 'Expired', 'emblem-studio' );
+						$status_label = sprintf( __( 'Ended %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $f->active_until ) );
 						$status_class = 'es-status-expired';
 						$status_title = sprintf( __( 'Set Active, but its schedule ended %s — no longer showing.', 'emblem-studio' ), mysql2date( $dt_fmt, (string) $f->active_until ) );
 					} elseif ( $eff === 'ending' ) {
-						$status_label = __( 'Scheduled to end', 'emblem-studio' );
+						$status_label = sprintf( __( 'Ends %s', 'emblem-studio' ), mysql2date( $short_fmt, (string) $f->active_until ) );
 						$status_class = 'es-status-ending';
 						$status_title = sprintf( __( 'Showing now, but scheduled to end %s.', 'emblem-studio' ), mysql2date( $dt_fmt, (string) $f->active_until ) );
 					} else {

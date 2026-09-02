@@ -374,14 +374,17 @@ $ab_archive_ct = count( $ab_archived );
 					// toggle already reads "Inactive" for the rest), so it's consistent.
 					if ( in_array( $eff_state, array( 'active', 'scheduled', 'expired', 'ending' ), true ) ) :
 						$hdr_fmt = get_option( 'date_format' ) . ' g:i A';
+						// Verb plus date, matching the asset list and the
+						// queued-change badge. The full date stays in the title.
+						$hdr_short = 'M j';
 						if ( 'scheduled' === $eff_state ) {
-							$hdr_label = __( 'Scheduled', 'emblem-studio' );
+							$hdr_label = sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $hdr_short, (string) $f->active_from ) );
 							$hdr_title = sprintf( __( 'Active, but its schedule starts %s — not showing yet.', 'emblem-studio' ), mysql2date( $hdr_fmt, (string) $f->active_from ) );
 						} elseif ( 'expired' === $eff_state ) {
-							$hdr_label = __( 'Expired', 'emblem-studio' );
+							$hdr_label = sprintf( __( 'Ended %s', 'emblem-studio' ), mysql2date( $hdr_short, (string) $f->active_until ) );
 							$hdr_title = sprintf( __( 'Active, but its schedule ended %s — no longer showing.', 'emblem-studio' ), mysql2date( $hdr_fmt, (string) $f->active_until ) );
 						} elseif ( 'ending' === $eff_state ) {
-							$hdr_label = __( 'Scheduled to end', 'emblem-studio' );
+							$hdr_label = sprintf( __( 'Ends %s', 'emblem-studio' ), mysql2date( $hdr_short, (string) $f->active_until ) );
 							$hdr_title = sprintf( __( 'Showing now, but scheduled to end %s.', 'emblem-studio' ), mysql2date( $hdr_fmt, (string) $f->active_until ) );
 						} else {
 							$hdr_label = __( 'Active', 'emblem-studio' );
