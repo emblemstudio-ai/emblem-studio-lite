@@ -97,6 +97,11 @@ final class Emblem_Studio_SaaS_Connector
         // Post-decouple background catch-up (SER-950) — runs after the site has
         // already reverted to Lite, so it never blocks or crashes the admin.
         add_action(self::POSTDECOUPLE_HOOK, [__CLASS__, 'run_postdecouple_pull']);
+        // Tell the SaaS the moment WordPress's timezone changes. Both options,
+        // because a site either names a zone ("America/New_York") or sets a
+        // manual offset, and WordPress clears one when you set the other.
+        add_action('update_option_timezone_string', [__CLASS__, 'push_timezone']);
+        add_action('update_option_gmt_offset', [__CLASS__, 'push_timezone']);
     }
 
     /* ── Connection state ──────────────────────────────────────────────── */
@@ -798,6 +803,60 @@ final class Emblem_Studio_SaaS_Connector
             'site_id' => $cfg['site_id'],
             'token'   => $cfg['site_token'],
             'forms'   => $forms,
+            // Rides along free, as the safety net for a timezone push that never
+            // arrived: the site was offline, the SaaS was down, or the option
+            // changed while this plugin was inactive. See push_timezone().
+            'timezone' => self::wp_timezone(),
+        ]);
+    }
+
+    /**
+     * WordPress's own timezone, in whatever shape it reports.
+     *
+     * An IANA name like "America/New_York", or "-04:00" on a site using a manual
+     * offset. The SaaS normalises whatever arrives.
+     */
+    private static function wp_timezone(): string
+    {
+        return function_exists('wp_timezone_string') ? (string) wp_timezone_string() : '';
+    }
+
+    /**
+     * Push the timezone the moment somebody changes it in WordPress.
+     *
+     * A WordPress site's timezone is WordPress's to decide. The SaaS dashboard
+     * has no field to disagree with it, so this side is the only source, and it
+     * used to speak exactly once, at pairing. That left two problems: a change
+     * made here never reached the SaaS, and a bad value there could never be
+     * corrected by anything.
+     *
+     * Hooked to the option itself rather than polled, so it costs nothing on
+     * every other day of the year and is instant on the day it matters.
+     */
+    public static function push_timezone(): void
+    {
+        $cfg = self::config();
+        if (empty($cfg['site_id']) || empty($cfg['site_token'])) {
+            return; // not connected — nobody to tell
+        }
+
+        $tz = self::wp_timezone();
+        if ($tz === '') {
+            return;
+        }
+
+        // Fire and forget. This runs inside an admin save, so it must never make
+        // somebody wait and must never fail the save it hangs off. A push that
+        // does not land is picked up by the next mirror pass.
+        wp_remote_post(rtrim($cfg['api_base'], '/').'/v1/embed/site-timezone', [
+            'timeout'  => 5,
+            'blocking' => false,
+            'headers'  => ['Content-Type' => 'application/json'],
+            'body'     => wp_json_encode([
+                'site_id'  => $cfg['site_id'],
+                'token'    => $cfg['site_token'],
+                'timezone' => $tz,
+            ]),
         ]);
     }
 
