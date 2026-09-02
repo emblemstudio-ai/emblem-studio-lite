@@ -258,9 +258,13 @@ $ab_archive_ct = count( $ab_archived );
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'A/B test started. Variants A and B are seeded with the current design — switch to variant B in the Design tab to edit it.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
 	<?php if ( isset( $_GET['test_ended'] ) ) :
-		$ended = sanitize_key( (string) wp_unslash( $_GET['test_ended'] ) );
-		$msg = 'A' === $ended || 'B' === $ended
-			? sprintf( __( 'A/B test ended. Variant %s won and is now the live design. The other variant is archived.', 'emblem-studio' ), strtoupper( $ended ) )
+		// Through ES_AB::normalize_slot for the same reason as the handler that
+		// redirects here: sanitize_key() lowercases, so comparing its output
+		// against 'A' never matched and every ended test reported "without a
+		// winner", including the ones that had one.
+		$ended = ES_AB::normalize_slot( sanitize_key( (string) wp_unslash( $_GET['test_ended'] ) ) );
+		$msg = null !== $ended
+			? sprintf( __( 'A/B test ended. Variant %s won and is now the live design. The other variant is archived.', 'emblem-studio' ), $ended )
 			: __( 'A/B test ended without a winner. Both variants are archived; the form has reverted to its pre-test design.', 'emblem-studio' );
 	?>
 		<div class="notice notice-success is-dismissible"><p><?php echo esc_html( $msg ); ?></p></div>

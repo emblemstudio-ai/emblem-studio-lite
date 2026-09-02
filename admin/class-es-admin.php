@@ -1869,8 +1869,13 @@ class ES_Admin {
 		if ( $form_id <= 0 ) {
 			wp_die( esc_html__( 'Missing form_id.', 'emblem-studio' ), '', [ 'response' => 400 ] );
 		}
+		// Through ES_AB::normalize_slot, which uppercases. This used to compare
+		// sanitize_key()'s output against 'A'/'B' directly, and sanitize_key()
+		// LOWERCASES, so the winner always read as null and every "Declare
+		// winner" click ended the test with NO winner. See the note on that
+		// method.
 		$winner_raw  = isset( $_GET['winner'] ) ? sanitize_key( (string) wp_unslash( $_GET['winner'] ) ) : '';
-		$winner_slot = in_array( $winner_raw, [ 'A', 'B' ], true ) ? $winner_raw : null;
+		$winner_slot = ES_AB::normalize_slot( $winner_raw );
 		$ok = ES_AB::end_test( $form_id, $winner_slot, 'manual' );
 
 		$args = [
