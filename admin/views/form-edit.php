@@ -1828,6 +1828,16 @@ $ab_archive_ct = count( $ab_archived );
 											<iframe name="es-rev-cur-<?php echo (int) $rev->id; ?>" class="es-revision-preview-current" data-revision-id="<?php echo (int) $rev->id; ?>" title="<?php esc_attr_e( 'Current version preview', 'emblem-studio' ); ?>" loading="lazy"></iframe>
 										</div>
 									</div>
+									<?php
+									// These previews have always been interactive: they render
+									// through ES_Preview, where frontend.js simulates the
+									// success state and does not POST unless the inspector's
+									// "Submit for real" toggle is on, which nothing here sends.
+									// It was just never said, so nobody knew to try it.
+									?>
+									<p class="description" style="margin:.4em 0 0;">
+										<?php esc_html_e( 'Press the button in either preview to see its thank-you state. Nothing is sent.', 'emblem-studio' ); ?>
+									</p>
 									<div class="es-revision-actions">
 										<a href="<?php echo esc_url( $restore_url ); ?>" class="button button-primary" onclick="return confirm('<?php esc_attr_e( 'Replace the current HTML/CSS with this revision? The version you have now will be saved as a new revision at the top of the list, so you can undo this.', 'emblem-studio' ); ?>');"><?php esc_html_e( 'Replace current with this', 'emblem-studio' ); ?></a>
 										<a href="<?php echo esc_url( $restore_as_new_url ); ?>" class="button" title="<?php esc_attr_e( 'Create a new form using this revision\'s HTML/CSS combined with the source form\'s current settings. The original form is untouched.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Restore as new form', 'emblem-studio' ); ?></a>
