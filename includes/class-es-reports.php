@@ -201,6 +201,7 @@ class ES_Reports {
 				SUM(CASE WHEN event_type = 'click' AND (click_target IS NULL OR click_target NOT IN ('__close__','__backdrop__')) THEN 1 ELSE 0 END) AS clicks_meaningful,
 				SUM(CASE WHEN event_type = 'click' AND click_target IN ('__close__','__backdrop__') THEN 1 ELSE 0 END) AS dismissals,
 				COUNT(DISTINCT CASE WHEN event_type = 'view' AND visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS unique_visitors,
+				COUNT(DISTINCT CASE WHEN event_type = 'conversion' AND visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS unique_conversions,
 				SUM(CASE WHEN event_type = 'view' AND (visitor IS NULL OR visitor = '') THEN 1 ELSE 0 END) AS unknown_views
 			FROM $events $where",
 			$params
@@ -218,6 +219,7 @@ class ES_Reports {
 		$cl_mean = (int) ( $row->clicks_meaningful ?? 0 );
 		$dis = (int) ( $row->dismissals ?? 0 );
 		$uv  = (int) ( $row->unique_visitors ?? 0 );
+		$uc  = (int) ( $row->unique_conversions ?? 0 );
 
 		return [
 			'page_views'       => $pv,
@@ -243,12 +245,49 @@ class ES_Reports {
 			'close_rate'        => $v > 0 ? round( $dis / $v * 100, 2 ) : 0.0,
 			// Anonymous unique visitors + the Unknown bucket (untagged views).
 			'unique_visitors'   => $uv,
+			// People who converted at least once — the numerator a per-person
+			// rate needs. Distinct visitor ids on `conversion` events, the same
+			// shape visitor_stats() has always used for its range view.
+			'unique_conversions' => $uc,
 			'unknown_views'     => (int) ( $row->unknown_views ?? 0 ),
 			'view_rate'     => $pv > 0 ? round( $v / $pv * 100, 2 ) : 0.0,
 			// Each rate twice: against asset views (per impression) and against
 			// unique visitors (per person). The UI shows them as "X% / Y%".
 			'conv_rate'          => $v  > 0 ? round( $c / $v  * 100, 2 ) : 0.0,
+			// THREE conversion figures, and they answer three different
+			// questions. Keep them straight before quoting any of them.
+			//
+			//  conv_rate              conversions ÷ views      per impression
+			//  unique_conv_rate       people ÷ people          the share of people who signed up
+			//  conversions_per_person conversions ÷ people     how often a signer-up came back
+			//
+			// The identity that ties them together:
+			//   conv_rate_unique = unique_conv_rate × conversions_per_person
+			//
+			// conv_rate_unique is conversions ÷ unique VIEWERS, so it mixes
+			// grains (events over people) and routinely reads past 100%. That is
+			// not a fault, it is a real signal — repeat sign-ups — but it is the
+			// two figures below multiplied together, and each one on its own says
+			// what it means. Kept for callers that already read it.
 			'conv_rate_unique'   => $uv > 0 ? round( $c / $uv * 100, 2 ) : 0.0,
+			// Share of the people who saw it who signed up at all, counting each
+			// person once however many times they submitted. Same formula as
+			// visitor_stats()'s key of the same name, deliberately.
+			//
+			// It can still tip a little past 100%, and the reason is worth
+			// knowing: the numerator comes from `conversion` rows written on
+			// submit, the denominator from `view` beacons, and the two paths are
+			// not filtered alike (record_event drops excluded-IP and bot-UA hits;
+			// submit does not). A converter whose view beacon never landed sits
+			// in the top and not the bottom. Not clamped: a clamp would hide
+			// that, and a rate quietly pinned at 100% reads as measured when it
+			// isn't.
+			'unique_conv_rate'   => $uv > 0 ? round( $uc / $uv * 100, 2 ) : 0.0,
+			// Sign-ups per person who signed up. 1.0 means nobody submitted
+			// twice; 1.05 means five in a hundred came back and did it again.
+			// This is the number that tells you WHICH assets attract repeat
+			// submissions, which the blended rate above could only hint at.
+			'conversions_per_person' => $uc > 0 ? round( $c / $uc, 2 ) : 0.0,
 			// Trigger click-through: of the people who SAW the trigger button,
 			// how many opened the popup. Only the popup-click shell fires
 			// trigger_view, so this is null on every other shell and null on an
@@ -608,7 +647,7 @@ class ES_Reports {
 	 * couldn't attribute to a person (private mode / cookie blocked). Per-person
 	 * numbers are short-window estimates (browser cookies cap at ~7 days).
 	 *
-	 * @return array{unique_visitors:int, new_visitors:int, returning_visitors:int, unknown_views:int, unique_conversions:int, unique_conv_rate:float}
+	 * @return array{unique_visitors:int, new_visitors:int, returning_visitors:int, unknown_views:int, unique_conversions:int, unique_conv_rate:float, conversions_per_person:float}
 	 */
 	public static function visitor_stats( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
 		global $wpdb;
@@ -651,10 +690,15 @@ class ES_Reports {
 		}
 		$returning = max( 0, $uniques - $new );
 
-		// Unique converters in range.
+		// Unique converters in range, and the conversions they account for. Two
+		// numbers, because one person can submit twice and the pair is the only
+		// way to see that: `conversions_per_person` above 1 says some did.
 		$csql = "SELECT COUNT(DISTINCT visitor) FROM $events
 			WHERE event_type = 'conversion' AND visitor IS NOT NULL AND visitor <> ''$scope$range";
 		$unique_conv = (int) ( $rp ? $wpdb->get_var( $wpdb->prepare( $csql, $rp ) ) : $wpdb->get_var( $csql ) );
+
+		$tsql = "SELECT COUNT(*) FROM $events WHERE event_type = 'conversion'$scope$range";
+		$total_conv = (int) ( $rp ? $wpdb->get_var( $wpdb->prepare( $tsql, $rp ) ) : $wpdb->get_var( $tsql ) );
 
 		return [
 			'unique_visitors'    => $uniques,
@@ -663,6 +707,8 @@ class ES_Reports {
 			'unknown_views'      => $unknown,
 			'unique_conversions' => $unique_conv,
 			'unique_conv_rate'   => $uniques > 0 ? round( $unique_conv / $uniques * 100, 2 ) : 0.0,
+			// Sign-ups per person who signed up. Above 1 = some submitted twice.
+			'conversions_per_person' => $unique_conv > 0 ? round( $total_conv / $unique_conv, 2 ) : 0.0,
 		];
 	}
 
@@ -671,6 +717,23 @@ class ES_Reports {
 	 * spans, each carrying an instant tooltip (data-es-tip) describing what it
 	 * means. Numbers stay on one line (the cells are white-space:nowrap).
 	 */
+	/**
+	 * Render `conversions_per_person` as "×1.05" with its own tooltip. Dimmed at
+	 * exactly 1.00, the ordinary case, so only an asset people submit twice draws
+	 * the eye. Zero (nobody signed up) renders as a dash, not "×0.00".
+	 */
+	public static function per_person_html( float $per_person ): string {
+		if ( $per_person <= 0 ) {
+			return '<span class="dim">&mdash;</span>';
+		}
+		return sprintf(
+			'<span class="es-rate-num%s" data-es-tip="%s">&times;%s</span>',
+			$per_person > 1 ? '' : ' dim',
+			esc_attr__( 'Sign-ups per person who signed up. 1.00 means nobody submitted twice; 1.05 means five people in a hundred came back and signed up again.', 'emblem-studio' ),
+			esc_html( number_format_i18n( $per_person, 2 ) )
+		);
+	}
+
 	public static function rate_pair_html( float $views_rate, float $unique_rate, string $tip_views, string $tip_unique ): string {
 		return sprintf(
 			'<span class="es-rate-num" data-es-tip="%s">%s%%</span> <span class="es-rate-sep">/</span> <span class="es-rate-num" data-es-tip="%s">%s%%</span>',

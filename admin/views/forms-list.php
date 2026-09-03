@@ -314,7 +314,8 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 				<th class="col-stat" title="<?php esc_attr_e( 'Asset actually became visible (viewport for inline / ribbon / slide-in; click for popup)', 'emblem-studio' ); ?>"><?php esc_html_e( 'Asset Views', 'emblem-studio' ); ?></th>
 				<th class="col-stat" title="<?php esc_attr_e( 'Distinct people who saw it (anonymous tag, no IP). Builds up from now on; ~7-day estimate.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Unique', 'emblem-studio' ); ?></th>
 				<th class="col-stat es-col-conv" title="<?php esc_attr_e( 'Conversions', 'emblem-studio' ); ?>"><?php esc_html_e( 'Form Conv.', 'emblem-studio' ); ?></th>
-				<th class="col-stat-narrow es-col-conv" title="<?php esc_attr_e( 'Conversions vs Form Views / vs unique visitors', 'emblem-studio' ); ?>"><?php esc_html_e( 'Conv. Rate', 'emblem-studio' ); ?></th>
+				<th class="col-stat-narrow es-col-conv" title="<?php esc_attr_e( 'Conversions vs Form Views / share of people who signed up', 'emblem-studio' ); ?>"><?php esc_html_e( 'Conv. Rate', 'emblem-studio' ); ?></th>
+				<th class="col-stat-narrow es-col-conv" title="<?php esc_attr_e( 'Sign-ups per person who signed up. Above ×1.00 means some people signed up more than once.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Per Person', 'emblem-studio' ); ?></th>
 				<th class="col-stat es-col-conv" title="<?php esc_attr_e( 'Visitors who started filling in the form but left without submitting', 'emblem-studio' ); ?>"><?php esc_html_e( 'Drop-offs', 'emblem-studio' ); ?></th>
 				<th class="col-stat-narrow es-col-conv" title="<?php esc_attr_e( 'Drop-offs vs Form Views / vs unique visitors', 'emblem-studio' ); ?>"><?php esc_html_e( 'Drop-off Rate', 'emblem-studio' ); ?></th>
 				<th class="col-stat es-col-click" title="<?php esc_attr_e( 'Engaged clicks inside the form — links and buttons, excluding the close button and backdrop', 'emblem-studio' ); ?>"><?php esc_html_e( 'Clicks', 'emblem-studio' ); ?></th>
@@ -327,7 +328,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 		</thead>
 		<?php if ( empty( $forms ) ) : ?>
 			<tbody>
-				<tr><td colspan="18"><em><?php
+				<tr><td colspan="19"><em><?php
 					echo esc_html( $is_trash
 						? __( 'Trash is empty.', 'emblem-studio' )
 						: ( $is_archived
@@ -585,9 +586,10 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						<td class="col-stat"><?php echo $k ? (int) $k['views'] : '—'; ?></td>
 						<td class="col-stat"><?php echo $k ? (int) ( $k['unique_visitors'] ?? 0 ) : '—'; ?></td>
 						<td class="col-stat es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? (int) $k['conversions'] : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
-						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['conv_rate_unique'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who converted', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::per_person_html( (float) ( $k['conversions_per_person'] ?? 0 ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<td class="col-stat es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? (int) $k['dropoffs'] : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
-						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — drop-off events per person (can exceed 100%)', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<?php
 						// Clicks + click rate. Per-form click tracking can be off
 						// (the track_clicks toggle); when it is there's no data, so
