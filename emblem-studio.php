@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.3.46-beta
+ * Version:           1.3.47-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.3.46-beta' );
+define( 'EMBLEM_STUDIO_VERSION', '1.3.47-beta' );
 define( 'EMBLEM_STUDIO_DB_VERSION', '41' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
@@ -39,8 +39,18 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-ajax.php';
 // the VIEW — the editor shows a locked Revisions tab with a connect upsell. The
 // viewing/restore admin handlers stay behind the 'revisions' capability.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-revisions.php';
-require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-scheduled-revisions.php';
-require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-schedule.php';
+// Scheduling, on the other hand, ships ONLY where somebody can use it. Lite has
+// no schedule screen and no scheduled changes, so it now has neither file. They
+// used to travel with the free build switched off, which meant the free download
+// carried a paid feature's code and created two tables it never wrote a row to.
+// A queued change can only be made from a screen Lite does not have, so nothing
+// is left stranded by dropping the runner with it.
+if ( ES_Caps::has( 'revisions' ) ) {
+	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-scheduled-revisions.php';
+}
+if ( ES_Caps::has( 'schedule_window' ) ) {
+	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-schedule.php';
+}
 // Consent proof (SER-853): loaded in EVERY edition, same reasoning as
 // revisions above — this is compliance infrastructure, not a paid feature.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-consent-log.php';

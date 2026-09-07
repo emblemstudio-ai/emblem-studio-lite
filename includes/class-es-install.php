@@ -278,8 +278,17 @@ class ES_Install {
 		dbDelta( $leads );
 		dbDelta( $logs );
 		dbDelta( $revisions );
-		dbDelta( $segments );
-		dbDelta( $scheduled );
+		// The two scheduling tables are made only where scheduling exists. Lite
+		// has no screen for either, so it used to create two tables and never
+		// write a row to them. An install that already has them keeps them: they
+		// are empty, and dropping somebody's tables to save a name in a list is
+		// not a trade worth making.
+		if ( ES_Caps::has( 'schedule_window' ) ) {
+			dbDelta( $segments );
+		}
+		if ( ES_Caps::has( 'revisions' ) ) {
+			dbDelta( $scheduled );
+		}
 		dbDelta( $ds_revisions );
 		dbDelta( $variants );
 		dbDelta( $tests );

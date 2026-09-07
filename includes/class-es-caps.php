@@ -22,7 +22,17 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class ES_Caps {
 
-	/** Capabilities per edition. Full = everything on. */
+	/**
+	 * Capabilities per edition. Full = everything on.
+	 *
+	 * THREE OF THESE ARE A STATEMENT OF INTENT, NOT A LOCK (checked 2026-09-04).
+	 * Nothing anywhere calls has() for `targeting`, `reports_advanced` or
+	 * `lead_detail`. Lite does not expose those features today, but that is
+	 * because the screens carrying them are deleted from the build, not because
+	 * this table stopped anybody. If one of those screens ever comes back without
+	 * a check beside it, the feature returns with it while this table still reads
+	 * "false". Enforce them here before relying on them.
+	 */
 	private const MATRIX = [
 		'full' => [
 			'ab'               => true,
