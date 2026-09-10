@@ -915,6 +915,61 @@
 		return EMAIL_SHAPE.test(String(input.value || '').trim()) ? null : input;
 	}
 
+	// The first `required` control the visitor has left empty, or null when the
+	// form is complete. Returned with the message to show, because "tick the box"
+	// and "fill this in" are different sentences, and a visitor who skipped a
+	// consent line needs the first one.
+	//
+	// We check this ourselves for the same reason we check the email ourselves:
+	// authored markup carries `novalidate` (the authoring spec asks for it), so
+	// the browser enforces nothing on submit. Without this sweep `required` was
+	// decoration — a consent checkbox could be left unticked and the lead still
+	// saved, with the consent then recorded as refused (SER-853 logs that state
+	// honestly, which made the hole visible without closing it).
+	//
+	// The email field is skipped deliberately: findBadEmailInput has the better
+	// message for it, and an empty address fails that check anyway.
+	//
+	// TWIN of the SaaS public/embed/embed.js — change one, change both.
+	function findUnfilledRequired(form) {
+		const controls = form.querySelectorAll('input[required], select[required], textarea[required]');
+		for (let i = 0; i < controls.length; i++) {
+			const el = controls[i];
+			if (el.disabled) continue;
+			const type = String(el.type || '').toLowerCase();
+
+			if (type === 'email' || el.name === 'email') continue;
+
+			if (type === 'checkbox') {
+				if (el.checked) continue;
+				return { el: el, message: 'Please tick the box to continue.' };
+			}
+
+			// One checked radio satisfies every member of the group.
+			if (type === 'radio') {
+				if (!el.name) continue;
+				const group = form.querySelectorAll('input[type="radio"][name="' + escapeAttrValue(el.name) + '"]');
+				let checked = false;
+				group.forEach(function (r) { if (r.checked) checked = true; });
+				if (checked) continue;
+				return { el: el, message: 'Please choose an option to continue.' };
+			}
+
+			if (String(el.value || '').trim() === '') {
+				return { el: el, message: 'Please fill in every required field.' };
+			}
+		}
+		return null;
+	}
+
+	// Just enough escaping for a name= about to go inside an attribute selector.
+	// Field names are author-controlled, not visitor-controlled, so this stops a
+	// stray quote breaking the selector; it is not a security boundary.
+	function escapeAttrValue(value) {
+		const BACKSLASH = String.fromCharCode(92);
+		return String(value).split(BACKSLASH).join(BACKSLASH + BACKSLASH).split('"').join(BACKSLASH + '"');
+	}
+
 	function setSubmittingState(form, isSubmitting) {
 		const btn = form.querySelector('button[type="submit"], input[type="submit"]');
 		if (btn) btn.disabled = isSubmitting;
@@ -952,6 +1007,17 @@
 					showInlineThankYou(shadow);
 				}
 			}, SUBMIT_BEAT_MS);
+			return;
+		}
+		// The author said these fields are required, so they are. `novalidate`
+		// means the browser will not say it for us, and until this check existed
+		// nothing did: a consent checkbox could be skipped and the lead saved
+		// anyway. Runs before the email check so the visitor is told about one
+		// problem at a time, starting with the first field they missed.
+		const missing = findUnfilledRequired(form);
+		if (missing) {
+			showInlineError(form, missing.message);
+			try { missing.el.focus(); } catch (err) { /* not focusable — the message stands on its own */ }
 			return;
 		}
 		// Nothing leaves the page until the address could actually receive the

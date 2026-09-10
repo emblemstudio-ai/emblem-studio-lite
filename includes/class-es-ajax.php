@@ -813,9 +813,18 @@ class ES_Ajax {
 	}
 
 	/**
-	 * Parse the form's HTML and find names of inputs that MUST be checked
-	 * (any `<input type="checkbox" required>` or any input with `data-esf-consent`).
-	 * Returns the list of those field names that are missing from the submission.
+	 * Parse the form's HTML and find the names of REQUIRED checkboxes that this
+	 * submission did not tick.
+	 *
+	 * `required` is the whole test. A consent marked required is covered, and so
+	 * is a required box that is not a consent ("I have read the instructions").
+	 *
+	 * An OPTIONAL consent is not, and used to be: any input carrying
+	 * data-esf-consent blocked the submission when it was left unticked. That
+	 * refused the lead of anyone who declined "email me about the beta", which is
+	 * a real answer to a real question, not a failure to fill the form in.
+	 *
+	 * TWIN of the SaaS App\Services\ConsentLog::missingRequiredCheckboxes.
 	 */
 	private function find_missing_consent_fields( string $html, array $fields ): array {
 		if ( trim( $html ) === '' ) {
@@ -834,9 +843,7 @@ class ES_Ajax {
 			if ( ! $name ) {
 				continue;
 			}
-			$is_required_checkbox = ( $type === 'checkbox' && $input->hasAttribute( 'required' ) );
-			$has_consent_marker   = $input->hasAttribute( 'data-esf-consent' );
-			if ( $is_required_checkbox || $has_consent_marker ) {
+			if ( $type === 'checkbox' && $input->hasAttribute( 'required' ) ) {
 				$required[] = $name;
 			}
 		}
@@ -850,7 +857,6 @@ class ES_Ajax {
 		}
 		return $missing;
 	}
-
 	/**
 	 * Lowercase + trim the email. Emails are technically case-sensitive in the
 	 * local part per RFC, but every real-world provider treats them as

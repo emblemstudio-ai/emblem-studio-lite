@@ -59,6 +59,11 @@ HTML
   Any other name becomes a custom field.
 - A form asset includes exactly one <input type="email" name="email"
   required>; a form-less announcement has no fields — skip it.
+- `required` is enforced, so mean it. The form carries novalidate, so the
+  browser stays quiet, but Emblem Studio checks every required field itself
+  before it posts and stops the submission on the first one left empty. Do not
+  write your own "this field is required" text or oninvalid handler; the message
+  goes in the same .esf-error element as the email one.
 - Pair each input with a <label for="..."> and an autocomplete value.
 - Consent: mark EVERY checkbox that asks the visitor to agree to something
   with data-esf-consent, inside a <label> carrying the exact wording (and a
