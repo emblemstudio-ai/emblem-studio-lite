@@ -397,6 +397,19 @@ class ES_Admin {
 			'emblem-studio-new',
 			[ $this, 'route_new' ]
 		);
+		// Schedule (SER-1328) — connected only, and placed where the SaaS sidebar
+		// puts it, straight after the asset list. It has no local twin: the board
+		// reads every asset's periods and queued changes from the account.
+		if ( $connected ) {
+			add_submenu_page(
+				'emblem-studio',
+				__( 'Schedule', 'emblem-studio' ),
+				__( 'Schedule', 'emblem-studio' ),
+				'manage_options',
+				'emblem-studio-schedule',
+				[ $this, 'route_schedule' ]
+			);
+		}
 		// Design System — the full edition has the local CSS editor; a connected
 		// Lite site embeds the account's (SaaS) Design System page. Mirrors how A/B
 		// Tests shows when the cap is on OR the site is connected.
@@ -664,6 +677,31 @@ class ES_Admin {
 	/** Support & feedback (SER-1049) — SaaS-only, no local Lite equivalent.
 	 *  The submenu only registers when connected, so reaching this unconnected
 	 *  is a rare direct-URL edge case, not the normal path. */
+	/** The Schedule board. Embedded when connected; otherwise it says what it
+	 *  needs, the same way Support does, because a stale link to it can still
+	 *  land here after the site is disconnected. */
+	public function route_schedule(): void {
+		if ( $this->maybe_embed( 'emblem-studio-schedule' ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Schedule', 'emblem-studio' ); ?></h1>
+			<p>
+				<?php esc_html_e( 'Connect this site to Emblem Studio to see every scheduled asset and queued change on one calendar.', 'emblem-studio' ); ?>
+			</p>
+			<p>
+				<a class="button button-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio-account' ) ); ?>">
+					<?php esc_html_e( 'Connect', 'emblem-studio' ); ?>
+				</a>
+			</p>
+		</div>
+		<?php
+	}
+
 	public function route_tickets(): void {
 		if ( $this->maybe_embed( 'emblem-studio-tickets' ) ) {
 			return;

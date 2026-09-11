@@ -61,6 +61,11 @@ final class Emblem_Studio_SaaS_Connector
     const PAGE_MAP = [
         'emblem-studio'              => 'assets',     // Forms & Assets
         'emblem-studio-new'          => 'assets/new', // Add New
+        // The Schedule board (SER-1328). SaaS-only: it reads every asset's
+        // periods and queued changes from the account, which a standalone
+        // install does not have. Must be mapped, because maybe_embed() on an
+        // unmapped slug quietly embeds the Assets page instead.
+        'emblem-studio-schedule'     => 'schedule',
         'emblem-studio-tests'        => 'tests',      // A/B Tests
         'emblem-studio-leads'        => 'leads',
         'emblem-studio-reports'      => 'reports',
@@ -338,6 +343,7 @@ final class Emblem_Studio_SaaS_Connector
             var VIEW_SLUG = {
                 'assets': 'emblem-studio',
                 'assets-new': 'emblem-studio-new',
+                'schedule': 'emblem-studio-schedule',
                 'tests': 'emblem-studio-tests',
                 'leads': 'emblem-studio-leads',
                 'reports': 'emblem-studio-reports',
