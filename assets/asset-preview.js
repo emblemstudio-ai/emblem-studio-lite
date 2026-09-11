@@ -128,8 +128,59 @@
 					throw new Error( 'preview failed' );
 				}
 				return { html: j.data.html || '', css: j.data.css || '' };
+			} )
+			// A FAILURE MUST NOT STAY CACHED. The rejected promise used to sit in
+			// the cache for the life of the page, so one failed hover (an expired
+			// nonce, a slow admin-ajax) broke that asset's preview until reload.
+			// The background prefetch below would have made it worse: a failure
+			// nobody saw would have broken the hover they tried next.
+			.catch( function ( e ) {
+				delete cache[ id ];
+				throw e;
 			} );
 		return cache[ id ];
+	}
+
+	/**
+	 * Warm the cache for the assets on the page, so the first hover is instant.
+	 *
+	 * The first hover used to wait for a whole admin-ajax round trip, which
+	 * boots WordPress for every call and is the slow part of this peek. This
+	 * does those trips ahead of time, after the page has settled. Same shape
+	 * as the SaaS asset list: idle time, two at a time, thirty at most, and
+	 * silent on failure, because a failed prefetch only means that asset loads
+	 * on hover the way it always did. A hover that lands while its prefetch is
+	 * in flight joins the same request, because they share the cache.
+	 */
+	function prefetch( names ) {
+		var MAX     = 30;
+		var AT_ONCE = 2;
+		var seen    = {};
+		var queue   = [];
+		for ( var i = 0; i < names.length && queue.length < MAX; i++ ) {
+			var id = names[ i ].getAttribute( 'data-es-preview-id' );
+			if ( id && ! seen[ id ] && ! cache[ id ] ) {
+				seen[ id ] = true;
+				queue.push( id );
+			}
+		}
+		function next() {
+			var id = queue.shift();
+			if ( ! id ) {
+				return;
+			}
+			fetchPayload( id ).catch( function () {} ).then( next );
+		}
+		function start() {
+			for ( var k = 0; k < AT_ONCE; k++ ) {
+				next();
+			}
+		}
+		if ( window.requestIdleCallback ) {
+			window.requestIdleCallback( start, { timeout: 2000 } );
+		} else {
+			window.setTimeout( start, 600 );
+		}
 	}
 
 	function mount( container, html, css ) {
@@ -285,6 +336,7 @@
 		}
 		// The popover is anchored at hover time, so close it if the page scrolls.
 		window.addEventListener( 'scroll', remove, true );
+		prefetch( names );
 	}
 
 	if ( document.readyState === 'loading' ) {
