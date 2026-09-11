@@ -332,6 +332,11 @@ final class Emblem_Studio_SaaS_Connector
             var BASE     = <?php echo wp_json_encode($embed_base); ?>;
             var TOKEN    = <?php echo wp_json_encode($token); ?>;
             var EDITOR   = <?php echo $editor ? 'true' : 'false'; ?>;
+            // This page's own admin.php. Handed to the dashboard so a link it
+            // opens in a NEW TAB can point at the WordPress page for that thing
+            // rather than at the bare dashboard. The frame cannot read it: a
+            // different origin, and the referrer is cut down to the origin.
+            var WP_ADMIN = <?php echo wp_json_encode(admin_url('admin.php')); ?>;
             var frame    = document.getElementById('es-embed-frame');
 
             // The SaaS asset-editor tabs. The tab travels as ?tab= (not a fragment)
@@ -361,6 +366,7 @@ final class Emblem_Studio_SaaS_Connector
                 var q = '?embed=1';
                 if (EDITOR) { q += '&editor=open'; }
                 if (tab)    { q += '&tab=' + encodeURIComponent(tab); }
+                q += '&wp_admin=' + encodeURIComponent(WP_ADMIN);
                 frame.src = BASE + q + '#est=' + encodeURIComponent(TOKEN);
             })();
 
