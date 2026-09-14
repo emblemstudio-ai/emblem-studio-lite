@@ -859,7 +859,9 @@ final class Emblem_Studio_SaaS_Connector
 
         // Fire and forget. This runs inside an admin save, so it must never make
         // somebody wait and must never fail the save it hangs off. A push that
-        // does not land is picked up by the next mirror pass.
+        // does not land is picked up within the hour by report_timezone(), which
+        // keeps sending until the SaaS confirms. (This comment used to say "the
+        // next mirror pass", which only ever ran once, at connect.)
         wp_remote_post(rtrim($cfg['api_base'], '/').'/v1/embed/site-timezone', [
             'timeout'  => 5,
             'blocking' => false,
@@ -1079,7 +1081,58 @@ final class Emblem_Studio_SaaS_Connector
     {
         if (self::is_connected()) {
             self::pull_all();
+            self::report_timezone();
         }
+    }
+
+    /**
+     * Make sure the SaaS knows this site's clock, and keep checking until it does.
+     *
+     * Every schedule on a connected site runs on the timezone the SaaS holds for
+     * it, and WordPress is the only place that timezone is set. It used to reach
+     * the SaaS by three routes, and all three could miss: pairing sent it and the
+     * SaaS dropped it, the mirror at connect carried it but skipped a site with
+     * no assets in WordPress, and push_timezone() only fires when the setting
+     * changes. A site that missed all three stayed on UTC with nothing to correct
+     * it, and its schedules ran hours off.
+     *
+     * So this runs hourly and costs nothing once it has landed: it remembers the
+     * last value the SaaS CONFIRMED, for this connection, and only speaks when the
+     * current one differs. Blocking on purpose, because the point is to know it
+     * arrived. Keyed by site id, so connecting to a different site reports again.
+     */
+    public static function report_timezone(): void
+    {
+        $cfg = self::config();
+        if (! $cfg || empty($cfg['site_id']) || empty($cfg['site_token'])) {
+            return;
+        }
+
+        $tz = self::wp_timezone();
+        if ($tz === '') {
+            return;
+        }
+
+        $marker = $cfg['site_id'].'|'.$tz;
+        if ((string) get_option('ess_timezone_reported', '') === $marker) {
+            return;
+        }
+
+        $res = wp_remote_post(rtrim($cfg['api_base'], '/').'/v1/embed/site-timezone', [
+            'timeout' => 8,
+            'headers' => ['Content-Type' => 'application/json'],
+            'body'    => wp_json_encode([
+                'site_id'  => $cfg['site_id'],
+                'token'    => $cfg['site_token'],
+                'timezone' => $tz,
+            ]),
+        ]);
+
+        if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
+            return; // Not confirmed. The next hour tries again.
+        }
+
+        update_option('ess_timezone_reported', $marker, false);
     }
 
     /**
@@ -1278,6 +1331,9 @@ final class Emblem_Studio_SaaS_Connector
     {
         if ($cfg && ! wp_next_scheduled('es_saas_pull')) {
             wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'es_saas_pull');
+        }
+        if ($cfg) {
+            self::report_timezone();
         }
         $state          = self::import_state();
         $state['stage'] = 'done';
@@ -2294,6 +2350,29 @@ final class Emblem_Studio_SaaS_Connector
             'permission_callback' => [__CLASS__, 'authorize'],
             'callback'            => [__CLASS__, 'read_wp'],
         ]);
+
+        // Read the store's prices (SER-1345). Two routes, because "which product
+        // is that" and "what does that one cost" are different questions, and the
+        // first is asked by name.
+        register_rest_route('emblem-studio-saas/v1', '/commerce/products', [
+            'methods'             => 'GET',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'read_products'],
+        ]);
+
+        register_rest_route('emblem-studio-saas/v1', '/commerce/product/(?P<id>\d+)', [
+            'methods'             => 'GET',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'read_product'],
+        ]);
+
+        // What a coupon really takes off one product. Measured by applying it,
+        // never by reading its settings. See ES_Commerce::coupon_value().
+        register_rest_route('emblem-studio-saas/v1', '/commerce/coupon', [
+            'methods'             => 'GET',
+            'permission_callback' => [__CLASS__, 'authorize'],
+            'callback'            => [__CLASS__, 'read_coupon'],
+        ]);
     }
 
     /** Authenticate the SaaS by the shared site token (constant-time compare). */
@@ -2364,6 +2443,110 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         return new WP_REST_Response($res->get_data(), (int) $res->get_status());
+    }
+
+    /* ── Inbound store read → WooCommerce (SER-1345) ───────────────────── */
+
+    /**
+     * HTTP status here answers "did the call work", not "is there a shop".
+     *
+     * A site with no WooCommerce is a perfectly good answer to the question, and
+     * the SaaS needs to be able to say so in plain words. If that came back as a
+     * 404, the relay would throw away the body and report a transport failure, so
+     * the dashboard would blame the connection instead of the missing shop. A
+     * product id that does not exist IS a 404, because that one is a bad ask.
+     */
+    private static function commerce_status(array $result): int
+    {
+        if ($result['ok'] ?? false) {
+            return 200;
+        }
+
+        return ($result['error'] ?? '') === 'not_found' ? 404 : 200;
+    }
+
+    /**
+     * Run one store read and turn it into a response nobody may cache.
+     *
+     * NO CACHING, because a cached price is a wrong price. TST Prep runs Cloudflare
+     * and a page-caching plugin, and a CDN rule that caches GET under /wp-json
+     * would hand the SaaS yesterday's tier with today's timestamp missing. The
+     * site token rides in a header most caches do not key on, so the risk is real
+     * even though the route is authenticated.
+     *
+     * GUARDED, because reading a price runs every price filter every plugin on
+     * the site registered, and one of them failing outside a checkout must not
+     * become a 500 that the dashboard reports as a broken connection. Measuring a
+     * coupon has its own guard inside ES_Commerce; this covers the plain reads.
+     */
+    private static function commerce_response(callable $read): WP_REST_Response
+    {
+        try {
+            $result = (array) $read();
+        } catch (\Throwable $e) {
+            $result = [
+                'ok'      => false,
+                'error'   => 'cannot_read',
+                'message' => 'Code on this site failed while the shop was being read, so there is nothing reliable to report.',
+            ];
+        }
+
+        $response = new WP_REST_Response($result, self::commerce_status($result));
+        $response->header('Cache-Control', 'no-store, private, max-age=0');
+
+        return $response;
+    }
+
+    /**
+     * Find products by name, so the caller can turn "Group Classes" into an id.
+     *
+     * An empty search lists the shop's products, which is what somebody meeting a
+     * new site does first.
+     */
+    public static function read_products(WP_REST_Request $request)
+    {
+        if (! class_exists('ES_Commerce')) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'unsupported', 'message' => 'This site runs an older Emblem Studio that cannot read the store.'], 200);
+        }
+
+        $term  = sanitize_text_field((string) $request->get_param('search'));
+        $limit = (int) ($request->get_param('limit') ?: 10);
+
+        return self::commerce_response(fn () => ES_Commerce::search($term, $limit));
+    }
+
+    /**
+     * What a coupon code takes off a product. The code is passed through as
+     * typed: WooCommerce normalises coupon codes itself, and doing it twice is
+     * how a code with a capital letter stops matching.
+     *
+     * There is deliberately no route that LISTS coupons. A shop's codes include
+     * ones meant for staff, partners and apologies, and the caller has to already
+     * know a code to ask about it.
+     */
+    public static function read_coupon(WP_REST_Request $request)
+    {
+        if (! class_exists('ES_Commerce')) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'unsupported', 'message' => 'This site runs an older Emblem Studio that cannot read the store.'], 200);
+        }
+
+        $code     = sanitize_text_field((string) $request->get_param('code'));
+        $product  = (int) $request->get_param('product_id');
+        $quantity = (int) ($request->get_param('quantity') ?: 1);
+
+        return self::commerce_response(fn () => ES_Commerce::coupon_value($code, $product, $quantity));
+    }
+
+    /** One product's prices, its sale window, and its variations if it has any. */
+    public static function read_product(WP_REST_Request $request)
+    {
+        if (! class_exists('ES_Commerce')) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'unsupported', 'message' => 'This site runs an older Emblem Studio that cannot read the store.'], 200);
+        }
+
+        $id = (int) $request->get_param('id');
+
+        return self::commerce_response(fn () => ES_Commerce::product($id));
     }
 
     /** Versioned local FunnelKit capabilities and runtime Form Feed state. */

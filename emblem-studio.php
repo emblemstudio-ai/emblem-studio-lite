@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.3.52-beta
+ * Version:           1.3.54-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.3.52-beta' );
+define( 'EMBLEM_STUDIO_VERSION', '1.3.54-beta' );
 define( 'EMBLEM_STUDIO_DB_VERSION', '41' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
@@ -68,6 +68,9 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-parser.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-html-sanitizer.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-privacy.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-display-rules.php';
+// Reading the store (SER-1345): loaded in EVERY edition, because the site that
+// needs it most runs Lite. It does nothing at all where WooCommerce is absent.
+require_once EMBLEM_STUDIO_PATH . 'includes/class-es-commerce.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-rest.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-shortcode.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preview.php';
