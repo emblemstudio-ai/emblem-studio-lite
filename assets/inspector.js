@@ -92,7 +92,11 @@
 		htmlMarks: [],     // dim/highlight marks in the HTML editor
 		htmlErrBar: null,  // inline validation strip under the HTML editor
 		htmlErrMark: null, // red-fade mark on the offending markup
-		htmlCommitTimer: null // debounce for re-mounting the asset after edits
+		htmlCommitTimer: null, // debounce for re-mounting the asset after edits
+		checksTimer: null, // debounce for the live Checks list (SER-1358)
+		checksSeq: 0,      // drops a reply that a newer check has overtaken
+		checksKey: null,   // the html+css the Checks list currently reflects
+		checksOpen: false  // whether the Checks list is expanded
 	};
 
 	// ── Live-form render (middle column) ──────────────────────────
@@ -157,6 +161,11 @@
 					'<div class="es-inspector-brand">' +
 						'<span class="es-inspector-eyebrow">Editor</span>' +
 						'<span class="es-inspector-title"></span>' +
+					'</div>' +
+					// Checks list (SER-1358): a compact summary that expands.
+					'<div class="es-inspector-checks" hidden>' +
+						'<button type="button" class="es-inspector-checks-toggle" aria-expanded="false"></button>' +
+						'<div class="es-inspector-checks-panel" hidden></div>' +
 					'</div>' +
 					'<div class="es-inspector-actions">' +
 						'<button type="button" class="es-inspector-btn es-inspector-replay" data-es-tip="Replay entry animations">↻ Replay</button>' +
@@ -235,6 +244,8 @@
 			hideConfirm();
 			if (fn) fn();
 		});
+
+		overlay.querySelector('.es-inspector-checks-toggle').addEventListener('click', function () { setChecksOpen(!state.checksOpen); });
 
 		// Full-screen toggle — hides BOTH side panels at once.
 		overlay.querySelector('.es-inspector-fullscreen').addEventListener('click', toggleFullscreen);
@@ -480,6 +491,8 @@
 		state.htmlLeftCm = null;
 		state.htmlRanges = {};
 		state.htmlMarks = [];
+		state.checksKey = null;
+		state.checksOpen = false;
 		state.open = true;
 
 		// Render both side panels now (they only need the working copies, not
@@ -489,6 +502,7 @@
 		applyHtmlViewUI();
 		refreshLeftPanel();
 		renderStage();
+		runChecks(); // straight away on open, no debounce
 	}
 
 	// close(true)  → apply: write edits back to the editors (Done).
@@ -506,6 +520,9 @@
 			writeEditor(state.cssId || CSS_ID, state.css);
 		}
 
+		if (state.checksTimer) { clearTimeout(state.checksTimer); state.checksTimer = null; }
+		state.checksSeq++; // a reply still in flight must not touch the removed overlay
+		state.checksOpen = false;
 		teardownCssObserver();
 		destroyAllCm();
 		destroyHtmlLeftCm();
@@ -830,6 +847,63 @@
 	function scheduleHtmlCommit() {
 		if (state.htmlCommitTimer) clearTimeout(state.htmlCommitTimer);
 		state.htmlCommitTimer = setTimeout(commitHtmlEdit, 600);
+		scheduleChecks();
+	}
+
+	// ── Checks list (SER-1358) ────────────────────────────────────
+	// Asks the server (es_check_asset, via window.EmblemStudioChecks in
+	// admin.js) what is wrong with the working copy, debounced while typing.
+	// It sits in the top bar so it stays visible in every view, full screen
+	// included, and only expands when asked. It warns; Done still applies.
+	// The unclosed-tag strip under the HTML editor is separate and unchanged.
+	function scheduleChecks() {
+		if (!state.open) return;
+		if (state.checksTimer) clearTimeout(state.checksTimer);
+		state.checksTimer = setTimeout(runChecks, 600);
+	}
+	function runChecks() {
+		state.checksTimer = null;
+		var checks = window.EmblemStudioChecks;
+		if (!state.open || !checks) return;
+		var html = state.html, css = state.css;
+		var key = html + '\u0000' + css;
+		if (key === state.checksKey) return;
+		var mine = ++state.checksSeq;
+		checks.request(html, css, function (items) {
+			// Closed, overtaken by a newer check, or failed: leave the list as it is.
+			if (!state.open || mine !== state.checksSeq || items === null) return;
+			state.checksKey = key;
+			renderChecks(items);
+		});
+	}
+	function renderChecks(items) {
+		var checks = window.EmblemStudioChecks;
+		var wrap = state.overlay && state.overlay.querySelector('.es-inspector-checks');
+		if (!wrap || !checks) return;
+		var toggle = wrap.querySelector('.es-inspector-checks-toggle');
+		var panel = wrap.querySelector('.es-inspector-checks-panel');
+		var errors = checks.count(items, 'error');
+		var warnings = checks.count(items, 'warning');
+		if (!items.length) {
+			wrap.hidden = true;
+			setChecksOpen(false);
+			return;
+		}
+		var parts = [];
+		if (errors) parts.push(errors + ' ' + checks.labels.error.toLowerCase());
+		if (warnings) parts.push(warnings + ' ' + checks.labels.warning.toLowerCase());
+		toggle.textContent = parts.join(' · ');
+		toggle.classList.toggle('has-errors', errors > 0);
+		toggle.setAttribute('aria-label', checks.labels.title + ': ' + parts.join(', '));
+		checks.renderGroups(panel, items);
+		wrap.hidden = false;
+	}
+	function setChecksOpen(on) {
+		state.checksOpen = !!on;
+		var wrap = state.overlay && state.overlay.querySelector('.es-inspector-checks');
+		if (!wrap) return;
+		wrap.querySelector('.es-inspector-checks-panel').hidden = !state.checksOpen;
+		wrap.querySelector('.es-inspector-checks-toggle').setAttribute('aria-expanded', state.checksOpen ? 'true' : 'false');
 	}
 
 	// Push edited HTML to the live asset: re-map element ranges, re-mount the
@@ -1740,6 +1814,7 @@
 	// form live instead of only firing once the mouse is released.
 	var _liveTimer = null, _livePending = false;
 	function scheduleLiveCss() {
+		scheduleChecks(); // every CSS edit path comes through here
 		if (_liveTimer) { _livePending = true; return; }
 		postToFrame('es-inspector:update-css', { css: state.css });
 		_liveTimer = setTimeout(function () {
@@ -2446,6 +2521,8 @@
 		// The discard confirmation captures Escape to back itself out, before
 		// it can close the takeover.
 		if (state.confirming) { hideConfirm(); return; }
+		// An expanded Checks list folds away first, before Escape cancels.
+		if (state.checksOpen) { setChecksOpen(false); return; }
 		requestCancel();
 	}
 

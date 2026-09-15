@@ -76,6 +76,79 @@ body.es-inspector-locked {
 	text-overflow: ellipsis;
 	max-width: 40vw;
 }
+/* ── Checks list in the top bar (SER-1358) ─────────────────────────
+   The overlay sits outside .emblem-studio-wrap, so the admin tokens are
+   read with their values as fallbacks. */
+.es-inspector-checks {
+	position: relative;
+	flex: 0 0 auto;
+}
+.es-inspector-checks[hidden] { display: none; }
+.es-inspector-checks-toggle {
+	appearance: none;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 5px 10px;
+	border-radius: 999px;
+	border: 1px solid var(--es-warning, #d97706);
+	background: var(--es-warning-soft, #fef3c7);
+	color: #92400e;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.es-inspector-checks-toggle.has-errors {
+	border-color: var(--es-danger, #dc2626);
+	background: var(--es-danger-soft, #fee2e2);
+	color: #991b1b;
+}
+.es-inspector-checks-toggle::after { content: " \25BE"; }
+.es-inspector-checks-toggle[aria-expanded="true"]::after { content: " \25B4"; }
+.es-inspector-checks-panel {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	z-index: 6;
+	width: min(420px, 80vw);
+	max-height: 60vh;
+	overflow: auto;
+	padding: 12px;
+	background: #fff;
+	border: 1px solid #e7ddcf;
+	border-radius: 8px;
+	box-shadow: 0 12px 32px rgba(24, 26, 46, 0.18);
+	font-size: 13px;
+	line-height: 1.45;
+}
+.es-inspector-checks-panel[hidden] { display: none; }
+.es-inspector-checks-panel .es-checks-group + .es-checks-group { margin-top: 10px; }
+.es-inspector-checks-panel .es-checks-group-title {
+	margin: 0 0 6px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.es-inspector-checks-panel .is-error .es-checks-group-title { color: var(--es-danger, #dc2626); }
+.es-inspector-checks-panel .is-warning .es-checks-group-title { color: var(--es-warning, #d97706); }
+.es-inspector-checks-panel .es-checks-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.es-inspector-checks-panel .es-checks-item {
+	margin: 0;
+	padding: 7px 10px;
+	border-left: 3px solid transparent;
+	border-radius: 4px;
+}
+.es-inspector-checks-panel .is-error .es-checks-item {
+	background: var(--es-danger-soft, #fee2e2);
+	border-left-color: var(--es-danger, #dc2626);
+}
+.es-inspector-checks-panel .is-warning .es-checks-item {
+	background: var(--es-warning-soft, #fef3c7);
+	border-left-color: var(--es-warning, #d97706);
+}
+.es-inspector-checks-panel .es-checks-message { display: block; color: #181a2e; }
+.es-inspector-checks-panel .es-checks-fix { display: block; margin-top: 2px; color: #353a52; }
+
 .es-inspector-actions {
 	display: flex;
 	align-items: center;

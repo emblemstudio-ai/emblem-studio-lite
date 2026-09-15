@@ -64,6 +64,8 @@ class ES_Admin {
 		add_action( 'wp_ajax_es_lock_beat',                  [ $this, 'handle_lock_beat'              ] );
 		add_action( 'wp_ajax_es_lock_takeover',              [ $this, 'handle_lock_takeover'          ] );
 		add_action( 'wp_ajax_es_lock_release',               [ $this, 'handle_lock_release'           ] );
+		// Live Checks list while the HTML/CSS is being edited (SER-1358).
+		add_action( 'wp_ajax_es_check_asset',                [ $this, 'handle_check_asset'            ] );
 		// Per-post form-exclusion metabox on page / post edit screens.
 		add_action( 'add_meta_boxes', [ $this, 'register_exclusion_metabox' ] );
 		add_action( 'save_post',      [ $this, 'save_exclusion_metabox' ], 10, 2 );
@@ -590,6 +592,27 @@ class ES_Admin {
 
 		$updated = ES_Form_Repo::reorder( $ids );
 		wp_send_json_success( [ 'updated' => $updated ] );
+	}
+
+	/**
+	 * Admin-only AJAX: run the Checks list (ES_Asset_Checks) on HTML/CSS that has
+	 * not been saved yet, so the editor can warn while someone types. Saves nothing.
+	 *
+	 * Same capability as saving an asset. The HTML is deliberately NOT sanitized
+	 * first: the stripped_code rule exists to warn that a save will throw away a
+	 * <script> or an onclick, and sanitizing would remove the very thing it looks for.
+	 * Nothing here is stored or echoed back as markup; the reply is the check items.
+	 */
+	public function handle_check_asset(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
+		}
+		check_ajax_referer( 'es_check_asset', 'nonce' );
+
+		$html = isset( $_POST['html'] ) ? (string) wp_unslash( $_POST['html'] ) : '';
+		$css  = isset( $_POST['css'] ) ? (string) wp_unslash( $_POST['css'] ) : '';
+
+		wp_send_json_success( [ 'checks' => ES_Asset_Checks::run( $html, $css ) ] );
 	}
 
 	// ── Concurrent-edit lock (AJAX) ───────────────────────────────
@@ -1294,6 +1317,14 @@ class ES_Admin {
 				// a shell's coupling is client-side only until the page's own Save.
 				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
 				'presetNonce'   => wp_create_nonce( 'es_preset_ajax' ),
+				// Live Checks list (SER-1358): the Design tab box and the
+				// full-screen editor both ask es_check_asset while editing.
+				'checkNonce'    => wp_create_nonce( 'es_check_asset' ),
+				'checkLabels'   => [
+					'error'   => __( 'Will break', 'emblem-studio' ),
+					'warning' => __( 'Worth fixing', 'emblem-studio' ),
+					'title'   => __( 'Checks', 'emblem-studio' ),
+				],
 				'presetPostTypes'   => $preset_post_types,
 				'presetSpecials'    => class_exists( 'ES_Display_Rules' ) ? array_map(
 					static function ( $key ) {

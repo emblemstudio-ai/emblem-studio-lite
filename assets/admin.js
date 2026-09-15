@@ -11,6 +11,75 @@
 		return base;
 	}
 
+	// ── Checks list (SER-1358) ─────────────────────────────────────
+	// Shared by the Design tab box (below) and the full-screen editor
+	// (inspector.js). The server runs ES_Asset_Checks on HTML/CSS that has not
+	// been saved; nothing is stored. The list only warns, it never blocks a save.
+	window.EmblemStudioChecks = (function () {
+		var cfg = window.EmblemStudioAdmin || {};
+		var labels = cfg.checkLabels || { error: 'Will break', warning: 'Worth fixing', title: 'Checks' };
+
+		// cb(items) with the check items, or cb(null) when the request failed
+		// (a failure keeps whatever the list already shows, rather than
+		// pretending the asset is clean).
+		function request(html, css, cb) {
+			if (!cfg.ajaxUrl || !cfg.checkNonce) { cb(null); return; }
+			var body = new URLSearchParams();
+			body.set('action', 'es_check_asset');
+			body.set('nonce', cfg.checkNonce);
+			body.set('html', html || '');
+			body.set('css', css || '');
+			fetch(cfg.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+				.then(function (r) { return r.json(); })
+				.then(function (json) {
+					cb(json && json.success && json.data && Array.isArray(json.data.checks) ? json.data.checks : null);
+				})
+				.catch(function () { cb(null); });
+		}
+
+		function count(items, level) {
+			var n = 0;
+			for (var i = 0; i < (items || []).length; i++) if (items[i].level === level) n++;
+			return n;
+		}
+
+		// Fill `container` with the grouped list: "Will break" then "Worth
+		// fixing", each item its message and its fix. textContent only.
+		function renderGroups(container, items) {
+			container.textContent = '';
+			['error', 'warning'].forEach(function (level) {
+				var inLevel = (items || []).filter(function (it) { return it.level === level; });
+				if (!inLevel.length) return;
+				var group = document.createElement('div');
+				group.className = 'es-checks-group is-' + level;
+				var title = document.createElement('p');
+				title.className = 'es-checks-group-title';
+				title.textContent = labels[level];
+				group.appendChild(title);
+				var ul = document.createElement('ul');
+				ul.className = 'es-checks-list';
+				inLevel.forEach(function (it) {
+					var li = document.createElement('li');
+					li.className = 'es-checks-item';
+					li.setAttribute('data-check-id', it.id || '');
+					var msg = document.createElement('span');
+					msg.className = 'es-checks-message';
+					msg.textContent = it.message || '';
+					var fix = document.createElement('span');
+					fix.className = 'es-checks-fix';
+					fix.textContent = it.fix || '';
+					li.appendChild(msg);
+					li.appendChild(fix);
+					ul.appendChild(li);
+				});
+				group.appendChild(ul);
+				container.appendChild(group);
+			});
+		}
+
+		return { request: request, renderGroups: renderGroups, count: count, labels: labels };
+	})();
+
 	$(function () {
 		// Mount CodeMirror on editor textareas. Single-version forms get
 		// #es-html / #es-css. A/B test forms get #es-html-A / #es-css-A
@@ -628,6 +697,81 @@
 			setTimeout(refresh, 150);
 		})();
 
+		// Design tab Checks box (SER-1358). PHP renders it from the stored asset;
+		// from then on it follows the HTML/CSS fields. Those fields are hidden and
+		// the full-screen editor writes to them without firing any event, so the
+		// editor closing is the main trigger. Typing into a visible textarea or a
+		// CodeMirror (if one is ever mounted) counts too, debounced.
+		(function initAssetChecksBox() {
+			var box = document.getElementById('es-checks');
+			var checks = window.EmblemStudioChecks;
+			if (!box || !checks) return;
+			var body = box.querySelector('.es-checks-body');
+			if (!body) return;
+
+			function ids() {
+				var slot = (window.EmblemStudioAB && EmblemStudioAB.testRunning) ? EmblemStudioAB.activeSlot : '';
+				return slot ? { html: 'es-html-' + slot, css: 'es-css-' + slot } : { html: 'es-html', css: 'es-css' };
+			}
+			function read(id) {
+				var el = document.getElementById(id);
+				if (!el) return '';
+				var cm = el.CodeMirror || (el.nextElementSibling && el.nextElementSibling.CodeMirror);
+				return cm ? cm.getValue() : (el.value || '');
+			}
+			function current() {
+				var f = ids();
+				return { html: read(f.html), css: read(f.css) };
+			}
+
+			// What the box currently reflects. Starts as the page-load values,
+			// which PHP already checked, so an unchanged asset makes no request.
+			var start = current();
+			var shown = start.html + '\u0000' + start.css;
+			var timer = null;
+			var seq = 0;
+
+			function run() {
+				if (timer) { clearTimeout(timer); timer = null; }
+				var now = current();
+				var key = now.html + '\u0000' + now.css;
+				if (key === shown) return;
+				var mine = ++seq;
+				checks.request(now.html, now.css, function (items) {
+					if (mine !== seq || items === null) return; // a newer check is on its way, or this one failed
+					shown = key;
+					checks.renderGroups(body, items);
+					box.hidden = items.length === 0;
+				});
+			}
+			function schedule() {
+				if (timer) clearTimeout(timer);
+				timer = setTimeout(run, 600);
+			}
+
+			['es-html', 'es-html-A', 'es-html-B', 'es-css', 'es-css-A', 'es-css-B'].forEach(function (id) {
+				var el = document.getElementById(id);
+				if (!el) return;
+				el.addEventListener('input', schedule);
+				el.addEventListener('change', schedule);
+				var tries = 0;
+				var t = setInterval(function () {
+					var cm = el.CodeMirror || (el.nextElementSibling && el.nextElementSibling.CodeMirror);
+					if (cm) {
+						if (!cm._esChecksHooked) { cm._esChecksHooked = true; cm.on('change', schedule); }
+						clearInterval(t);
+					} else if (++tries > 20) {
+						clearInterval(t);
+					}
+				}, 250);
+			});
+			// The editor wrote its edits back (Done) or left the fields alone
+			// (Cancel). Either way, check what the fields hold now.
+			document.addEventListener('es:editor-closed', run);
+			// A/B: the box follows whichever variant the tabs show.
+			document.addEventListener('os:variant-changed', run);
+		})();
+
 		// New-asset "Open editor": there's no saved row yet, so save first
 		// (flagging the redirect) and the editor auto-opens on the reload.
 		(function initCreateAndEdit() {
@@ -654,6 +798,40 @@
 		//   3. Previews (old left, current right) — iframes named in PHP so the
 		//      POST-to-iframe form submission resolves a named browsing context
 		//      on the very first try (no race with .name set via JS).
+		// Scheduled change previews: "How it looks now" (the saved form) beside
+		// "After this change" (the queued HTML and CSS). Same POST-into-a-named-
+		// iframe route as the past revision previews below, so both render through
+		// ES_Preview exactly like the Design tab.
+		(function initScheduledPreviews() {
+			document.querySelectorAll('.es-sched-previews').forEach(function (box) {
+				var url = box.getAttribute('data-preview-url');
+				var id = box.getAttribute('data-change-id');
+				if (!url || !id) return;
+				function post(target, html, css) {
+					var f = document.createElement('form');
+					f.method = 'POST';
+					f.action = url;
+					f.target = target;
+					f.style.display = 'none';
+					function add(n, v) {
+						var i = document.createElement('input');
+						i.type = 'hidden';
+						i.name = n;
+						i.value = v;
+						f.appendChild(i);
+					}
+					add('preview_frame', '1');
+					if (html != null) add('preview_html', html);
+					if (css != null) add('preview_css', css);
+					document.body.appendChild(f);
+					f.submit();
+					setTimeout(function () { try { document.body.removeChild(f); } catch (e) {} }, 200);
+				}
+				post('es-sched-now-' + id, null, null);
+				post('es-sched-after-' + id, box.querySelector('.es-sched-data-html').value, box.querySelector('.es-sched-data-css').value);
+			});
+		})();
+
 		(function initRevisions() {
 			var list = document.querySelector('.es-revisions-list');
 			if (!list) return;

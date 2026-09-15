@@ -104,6 +104,23 @@
 			return '';
 		});
 	}
+	// The Design System in front of the form's own CSS, with every @import from
+	// both moved to the top (a browser ignores an @import anywhere else). Mirrors
+	// ES_Design_System::compose().
+	function composeCss(ds, css) {
+		css = css || '';
+		if (!ds || !ds.trim()) return css;
+		var imports = [];
+		var split = function (sheet) {
+			return sheet.replace(/@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;{}]*;|@charset\b[^;]*;/gi, function (m) {
+				if (/^@import/i.test(m)) imports.push(m.trim());
+				return '';
+			});
+		};
+		var dsRules = split(ds);
+		var cssRules = split(css);
+		return (imports.length ? imports.join('\n') + '\n' : '') + dsRules + '\n' + cssRules;
+	}
 	function prepareCss(css, withBoot) {
 		css = css || '';
 		css = scopeAndLiftFontFaces(css);
@@ -430,7 +447,12 @@
 			replayAnimations();
 		} else if (d.type === MSG.UPDATE_CSS) {
 			if (styleEl) {
-				styleEl.textContent = prepareCss(d.css, isShadowMount);
+				// The parent sends the form's own CSS only. The Design System has to
+				// be put back in front of it here, or the first edit silently drops
+				// the site's shared layer from the editor (it rendered on open, then
+				// vanished on the first keystroke). composeCss() moves every @import
+				// to the top, the same rule ES_Design_System::compose() uses.
+				styleEl.textContent = prepareCss(composeCss(window.__esInspectorDs || '', d.css), isShadowMount);
 				// Layout may shift — realign the selection box. Editing the CSS
 				// can add or remove animations, so re-report whether Replay has
 				// anything to do (once styles have settled).

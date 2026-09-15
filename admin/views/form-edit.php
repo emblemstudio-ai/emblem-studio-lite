@@ -234,6 +234,23 @@ if ( ES_Caps::has( 'ab' ) && ! $is_new ) {
 $ab_running    = $ab_test && isset( $ab_variants['A'], $ab_variants['B'] );
 $ab_day        = ( $ab_running && ES_Caps::has( 'ab' ) ) ? ES_AB::test_day_for( $ab_test ) : 0;
 $ab_archive_ct = count( $ab_archived );
+
+// Checks list (SER-1358), from what is STORED: the form's own HTML/CSS, or
+// variant A's while a test runs (variant A is the pane showing on load; the
+// live check takes over when the tabs switch). A new, unsaved asset has
+// nothing stored, so nothing to report yet.
+$check_items = [];
+if ( class_exists( 'ES_Asset_Checks' ) && ! $is_new ) {
+	if ( $ab_running ) {
+		$check_items = ES_Asset_Checks::run( (string) $ab_variants['A']->html, (string) $ab_variants['A']->css );
+	} else {
+		$check_items = ES_Asset_Checks::run( (string) $f->html, (string) $f->css );
+	}
+}
+$check_groups = [
+	'error'   => __( 'Will break', 'emblem-studio' ),
+	'warning' => __( 'Worth fixing', 'emblem-studio' ),
+];
 ?>
 <div class="wrap emblem-studio-wrap">
 	<?php // Display-rule presets (SER-899 phase 2) — full client-side payload
@@ -243,7 +260,18 @@ $ab_archive_ct = count( $ab_archived );
 	<h1><?php echo $is_new ? esc_html__( 'Add Form', 'emblem-studio' ) : esc_html__( 'Edit Form', 'emblem-studio' ); ?></h1>
 
 	<?php if ( isset( $_GET['saved'] ) ) : ?>
-		<div class="es-toast" role="status" aria-live="polite"><?php esc_html_e( 'Asset saved', 'emblem-studio' ); ?></div>
+		<div class="es-toast" role="status" aria-live="polite"><?php
+			$check_count = count( $check_items );
+			if ( $check_count > 0 ) {
+				echo esc_html( sprintf(
+					/* translators: %d: how many problems the Checks list found */
+					_n( 'Asset saved, with %d problem', 'Asset saved, with %d problems', $check_count, 'emblem-studio' ),
+					$check_count
+				) );
+			} else {
+				esc_html_e( 'Asset saved', 'emblem-studio' );
+			}
+		?></div>
 	<?php endif; ?>
 	<?php if ( isset( $_GET['stats_reset'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Stats for this form have been reset.', 'emblem-studio' ); ?></p></div>
@@ -712,13 +740,42 @@ $ab_archive_ct = count( $ab_archived );
 				</div>
 			<?php endif; ?>
 
+			<?php // Checks list (SER-1358). Warns, never blocks a save. admin.js refreshes it live from es_check_asset. ?>
+			<div class="es-checks" id="es-checks" aria-live="polite"<?php echo $check_items ? '' : ' hidden'; ?>>
+				<p class="es-checks-title"><?php esc_html_e( 'Checks', 'emblem-studio' ); ?></p>
+				<div class="es-checks-body">
+					<?php foreach ( $check_groups as $check_level => $check_label ) :
+						$level_items = array_values( array_filter( $check_items, static function ( $item ) use ( $check_level ) {
+							return $item['level'] === $check_level;
+						} ) );
+						if ( ! $level_items ) {
+							continue;
+						}
+					?>
+						<div class="es-checks-group is-<?php echo esc_attr( $check_level ); ?>">
+							<p class="es-checks-group-title"><?php echo esc_html( $check_label ); ?></p>
+							<ul class="es-checks-list">
+								<?php foreach ( $level_items as $check_item ) : ?>
+									<li class="es-checks-item" data-check-id="<?php echo esc_attr( $check_item['id'] ); ?>">
+										<span class="es-checks-message"><?php echo esc_html( $check_item['message'] ); ?></span>
+										<span class="es-checks-fix"><?php echo esc_html( $check_item['fix'] ); ?></span>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						</div>
+					<?php endforeach; ?>
+				</div>
+			</div>
+
 			<div class="es-authoring-help">
 				<p class="es-authoring-help-intro"><?php esc_html_e( 'Authoring this form by hand, or with an outside AI?', 'emblem-studio' ); ?></p>
-				<p class="description"><?php esc_html_e( 'Copy the specification to see exactly what an Emblem Studio form supports — or copy the AI pre-prompt, fill in the bracketed blanks, and paste it into ChatGPT or Claude to generate a form.', 'emblem-studio' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Copy the specification to see exactly what an Emblem Studio form supports. To build it in your own ChatGPT, Claude or anything else, copy the AI prompt and paste it there. It points your AI at the current rules, so it never works from a stale copy.', 'emblem-studio' ); ?></p>
 				<p class="es-authoring-help-actions">
 					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( ES_Authoring::human_spec() ); ?>"><?php esc_html_e( 'Copy form specifications', 'emblem-studio' ); ?></button>
 					<span class="es-authoring-help-sep" aria-hidden="true">·</span>
-					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( ES_Authoring::ai_preprompt() ); ?>"><?php esc_html_e( 'Copy AI pre-prompt', 'emblem-studio' ); ?></button>
+					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( ES_Authoring::ai_preprompt() ); ?>"><?php esc_html_e( 'Copy AI prompt', 'emblem-studio' ); ?></button>
+					<span class="es-authoring-help-sep" aria-hidden="true">·</span>
+					<a class="es-authoring-link" href="<?php echo esc_url( ES_Authoring::prompt_page_url() ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'About the prompt', 'emblem-studio' ); ?></a>
 				</p>
 			</div>
 
@@ -1707,6 +1764,31 @@ $ab_archive_ct = count( $ab_archived );
 									<?php esc_html_e( 'Cannot tell whether the form has changed since this was built.', 'emblem-studio' ); ?>
 								</p>
 							<?php endif; ?>
+							<?php
+							// Before and after, side by side, the way the SaaS shows a queued
+							// change. Without them the only way to see what a change would do
+							// was to apply it. Both render through ES_Preview like the past
+							// revision previews: "now" is the saved form, "after" is the
+							// queued HTML and CSS, and pressing the button shows the thank-you
+							// state without sending anything.
+							?>
+							<div class="es-revision-previews es-sched-previews" data-preview-url="<?php echo esc_attr( ES_Preview::url_for( (int) $f->id ) ); ?>" data-change-id="<?php echo (int) $s->id; ?>" style="margin-top:.8em;">
+								<div class="es-revision-preview-col">
+									<div class="es-revision-pane-label">
+										<strong><?php esc_html_e( 'How it looks now', 'emblem-studio' ); ?></strong>
+									</div>
+									<iframe name="es-sched-now-<?php echo (int) $s->id; ?>" class="es-revision-preview-current" title="<?php esc_attr_e( 'How the form looks now', 'emblem-studio' ); ?>" loading="lazy"></iframe>
+								</div>
+								<div class="es-revision-preview-col">
+									<div class="es-revision-pane-label es-revision-pane-label-new">
+										<strong><?php esc_html_e( 'After this change', 'emblem-studio' ); ?></strong>
+									</div>
+									<iframe name="es-sched-after-<?php echo (int) $s->id; ?>" class="es-revision-preview-old" title="<?php esc_attr_e( 'How the form looks after this change', 'emblem-studio' ); ?>" loading="lazy"></iframe>
+								</div>
+								<textarea class="es-sched-data-html" hidden aria-hidden="true"><?php echo esc_textarea( (string) $s->html ); ?></textarea>
+								<textarea class="es-sched-data-css" hidden aria-hidden="true"><?php echo esc_textarea( (string) $s->css ); ?></textarea>
+							</div>
+							<p class="description" style="margin:0;"><?php esc_html_e( 'Press the button in either preview to see its thank-you state. Nothing is sent.', 'emblem-studio' ); ?></p>
 							<p style="margin:.5em 0 0;">
 								<a href="<?php echo esc_url( $apply ); ?>" class="button" onclick="return confirm('<?php esc_attr_e( 'Apply this change to the live form now, instead of waiting for its date?', 'emblem-studio' ); ?>');"><?php esc_html_e( 'Apply now', 'emblem-studio' ); ?></a>
 								<a href="<?php echo esc_url( $cancel ); ?>" class="button" onclick="return confirm('<?php esc_attr_e( 'Call this change off? It will not be applied.', 'emblem-studio' ); ?>');"><?php esc_html_e( 'Cancel this change', 'emblem-studio' ); ?></a>

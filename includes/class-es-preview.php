@@ -132,34 +132,19 @@ class ES_Preview {
 	}
 
 	/**
-	 * Google Fonts <link> tags for the preview iframe. Loads the
-	 * families our shipped templates use. Bundled into a single
-	 * call so browsers parallelize the font file downloads.
-	 * Cached after first preview load.
+	 * Font <link> tags for the preview iframes. Deliberately empty now.
 	 *
-	 * Loaded ONLY inside preview iframes — never on live front-end
-	 * forms. For live forms, font loading is the site author's call
-	 * (most modern WP themes already load Inter or similar).
+	 * This used to preload the seven Google families the shipped templates named
+	 * without importing them (Inter Tight, JetBrains Mono, Fraunces, DM Serif
+	 * Display, Nunito, Cormorant Garamond, Space Grotesk). That made every preview
+	 * lie: a template looked right in the Design tab, the editor and the revision
+	 * previews, and fell back to Georgia or the system font on the live page, which
+	 * never loads them. The templates import their own fonts now, so a preview
+	 * shows exactly the fonts a visitor gets. The SaaS never preloaded. Found by a
+	 * Playwright parity check. Kept as a function so its callers need no change.
 	 */
 	public static function preview_font_head(): string {
-		$href = 'https://fonts.googleapis.com/css2?'
-			. 'family=Inter+Tight:wght@500;600;700'
-			. '&family=JetBrains+Mono:wght@600;700'
-			. '&family=Fraunces:ital,wght@1,400;1,500'
-			. '&family=DM+Serif+Display:ital@0;1'
-			. '&family=Nunito:wght@400;600;700'
-			. '&family=Cormorant+Garamond:ital,wght@1,400;1,500'
-			. '&family=Space+Grotesk:wght@500;600;700'
-			. '&display=swap';
-		// Non-blocking load: a print stylesheet is ignored for screen rendering,
-		// so the asset paints immediately; onload flips it to `all` once the CSS
-		// is in. Without this, the iframe stalls on the Google Fonts request (and
-		// its font files) before first paint — the main reason previews felt slow.
-		return
-			'<link rel="preconnect" href="https://fonts.googleapis.com">' .
-			'<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' .
-			'<link rel="stylesheet" media="print" onload="this.media=\'all\'" href="' . esc_url( $href ) . '">' .
-			'<noscript><link rel="stylesheet" href="' . esc_url( $href ) . '"></noscript>';
+		return '';
 	}
 
 	/**
@@ -474,13 +459,14 @@ class ES_Preview {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <?php echo $font_head; ?>
 <style>
-html, body { margin: 0; padding: 0; background: <?php echo esc_html( $body_bg ); ?>; color: #1d2327; font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100%; box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: <?php echo esc_html( $body_bg ); ?>; color: #1d2327; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100%; box-sizing: border-box; }
 <?php echo $position_css; ?><?php echo $wrap_css; ?><?php echo $close_css; ?><?php echo $entry_css; ?><?php echo $preview_popup_dim; ?>
 </style>
 </head>
 <body>
 <script>window.EmblemStudio = { ajaxUrl: <?php echo wp_json_encode( $ajax_url ); ?>, postId: 0, preview: true };
 window.__esInspectorCss = <?php echo wp_json_encode( (string) $form->css ); ?>;
+window.__esInspectorDs = <?php echo wp_json_encode( ( class_exists( 'ES_Design_System' ) && ! empty( $form->use_design_system ) ) ? ES_Design_System::get_css() : '' ); ?>;
 window.__esInspectorShells = <?php echo wp_json_encode( $shells_for_js ); ?>;
 window.__esInspectorShell = <?php echo wp_json_encode( $shell ); ?>;</script>
 <?php // Host is always wrapped: the entrance animates the wrapper, and the close button (when present) anchors to it. ?>
@@ -911,7 +897,7 @@ JS;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <?php echo $font_head; ?>
 <style>
-html, body { margin: 0; padding: 0; background: #f1f5f9; color: #1d2327; font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100%; box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #f1f5f9; color: #1d2327; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100%; box-sizing: border-box; }
 <?php echo $position_css; ?>
 </style>
 </head>

@@ -127,7 +127,7 @@
 				if ( ! j || ! j.success ) {
 					throw new Error( 'preview failed' );
 				}
-				return { html: j.data.html || '', css: j.data.css || '' };
+				return { html: j.data.html || '', css: j.data.css || '', shadow: j.data.shadow !== false };
 			} )
 			// A FAILURE MUST NOT STAY CACHED. The rejected promise used to sit in
 			// the cache for the life of the page, so one failed hover (an expired
@@ -183,13 +183,19 @@
 		}
 	}
 
-	function mount( container, html, css ) {
+	// A form with Shadow DOM OFF takes its font from the page around it. The
+	// card's shadow root resets everything, so it drew such a form in Times New
+	// Roman while the Design tab and the editor showed the system font. Hand it
+	// the same page those previews give it (class-es-preview.php's body stack).
+	var LIGHT_DOM_HOST_CSS = ':host{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif!important;color:#1d2327!important;}';
+
+	function mount( container, html, css, shadowDom ) {
 		container.textContent = '';
 		var host = document.createElement( 'div' );
 		host.style.width = '100%';
 		var shadow = host.attachShadow( { mode: 'open' } );
 		var style = document.createElement( 'style' );
-		style.textContent = prepareCss( css, true );
+		style.textContent = prepareCss( css, true ) + ( shadowDom === false ? LIGHT_DOM_HOST_CSS : '' );
 		shadow.appendChild( style );
 		var tpl = document.createElement( 'template' );
 		tpl.innerHTML = html;
@@ -296,7 +302,7 @@
 			if ( current !== card ) {
 				return;
 			}
-			var host = mount( hostWrap, p.html, p.css );
+			var host = mount( hostWrap, p.html, p.css, p.shadow );
 			if ( note.parentNode ) {
 				note.parentNode.removeChild( note );
 			}

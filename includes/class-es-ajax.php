@@ -85,6 +85,9 @@ class ES_Ajax {
 		wp_send_json_success( [
 			'html' => (string) ( $payload['html'] ?? '' ),
 			'css'  => (string) ( $payload['css'] ?? '' ),
+			// Shadow DOM off means the asset takes the page's font; the hover card
+			// needs to know so it can hand it the same page font the previews use.
+			'shadow' => ! empty( $form->use_shadow_dom ),
 		] );
 	}
 

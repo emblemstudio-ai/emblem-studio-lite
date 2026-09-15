@@ -4818,6 +4818,62 @@
 	margin-top: var(--es-space-2);
 }
 
+/* ── Checks — Design-tab list of problems in the asset (SER-1358) ──
+   Not a WP .notice: initAutoCloseNotices() would turn it into a toast. */
+.emblem-studio-wrap .es-checks {
+	margin: 0 0 var(--es-space-4);
+	padding: 14px 16px;
+	background: var(--es-surface);
+	border: 1px solid var(--es-border);
+	border-radius: var(--es-radius-md);
+}
+.emblem-studio-wrap .es-checks[hidden] { display: none; }
+.emblem-studio-wrap .es-checks-title {
+	margin: 0 0 var(--es-space-2);
+	font-weight: 600;
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-checks-group + .es-checks-group { margin-top: var(--es-space-3); }
+.emblem-studio-wrap .es-checks-group-title {
+	margin: 0 0 6px;
+	font-size: var(--es-text-sm);
+	font-weight: 700;
+	letter-spacing: var(--es-tracking-wide);
+	text-transform: uppercase;
+}
+.emblem-studio-wrap .es-checks-group.is-error .es-checks-group-title { color: var(--es-danger); }
+.emblem-studio-wrap .es-checks-group.is-warning .es-checks-group-title { color: var(--es-warning); }
+.emblem-studio-wrap .es-checks-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 6px;
+}
+.emblem-studio-wrap .es-checks-item {
+	margin: 0;
+	padding: 8px 12px;
+	border-left: 3px solid transparent;
+	border-radius: var(--es-radius-sm);
+}
+.emblem-studio-wrap .es-checks-group.is-error .es-checks-item {
+	background: var(--es-danger-soft);
+	border-left-color: var(--es-danger);
+}
+.emblem-studio-wrap .es-checks-group.is-warning .es-checks-item {
+	background: var(--es-warning-soft);
+	border-left-color: var(--es-warning);
+}
+.emblem-studio-wrap .es-checks-message {
+	display: block;
+	color: var(--es-text-strong);
+}
+.emblem-studio-wrap .es-checks-fix {
+	display: block;
+	margin-top: 2px;
+	color: var(--es-text);
+}
+
 /* ── Authoring help — Design-tab "copy spec / pre-prompt" links ─── */
 .emblem-studio-wrap .es-authoring-help {
 	margin: 0 0 var(--es-space-4);

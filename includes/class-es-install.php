@@ -137,44 +137,8 @@ class ES_Install {
 			KEY form_id (form_id, created_at)
 		) $charset_collate;";
 
-		// The periods a form runs for (SER-1292), replacing the single
-		// active_from / active_until window. A list has an order, a length and
-		// members that can each be edited, and none of that fits two columns.
-		// Site-local DATETIME, same clock as everything else here.
-		$segments = "CREATE TABLE {$prefix}emblemstudio_form_schedule_segments (
-			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			form_id BIGINT(20) UNSIGNED NOT NULL,
-			starts_at DATETIME NULL,
-			ends_at DATETIME NULL,
-			position INT UNSIGNED NOT NULL DEFAULT 0,
-			never_ran_reason VARCHAR(191) NULL,
-			created_at DATETIME NOT NULL,
-			PRIMARY KEY  (id),
-			KEY form_start (form_id, starts_at)
-		) $charset_collate;";
-
-		// Content changes set now and applied on a date (SER-1287). Deliberately
-		// NOT columns on form_revisions: a revision records something that
-		// happened, this is an intention that has not happened yet, and it can
-		// be edited, cancelled, skipped or fail. Same columns, opposite
-		// direction in time.
-		$scheduled = "CREATE TABLE {$prefix}emblemstudio_form_scheduled_revisions (
-			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			form_id BIGINT(20) UNSIGNED NOT NULL,
-			html LONGTEXT NULL,
-			css LONGTEXT NULL,
-			name VARCHAR(191) NULL,
-			apply_at DATETIME NOT NULL,
-			status VARCHAR(16) NOT NULL DEFAULT 'queued',
-			applied_at DATETIME NULL,
-			reason VARCHAR(500) NULL,
-			based_on_revision_id BIGINT(20) UNSIGNED NULL,
-			created_at DATETIME NOT NULL,
-			created_by BIGINT(20) UNSIGNED NULL,
-			PRIMARY KEY  (id),
-			KEY due (status, apply_at),
-			KEY form_apply (form_id, apply_at)
-		) $charset_collate;";
+		// The two scheduling tables live in scheduling_tables_sql(), so activation
+		// and the DB 42 migration create them from one definition.
 
 		$ds_revisions = "CREATE TABLE {$prefix}emblemstudio_design_system_revisions (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -278,17 +242,7 @@ class ES_Install {
 		dbDelta( $leads );
 		dbDelta( $logs );
 		dbDelta( $revisions );
-		// The two scheduling tables are made only where scheduling exists. Lite
-		// has no screen for either, so it used to create two tables and never
-		// write a row to them. An install that already has them keeps them: they
-		// are empty, and dropping somebody's tables to save a name in a list is
-		// not a trade worth making.
-		if ( ES_Caps::has( 'schedule_window' ) ) {
-			dbDelta( $segments );
-		}
-		if ( ES_Caps::has( 'revisions' ) ) {
-			dbDelta( $scheduled );
-		}
+		self::create_scheduling_tables();
 		dbDelta( $ds_revisions );
 		dbDelta( $variants );
 		dbDelta( $tests );
@@ -302,6 +256,112 @@ class ES_Install {
 	public static function table( string $name ): string {
 		global $wpdb;
 		return $wpdb->prefix . 'emblemstudio_' . $name;
+	}
+
+	/**
+	 * CREATE TABLE statements for the two scheduling tables.
+	 *
+	 * @return array{0: string, 1: string} [ schedule segments, scheduled revisions ]
+	 */
+	private static function scheduling_tables_sql(): array {
+		global $wpdb;
+		$prefix          = $wpdb->prefix;
+		$charset_collate = $wpdb->get_charset_collate();
+
+		// The periods a form runs for (SER-1292), replacing the single
+		// active_from / active_until window. A list has an order, a length and
+		// members that can each be edited, and none of that fits two columns.
+		// Site-local DATETIME, same clock as everything else here.
+		$segments = "CREATE TABLE {$prefix}emblemstudio_form_schedule_segments (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			starts_at DATETIME NULL,
+			ends_at DATETIME NULL,
+			position INT UNSIGNED NOT NULL DEFAULT 0,
+			never_ran_reason VARCHAR(191) NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY form_start (form_id, starts_at)
+		) $charset_collate;";
+
+		// Content changes set now and applied on a date (SER-1287). Deliberately
+		// NOT columns on form_revisions: a revision records something that
+		// happened, this is an intention that has not happened yet, and it can
+		// be edited, cancelled, skipped or fail. Same columns, opposite
+		// direction in time.
+		$scheduled = "CREATE TABLE {$prefix}emblemstudio_form_scheduled_revisions (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			html LONGTEXT NULL,
+			css LONGTEXT NULL,
+			name VARCHAR(191) NULL,
+			apply_at DATETIME NOT NULL,
+			status VARCHAR(16) NOT NULL DEFAULT 'queued',
+			applied_at DATETIME NULL,
+			reason VARCHAR(500) NULL,
+			based_on_revision_id BIGINT(20) UNSIGNED NULL,
+			created_at DATETIME NOT NULL,
+			created_by BIGINT(20) UNSIGNED NULL,
+			PRIMARY KEY  (id),
+			KEY due (status, apply_at),
+			KEY form_apply (form_id, apply_at)
+		) $charset_collate;";
+
+		return [ $segments, $scheduled ];
+	}
+
+	/**
+	 * Create the two scheduling tables where this edition has scheduling.
+	 *
+	 * Lite has no screen for either, so it does not get them. An install that
+	 * already has them keeps them: they are empty there, and dropping somebody's
+	 * tables to save a name in a list is not a trade worth making.
+	 *
+	 * dbDelta() is idempotent, so this is safe on every activation and migration.
+	 */
+	private static function create_scheduling_tables(): void {
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		list( $segments, $scheduled ) = self::scheduling_tables_sql();
+		if ( ES_Caps::has( 'schedule_window' ) ) {
+			dbDelta( $segments );
+		}
+		if ( ES_Caps::has( 'revisions' ) ) {
+			dbDelta( $scheduled );
+		}
+	}
+
+	/**
+	 * Copy each form's old single active_from / active_until window into the
+	 * schedule periods table. Idempotent: a form that already has periods is
+	 * skipped, so a re-run never doubles a schedule.
+	 */
+	private static function backfill_schedule_segments(): void {
+		global $wpdb;
+		$forms    = self::table( 'forms' );
+		$segments = self::table( 'form_schedule_segments' );
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $segments ) ) !== $segments ) {
+			return; // an edition without scheduling has nothing to copy into
+		}
+		$now  = current_time( 'mysql' );
+		$rows = $wpdb->get_results(
+			"SELECT id, active_from, active_until FROM {$forms} WHERE active_from IS NOT NULL OR active_until IS NOT NULL"
+		);
+		foreach ( (array) $rows as $row ) {
+			$already = (int) $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$segments} WHERE form_id = %d",
+				(int) $row->id
+			) );
+			if ( $already > 0 ) {
+				continue;
+			}
+			$wpdb->insert( $segments, [
+				'form_id'    => (int) $row->id,
+				'starts_at'  => $row->active_from,
+				'ends_at'    => $row->active_until,
+				'position'   => 0,
+				'created_at' => $now,
+			] );
+		}
 	}
 
 	/**
@@ -1052,33 +1112,24 @@ class ES_Install {
 		// Forms with neither date get no row at all, which is the same thing as
 		// "always on" and keeps the common case free of rows.
 		if ( version_compare( $current, '41', '<' ) ) {
-			global $wpdb;
-			$forms    = self::table( 'forms' );
-			$segments = self::table( 'form_schedule_segments' );
-			$now      = current_time( 'mysql' );
-
-			$rows = $wpdb->get_results(
-				"SELECT id, active_from, active_until FROM {$forms} WHERE active_from IS NOT NULL OR active_until IS NOT NULL"
-			);
-			foreach ( (array) $rows as $row ) {
-				// Idempotent: a re-run must not double a form's schedule.
-				$already = (int) $wpdb->get_var( $wpdb->prepare(
-					"SELECT COUNT(*) FROM {$segments} WHERE form_id = %d",
-					(int) $row->id
-				) );
-				if ( $already > 0 ) {
-					continue;
-				}
-				$wpdb->insert( $segments, [
-					'form_id'    => (int) $row->id,
-					'starts_at'  => $row->active_from,
-					'ends_at'    => $row->active_until,
-					'position'   => 0,
-					'created_at' => $now,
-				] );
-			}
-
+			// The periods table has to exist before anything is copied into it.
+			self::create_scheduling_tables();
+			self::backfill_schedule_segments();
 			update_option( 'emblem_studio_db_version', '41' );
+		}
+
+		// DB 40 and 41 added the scheduled-revisions and schedule-periods tables in
+		// activate() only. A site that updated in place, without deactivating and
+		// reactivating, never ran activate(), so it was stamped 41 with neither
+		// table: scheduling a change or a period failed with a database error, and
+		// the DB 41 copy of each form's old active_from / active_until had nowhere
+		// to go, so those schedules were lost. Found on a local dev site by a
+		// Playwright parity check. Create both where missing, then run that copy
+		// again. Both steps are idempotent, so a site that has the tables is untouched.
+		if ( version_compare( $current, '42', '<' ) ) {
+			self::create_scheduling_tables();
+			self::backfill_schedule_segments();
+			update_option( 'emblem_studio_db_version', '42' );
 		}
 	}
 
