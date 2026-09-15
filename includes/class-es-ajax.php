@@ -445,16 +445,7 @@ class ES_Ajax {
 		// Field-parser stores names with `[]` intact (to flag them as multi),
 		// so the lookup needs to tolerate both forms.
 		$lookup_field = function ( string $name ) use ( $fields ) {
-			if ( array_key_exists( $name, $fields ) ) {
-				return $fields[ $name ];
-			}
-			if ( substr( $name, -2 ) === '[]' ) {
-				$stripped = substr( $name, 0, -2 );
-				if ( array_key_exists( $stripped, $fields ) ) {
-					return $fields[ $stripped ];
-				}
-			}
-			return '';
+			return self::posted_value( $fields, $name ) ?? '';
 		};
 		// The field's HTML input kind (email/tel/...), parsed from the form's
 		// own stored HTML — a last-resort auto-detect signal when no name
@@ -516,7 +507,7 @@ class ES_Ajax {
 		// otherwise a form with (say) an explicit last-name field but no
 		// first-name field would have the split overwrite the already-correct
 		// last name with the tail of the split full name.
-		if ( ! $first_name && ! $last_name && empty( $mapping['col:f_name'] ) && ! empty( $fields['name'] ) ) {
+		if ( ! $first_name && ! $last_name && empty( $mapping['col:f_name'] ) && ! empty( $fields['name'] ) && is_scalar( $fields['name'] ) ) {
 			$full       = self::normalize_name( trim( (string) $fields['name'] ) );
 			$parts      = preg_split( '/\s+/', $full, 2 );
 			$first_name = $parts[0] ?? '';
@@ -546,7 +537,7 @@ class ES_Ajax {
 			}
 		}
 		$slug_values = array_filter( $slug_values, function ( $v ) {
-			return $v !== '' && $v !== [] && $v !== null;
+			return $v !== '' && $v !== [];
 		} );
 
 		// Tags: form's configured tags + any esf_tag overrides from the HTML.
@@ -599,7 +590,7 @@ class ES_Ajax {
 			if ( ! isset( $allowed[ $k ] ) ) {
 				continue; // not a field on this form — drop it silently
 			}
-			$custom_fields[ sanitize_key( $k ) ] = is_scalar( $v ) ? sanitize_text_field( (string) $v ) : '';
+			$custom_fields[ sanitize_key( $k ) ] = self::sanitize_field_value( $v );
 		}
 
 		global $wpdb;
@@ -853,12 +844,53 @@ class ES_Ajax {
 
 		$missing = [];
 		foreach ( array_unique( $required ) as $field ) {
-			$value = $fields[ $field ] ?? '';
-			if ( empty( $value ) || strtolower( (string) $value ) === 'off' || strtolower( (string) $value ) === 'false' ) {
+			if ( ! self::checkbox_value_is_ticked( self::posted_value( $fields, $field ) ) ) {
 				$missing[] = $field;
 			}
 		}
 		return $missing;
+	}
+
+	/**
+	 * The posted value for a field name as the form's HTML spells it. PHP strips
+	 * one trailing `[]` from a posted key, so `agree[]` arrives as `agree`.
+	 *
+	 * @param  array<string, mixed> $fields
+	 * @return mixed null when the field was not posted at all
+	 */
+	public static function posted_value( array $fields, string $name ) {
+		if ( array_key_exists( $name, $fields ) ) {
+			return $fields[ $name ];
+		}
+		if ( substr( $name, -2 ) === '[]' ) {
+			$stripped = substr( $name, 0, -2 );
+			if ( array_key_exists( $stripped, $fields ) ) {
+				return $fields[ $stripped ];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether a posted checkbox value means "ticked". A hand-built client may send
+	 * `off` or `false` for unticked. A checkbox group posts a list, and it counts
+	 * as ticked when any one of its answers does.
+	 *
+	 * @param mixed $value
+	 */
+	public static function checkbox_value_is_ticked( $value ): bool {
+		if ( is_array( $value ) ) {
+			foreach ( $value as $item ) {
+				if ( self::checkbox_value_is_ticked( $item ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		if ( ! is_scalar( $value ) || empty( $value ) ) {
+			return false;
+		}
+		return ! in_array( strtolower( (string) $value ), [ 'off', 'false' ], true );
 	}
 	/**
 	 * Lowercase + trim the email. Emails are technically case-sensitive in the
@@ -899,13 +931,56 @@ class ES_Ajax {
 		);
 	}
 
+	/** Most answers one multi-value field may keep (a checkbox group, a select[multiple]). */
+	public const MAX_FIELD_VALUES = 100;
+
+	/** Longest single answer kept, in characters. */
+	public const MAX_FIELD_LENGTH = 5000;
+
+	/**
+	 * Clean one submitted answer for storage and delivery.
+	 *
+	 * A checkbox group posts a LIST of answers (`interests[]`, or several ticked
+	 * boxes sharing a plain name, which frontend.js now sends as `name[]`). The
+	 * submit path used to keep scalars only, so three ticked boxes were saved on
+	 * the lead as an empty string and never reached the CSV, a webhook or
+	 * FunnelKit (SER-1370).
+	 *
+	 * A list stays a list: each scalar item is sanitize_text_field'd and capped,
+	 * anything nested is dropped, and at most MAX_FIELD_VALUES items survive.
+	 * TWIN of the SaaS SubmissionController::sanitizeExtraValue, same caps.
+	 * Also used by the SaaS connector for values the SaaS forwards to FunnelKit.
+	 *
+	 * @param  mixed $value
+	 * @return string|array<int, string>
+	 */
+	public static function sanitize_field_value( $value ) {
+		if ( ! is_array( $value ) ) {
+			return is_scalar( $value )
+				? mb_substr( sanitize_text_field( (string) $value ), 0, self::MAX_FIELD_LENGTH )
+				: '';
+		}
+
+		$out = [];
+		foreach ( $value as $item ) {
+			if ( ! is_scalar( $item ) ) {
+				continue;
+			}
+			$out[] = mb_substr( sanitize_text_field( (string) $item ), 0, self::MAX_FIELD_LENGTH );
+			if ( count( $out ) >= self::MAX_FIELD_VALUES ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
 	private function collect_fields(): array {
 		$out = [];
 		foreach ( $_POST as $k => $v ) {
 			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_ts', 'es_el' ], true ) ) {
 				continue;
 			}
-			$out[ $k ] = is_array( $v ) ? array_map( 'sanitize_text_field', wp_unslash( $v ) ) : sanitize_text_field( wp_unslash( $v ) );
+			$out[ $k ] = self::sanitize_field_value( wp_unslash( $v ) );
 		}
 		return $out;
 	}

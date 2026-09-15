@@ -50,4 +50,30 @@ class ES_Field_Matcher {
 		}
 		return null;
 	}
+
+	/**
+	 * The option labels of a FunnelKit choice field (4 select, 5 radio,
+	 * 6 checkbox), read from the field's JSON meta. Empty for any other type.
+	 *
+	 * FunnelKit keeps a choice answer only when it matches one of these labels,
+	 * case-insensitive, and drops the rest silently. ES_FunnelKit hands the list
+	 * to the mapper, and assets/admin.js unmatchedOptions() warns about the form
+	 * values that are not on it (SER-1370).
+	 *
+	 * @return array<int, string>
+	 */
+	public static function funnelkit_options( int $type, string $meta_json ): array {
+		if ( ! in_array( $type, [ 4, 5, 6 ], true ) || $meta_json === '' ) {
+			return [];
+		}
+		$meta    = json_decode( $meta_json, true );
+		$options = is_array( $meta ) && is_array( $meta['options'] ?? null ) ? $meta['options'] : [];
+		$out     = [];
+		foreach ( $options as $option ) {
+			if ( is_scalar( $option ) && (string) $option !== '' ) {
+				$out[] = (string) $option;
+			}
+		}
+		return $out;
+	}
 }

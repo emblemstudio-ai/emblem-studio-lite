@@ -2561,9 +2561,19 @@
 		var seen = {};
 		var reserved = ['esf_hp', 'esf_tag', 'esf_list', 'form_id', 'post_id', 'action', '_wpnonce', '_wp_http_referer'];
 
+		var checkboxCount = {};
+
 		function add(name, kind) {
-			if (!name || reserved.indexOf(name) !== -1) return;
+			if (!name || reserved.indexOf(name) !== -1) return null;
 			if (!seen[name]) seen[name] = { name: name, kind: kind };
+			return seen[name];
+		}
+		// The answers a choice field can send. Mirrors ES_Form_Parser::add_option:
+		// once each, and an empty value is a placeholder, not an answer.
+		function addOption(field, value) {
+			if (!field || value === '') return;
+			if (!field.options) field.options = [];
+			if (field.options.indexOf(value) === -1) field.options.push(value);
 		}
 		function inputKind(type, name) {
 			var isMulti = /\[\]$/.test(name);
@@ -2585,12 +2595,27 @@
 		doc.querySelectorAll('input').forEach(function (el) {
 			var name = el.getAttribute('name');
 			if (!name) return;
-			add(name, inputKind((el.getAttribute('type') || '').toLowerCase(), name));
+			var type = (el.getAttribute('type') || '').toLowerCase();
+			var field = add(name, inputKind(type, name));
+			if (!field) return;
+			if (type === 'checkbox' || type === 'radio') {
+				addOption(field, el.hasAttribute('value') ? el.getAttribute('value') : 'on');
+			}
+			// Several checkboxes sharing a plain name are a group: frontend.js
+			// sends two or more ticked ones as name[]. Same rule as the PHP parser.
+			if (type === 'checkbox') {
+				checkboxCount[name] = (checkboxCount[name] || 0) + 1;
+				if (checkboxCount[name] >= 2 && field.kind === 'checkbox-single') field.kind = 'checkbox-multi';
+			}
 		});
 		doc.querySelectorAll('select').forEach(function (el) {
 			var name = el.getAttribute('name');
 			if (!name) return;
-			add(name, el.hasAttribute('multiple') ? 'select-multi' : 'select-single');
+			var field = add(name, el.hasAttribute('multiple') ? 'select-multi' : 'select-single');
+			if (!field) return;
+			el.querySelectorAll('option').forEach(function (opt) {
+				addOption(field, opt.hasAttribute('value') ? opt.getAttribute('value') : opt.textContent.trim());
+			});
 		});
 		doc.querySelectorAll('textarea').forEach(function (el) {
 			var name = el.getAttribute('name');
@@ -2684,6 +2709,20 @@
 			return byKind ? { name: byKind.name } : null;
 		}
 
+		// The form's answers that a FunnelKit choice field will throw away.
+		// FunnelKit (BWFCRM_Contact::get_field_values) keeps only values that
+		// match one of the field's option labels, case-insensitive, and drops the
+		// rest silently. Both option lists come from the server (and from
+		// parseFormFields() as the HTML is edited). Empty when either side has no
+		// options, so a text field never warns.
+		function unmatchedOptions(fkField, formField) {
+			if (!fkField.options || !fkField.options.length || !formField.options || !formField.options.length) return [];
+			var known = fkField.options.map(function (o) { return String(o).toLowerCase(); });
+			return formField.options.filter(function (v) {
+				return known.indexOf(String(v).toLowerCase()) === -1;
+			});
+		}
+
 		function render() {
 			renderFk();
 			renderForm();
@@ -2711,6 +2750,7 @@
 
 					var slot = document.createElement('div');
 					slot.className = 'es-mapper-slot';
+					var warning = null;
 					var mappedName = mapping[f.key];
 					if (mappedName) {
 						var detected = formFieldExists(mappedName);
@@ -2721,7 +2761,7 @@
 						pill.innerHTML = '<span>' + esc(mappedName) + '</span>';
 						pill.title = orphan
 							? 'This form input no longer exists in your HTML.'
-							: (!compat ? 'Type mismatch — saving will still work, but value may not be stored correctly.' : '');
+							: (!compat ? 'Type mismatch. Saving will still work, but the value may not be stored correctly.' : '');
 						var remove = document.createElement('button');
 						remove.type = 'button';
 						remove.className = 'es-mapper-pill-remove';
@@ -2733,6 +2773,13 @@
 						});
 						pill.appendChild(remove);
 						slot.appendChild(pill);
+						var dropped = detected ? unmatchedOptions(f, detected) : [];
+						if (dropped.length) {
+							warning = document.createElement('div');
+							warning.className = 'es-mapper-row-warning';
+							warning.setAttribute('role', 'note');
+							warning.textContent = 'FunnelKit only keeps values it knows. These will be dropped: ' + dropped.join(', ') + '.';
+						}
 					} else {
 						var auto = autoDetected(f.key);
 						if (auto) {
@@ -2745,7 +2792,7 @@
 							autoPill.className = 'es-mapper-pill is-auto' + (!autoCompat ? ' is-warn' : '');
 							autoPill.innerHTML = '<span>' + esc(label) + '</span><span class="es-mapper-auto-tag">auto</span>';
 							autoPill.title = !autoCompat
-								? 'Type mismatch — auto-detected by name, but the input type doesn\'t match. Saving will still work, but the value may not be stored correctly.'
+								? 'Type mismatch. Auto-detected by name, but the input type doesn\'t match. Saving will still work, but the value may not be stored correctly.'
 								: 'Auto-detected from input name — pushed to FunnelKit on submit. To override, pick a form input on the right then click this slot.';
 							slot.appendChild(autoPill);
 						} else {
@@ -2760,6 +2807,7 @@
 						render();
 					});
 					row.appendChild(slot);
+					if (warning) row.appendChild(warning);
 					section.appendChild(row);
 				});
 				fkCol.appendChild(section);

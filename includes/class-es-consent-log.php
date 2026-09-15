@@ -70,8 +70,9 @@ class ES_Consent_Log {
 				continue;
 			}
 
-			$value   = $fields[ $consent['field'] ] ?? null;
-			$checked = $value !== null && $value !== '' && ! in_array( strtolower( (string) $value ), [ 'off', 'false' ], true );
+			// Same reading as the submit guard: `agree[]` arrives as `agree`, and a
+			// ticked group arrives as a list rather than one string.
+			$checked = ES_Ajax::checkbox_value_is_ticked( ES_Ajax::posted_value( $fields, $consent['field'] ) );
 
 			$wpdb->insert( $consent_table, [
 				'lead_id'           => $lead_id,

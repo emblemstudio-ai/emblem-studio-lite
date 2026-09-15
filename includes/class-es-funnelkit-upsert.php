@@ -136,7 +136,7 @@ final class ES_FunnelKit_Upsert {
 					continue;
 				}
 				$encoded = is_array( $value )
-					? ( function_exists( 'wp_json_encode' ) ? wp_json_encode( $value ) : json_encode( $value ) )
+					? self::list_value( $value, self::field_type( 'slug', (string) $slug ) )
 					: (string) $value;
 				$written = $contact->set_field_by_slug( (string) $slug, (string) $encoded ) || $written;
 			}
@@ -151,6 +151,11 @@ final class ES_FunnelKit_Upsert {
 			static fn( $value, $key ) => is_numeric( $key ) && $value !== '' && $value !== null && $value !== [],
 			ARRAY_FILTER_USE_BOTH
 		);
+		foreach ( $custom as $key => $value ) {
+			if ( is_array( $value ) ) {
+				$custom[ $key ] = self::list_value( $value, self::field_type( 'id', (string) $key ) );
+			}
+		}
 		if ( $custom && method_exists( $contact, 'set_fields' ) ) {
 			$contact->set_fields( $custom );
 			$written = true;
@@ -158,6 +163,50 @@ final class ES_FunnelKit_Upsert {
 		if ( $written && method_exists( $contact, 'save_fields' ) ) {
 			$contact->save_fields();
 		}
+	}
+
+	/** FunnelKit field types that pick from a list of options (BWFCRM_Fields). */
+	private const CHOICE_TYPES = [ 4 /* select */, 5 /* radio */, 6 /* checkbox */ ];
+
+	/**
+	 * Several answers for one FunnelKit field (a ticked checkbox group).
+	 *
+	 * A choice field (checkbox, radio, select) gets a JSON list. FunnelKit's
+	 * save_fields() decodes it and keeps every item that matches one of the
+	 * field's option labels, case-insensitive. A checkbox field stores them all;
+	 * radio and select keep the first match. JSON rather than a comma list,
+	 * because FunnelKit splits a plain string on commas and an answer can
+	 * contain one.
+	 *
+	 * Any other field (text, textarea, number) gets the answers joined with
+	 * ", ". FunnelKit silently skips an array for those types, and a JSON list
+	 * would show up in a text field as `["a","b"]`.
+	 *
+	 * Unknown type (FunnelKit's field model unavailable): JSON, as before.
+	 *
+	 * @param array<int|string, mixed> $values
+	 */
+	private static function list_value( array $values, ?int $type ): string {
+		$items = array_values( array_map( 'strval', array_filter( $values, 'is_scalar' ) ) );
+		if ( $type !== null && ! in_array( $type, self::CHOICE_TYPES, true ) ) {
+			return implode( ', ', $items );
+		}
+		return (string) ( function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items ) );
+	}
+
+	/** A FunnelKit custom field's numeric type, looked up by slug or ID. Null when unknown. */
+	private static function field_type( string $by, string $key ): ?int {
+		if ( ! class_exists( 'BWFAN_Model_Fields' ) ) {
+			return null;
+		}
+		try {
+			$row = $by === 'slug'
+				? BWFAN_Model_Fields::get_field_by_slug( $key )
+				: BWFAN_Model_Fields::get_field_by_id( (int) $key );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		return is_array( $row ) && isset( $row['type'] ) ? (int) $row['type'] : null;
 	}
 
 	private static function apply_terms( $contact, array $lead ): void {

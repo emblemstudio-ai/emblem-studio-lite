@@ -257,6 +257,11 @@ class ES_FunnelKit {
 				[ 'key' => 'col:timezone',   'label' => __( 'Timezone', 'emblem-studio' ),   'kind' => 'text' ],
 			],
 		];
+		// Same shape as a custom field: none of the built-in columns picks from options.
+		$contact_group['fields'] = array_map(
+			static fn( array $field ): array => $field + [ 'options' => [] ],
+			$contact_group['fields']
+		);
 		$groups[] = $contact_group;
 
 		// Group 2..N: custom fields grouped by their bwfan_field_groups row.
@@ -270,7 +275,7 @@ class ES_FunnelKit {
 		}
 
 		$rows = $wpdb->get_results(
-			"SELECT cf.ID AS field_id, cf.name AS field_name, cf.slug AS field_slug, cf.type AS field_type, cf.gid AS group_id, fg.name AS group_name
+			"SELECT cf.ID AS field_id, cf.name AS field_name, cf.slug AS field_slug, cf.type AS field_type, cf.meta AS field_meta, cf.gid AS group_id, fg.name AS group_name
 			FROM $fields_tbl AS cf
 			LEFT JOIN $groups_tbl AS fg ON cf.gid = fg.ID
 			ORDER BY COALESCE(fg.name, 'zzz'), cf.name ASC"
@@ -283,9 +288,15 @@ class ES_FunnelKit {
 		foreach ( $rows as $r ) {
 			$group_label = $r->group_name ? (string) $r->group_name : __( 'Other custom fields', 'emblem-studio' );
 			$by_group[ $group_label ][] = [
-				'key'   => 'slug:' . (string) $r->field_slug,
-				'label' => (string) $r->field_name,
-				'kind'  => self::field_type_to_kind( (int) $r->field_type ),
+				'key'     => 'slug:' . (string) $r->field_slug,
+				'label'   => (string) $r->field_name,
+				'kind'    => self::field_type_to_kind( (int) $r->field_type ),
+				// A choice field (select, radio, checkbox) only stores answers
+				// that match one of these labels, case-insensitive, and drops the
+				// rest without a word. Both mappers (this plugin's, and the SaaS's
+				// via the connector's funnelkit/meta) use it to warn about that.
+				// Empty for a field that does not pick from options.
+				'options' => ES_Field_Matcher::funnelkit_options( (int) $r->field_type, (string) ( $r->field_meta ?? '' ) ),
 			];
 		}
 		foreach ( $by_group as $label => $fields ) {

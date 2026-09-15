@@ -970,6 +970,43 @@
 		return String(value).split(BACKSLASH).join(BACKSLASH + BACKSLASH).split('"').join(BACKSLASH + '"');
 	}
 
+	// A field with several answers must reach the server as a list.
+	//
+	// The server keeps only the LAST value for a repeated plain name, so three
+	// ticked boxes that all share name="colors" arrived as one answer. A name
+	// ending in [] arrives as a list. So before posting, any name that really
+	// carries several answers is re-sent as name[]:
+	//   - two or more CHECKED checkboxes share a name that does not end in [], or
+	//   - a select[multiple] has two or more selected options and no [].
+	// Names already ending in [] are left alone. The plain key is deleted and
+	// every value FormData held for it is appended under name[] instead.
+	//
+	// TWIN of the same helper in the SaaS public/embed/embed.js. Keep them
+	// identical, so a form behaves the same whichever one takes the submission.
+	function sendMultiValueNamesAsLists(form, data) {
+		const counts = {};
+		form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (el) {
+			const name = el.getAttribute('name');
+			if (!name || name.slice(-2) === '[]') return;
+			counts[name] = (counts[name] || 0) + 1;
+		});
+		const names = Object.keys(counts).filter(function (name) { return counts[name] >= 2; });
+
+		form.querySelectorAll('select[multiple]').forEach(function (el) {
+			const name = el.getAttribute('name');
+			if (!name || name.slice(-2) === '[]' || names.indexOf(name) !== -1) return;
+			let selected = 0;
+			for (let i = 0; i < el.options.length; i++) if (el.options[i].selected) selected++;
+			if (selected >= 2) names.push(name);
+		});
+
+		names.forEach(function (name) {
+			const values = data.getAll(name);
+			data.delete(name);
+			values.forEach(function (value) { data.append(name + '[]', value); });
+		});
+	}
+
 	function setSubmittingState(form, isSubmitting) {
 		const btn = form.querySelector('button[type="submit"], input[type="submit"]');
 		if (btn) btn.disabled = isSubmitting;
@@ -1039,6 +1076,7 @@
 		setSubmittingState(form, true);
 
 		const data = new FormData(form);
+		sendMultiValueNamesAsLists(form, data);
 		data.append('action', 'es_submit');
 		data.append('form_id', formId);
 

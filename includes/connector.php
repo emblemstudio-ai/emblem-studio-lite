@@ -2669,11 +2669,24 @@ final class Emblem_Studio_SaaS_Connector
             if ($key === '') {
                 continue;
             }
-            $clean[$key] = is_array($value)
-                ? array_values(array_map('sanitize_text_field', $value))
-                : sanitize_text_field((string) $value);
+            $clean[$key] = self::sanitize_field_value($value);
         }
         return $clean;
+    }
+
+    /**
+     * One answer the SaaS forwards for FunnelKit. A ticked checkbox group is a
+     * LIST and must stay one all the way to ES_FunnelKit_Upsert, which turns it
+     * into what FunnelKit stores (SER-1370). Same rule and caps as a submission
+     * taken on this site: each item sanitize_text_field'd, 100 items, 5000
+     * characters each.
+     *
+     * @param mixed $value
+     * @return string|array<int, string>
+     */
+    private static function sanitize_field_value($value)
+    {
+        return ES_Ajax::sanitize_field_value($value);
     }
 
     private static function normalize_direct_lead(array $p): array
@@ -2681,7 +2694,7 @@ final class Emblem_Studio_SaaS_Connector
         $custom = [];
         foreach ((array) ($p['custom'] ?? $p['custom_fields'] ?? []) as $key => $value) {
             if (is_numeric($key) && $value !== '' && $value !== null) {
-                $custom[(int) $key] = is_array($value) ? $value : sanitize_text_field((string) $value);
+                $custom[(int) $key] = self::sanitize_field_value($value);
             }
         }
 
@@ -2719,7 +2732,7 @@ final class Emblem_Studio_SaaS_Connector
         $custom = [];
         foreach ($p as $k => $v) {
             if (is_numeric($k)) {
-                $custom[(int) $k] = is_array($v) ? $v : sanitize_text_field((string) $v);
+                $custom[(int) $k] = self::sanitize_field_value($v);
             }
         }
 
