@@ -194,7 +194,38 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 9. checkbox_group_no_brackets (per name, warning)
+		// 9 to 13, and 21. Live values (SER-1352, the SaaS repo's docs/LIVE-VALUES.md).
+		// Each rule is one item however many markers break it.
+		$live     = self::live_problems( $xpath );
+		$live_msg = [
+			'live_unknown_field'  => [
+				__( 'A live value names a field that does not exist, so it always shows its fallback words.', 'emblem-studio' ),
+				__( 'Use one of price.today, price.regular, price.sale, sale.ends, coupon.discount, coupon.percent_off, coupon.price_after, coupon.expires or coupon.uses_left.', 'emblem-studio' ),
+			],
+			'live_no_product'     => [
+				__( 'A live value has no data-es-product, so the shop is never asked for it.', 'emblem-studio' ),
+				__( 'Add data-es-product with the WooCommerce product id.', 'emblem-studio' ),
+			],
+			'live_no_coupon'      => [
+				__( 'A coupon live value has no data-es-coupon, so the shop is never asked for it.', 'emblem-studio' ),
+				__( 'Add data-es-coupon with the coupon code.', 'emblem-studio' ),
+			],
+			'live_empty_fallback' => [
+				__( 'A live value has no fallback words, so it shows nothing whenever its number is not safe to show.', 'emblem-studio' ),
+				__( 'Write words inside it that read well without the number, like "a discount".', 'emblem-studio' ),
+			],
+			'live_nested'         => [
+				__( 'A live value sits inside another live value, so it is replaced before it can show.', 'emblem-studio' ),
+				__( 'Move it out of the other live value.', 'emblem-studio' ),
+			],
+		];
+		foreach ( $live_msg as $id => $text ) {
+			if ( isset( $live[ $id ] ) ) {
+				$items[] = self::item( $id, 'error', $text[0], $text[1] );
+			}
+		}
+
+		// 14. checkbox_group_no_brackets (per name, warning)
 		$checkbox_counts = [];
 		foreach ( $xpath->query( '//input' ) ?: [] as $input ) {
 			if ( ! $input instanceof DOMElement || self::input_type( $input ) !== 'checkbox' ) {
@@ -226,7 +257,7 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 10. unmarked_consent (per name) — the consent log's own check, so the
+		// 15. unmarked_consent (per name) — the consent log's own check, so the
 		// two can never disagree about which boxes go unrecorded.
 		foreach ( ES_Consent_Log::unmarked_required_checkboxes( $html ) as $name ) {
 			$items[] = self::item(
@@ -241,7 +272,7 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 11. consent_without_label (per name)
+		// 16. consent_without_label (per name)
 		$unlabelled = [];
 		foreach ( $xpath->query( '//input' ) ?: [] as $input ) {
 			if ( ! $input instanceof DOMElement || ! $input->hasAttribute( 'data-esf-consent' ) ) {
@@ -270,7 +301,7 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 12. no_width
+		// 17. no_width
 		if ( self::max_width_without_width( $css ) ) {
 			$items[] = self::item(
 				'no_width',
@@ -280,7 +311,7 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 13. tracked_submit (one item)
+		// 18. tracked_submit (one item)
 		foreach ( $submits as $submit ) {
 			if ( $submit->hasAttribute( 'data-es-track' ) ) {
 				$items[] = self::item(
@@ -293,7 +324,7 @@ class ES_Asset_Checks {
 			}
 		}
 
-		// 14. no_hidden_rule
+		// 19. no_hidden_rule
 		$thankyou = $xpath->query( '//*[@data-esf-thankyou]' );
 		if ( $thankyou && $thankyou->length > 0 && ! preg_match( '/\[hidden\][^{]*\{[^}]*display\s*:\s*none/i', $css ) ) {
 			$items[] = self::item(
@@ -304,7 +335,7 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 15. stripped_code (one item)
+		// 20. stripped_code (one item)
 		if ( self::has_stripped_code( $xpath ) ) {
 			$items[] = self::item(
 				'stripped_code',
@@ -314,7 +345,58 @@ class ES_Asset_Checks {
 			);
 		}
 
+		// 21. live_number_in_fallback
+		if ( isset( $live['live_number_in_fallback'] ) ) {
+			$items[] = self::item(
+				'live_number_in_fallback',
+				'warning',
+				__( 'A live value\'s fallback words contain a number. They show exactly when the number is not safe, so they can state an old one.', 'emblem-studio' ),
+				__( 'Write words without a number, like "a discount" or "less".', 'emblem-studio' )
+			);
+		}
+
 		return $items;
+	}
+
+	/**
+	 * Which live-value rules at least one marker breaks. Every condition is judged
+	 * on its own, so a marker with no product AND no fallback reports both.
+	 *
+	 * @return array<string, true>
+	 */
+	private static function live_problems( DOMXPath $xpath ): array {
+		$found = [];
+		foreach ( $xpath->query( '//*[@data-es-live]' ) ?: [] as $el ) {
+			if ( ! $el instanceof DOMElement ) {
+				continue;
+			}
+			$field    = strtolower( trim( $el->getAttribute( 'data-es-live' ) ) );
+			$product  = trim( $el->getAttribute( 'data-es-product' ) );
+			$fallback = trim( (string) preg_replace( '/\s+/u', ' ', $el->textContent ) );
+
+			if ( ! isset( ES_Live_Values::FIELDS[ $field ] ) ) {
+				$found['live_unknown_field'] = true;
+			}
+			if ( ! preg_match( '/^\d+$/', $product ) || (int) $product < 1 ) {
+				$found['live_no_product'] = true;
+			}
+			if ( strpos( $field, 'coupon.' ) === 0 && trim( $el->getAttribute( 'data-es-coupon' ) ) === '' ) {
+				$found['live_no_coupon'] = true;
+			}
+			if ( $fallback === '' ) {
+				$found['live_empty_fallback'] = true;
+			} elseif ( preg_match( '/\d/', $fallback ) ) {
+				$found['live_number_in_fallback'] = true;
+			}
+			for ( $p = $el->parentNode; $p instanceof DOMElement; $p = $p->parentNode ) {
+				if ( $p->hasAttribute( 'data-es-live' ) ) {
+					$found['live_nested'] = true;
+					break;
+				}
+			}
+		}
+
+		return $found;
 	}
 
 	/**

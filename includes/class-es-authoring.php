@@ -120,6 +120,10 @@ NOTES
   put it on the submit button: submitting already counts as a conversion,
   so tagging it too counts the same action twice.
 - Animations and hover effects are welcome.
+- A price or discount from a connected WordPress shop can be live:
+  <span data-es-live="coupon.discount" data-es-product="ID"
+  data-es-coupon="CODE">a discount</span>. The words inside show whenever
+  the number isn't safe to show, so write them without digits.
 - The shell adds the popup backdrop, positioning and close button. Don't
   build your own overlay, modal wrapper, close button or full-bleed
   background. Put the background, padding, border-radius and box-shadow on

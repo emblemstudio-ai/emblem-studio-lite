@@ -214,6 +214,8 @@ class ES_Preview {
 			[
 				'css'  => $preview_css,
 				'html' => (string) $form->html,
+				// Live values (SER-1352), so the preview shows what live does.
+				'live' => class_exists( 'ES_Live_Values' ) ? ES_Live_Values::resolve_html( (string) $form->html ) : null,
 			],
 			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES
 		);
@@ -439,7 +441,11 @@ class ES_Preview {
 			? ES_Design_System::compose( $form, (string) $form->css )
 			: (string) $form->css;
 		$payload = wp_json_encode(
-			[ 'css' => $inspector_render_css, 'html' => (string) $form->html ],
+			[
+				'css'  => $inspector_render_css,
+				'html' => (string) $form->html,
+				'live' => class_exists( 'ES_Live_Values' ) ? ES_Live_Values::resolve_html( (string) $form->html ) : null,
+			],
 			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES
 		);
 		$ajax_url      = admin_url( 'admin-ajax.php' );

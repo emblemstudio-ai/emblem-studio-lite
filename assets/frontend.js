@@ -360,6 +360,7 @@
 			const tpl = document.createElement('template');
 			tpl.innerHTML = payload.html || '';
 			shadow.appendChild(tpl.content);
+			esLiveMounted(shadow, payload.live);
 
 			return shadow;
 		}
@@ -379,8 +380,149 @@
 		const tpl = document.createElement('template');
 		tpl.innerHTML = payload.html || '';
 		host.appendChild(tpl.content);
+		esLiveMounted(host, payload.live);
 		return host;
 	}
+
+	/*
+	 * LIVE VALUES (SER-1352). The contract is the SaaS repo's docs/LIVE-VALUES.md.
+	 *
+	 * TWIN of esFillLive in the SaaS public/embed/embed.js and fillLiveValues in its
+	 * resources/js/lib/liveValues.ts. The three must agree on the key, the name and
+	 * the group rules.
+	 *
+	 * The server has already decided what is safe: payload.live holds ONLY the text
+	 * of fields that are fresh, in stock, above zero and not refused. This never
+	 * judges a value. It swaps text in, leaves the author's words where there is
+	 * none, and shows or hides the lines that depend on it.
+	 *
+	 * ONE THING THE SAAS COPY DOES NOT NEED: this page may have come out of a page
+	 * cache, so the text baked into it can be hours old. Once a page mounts a live
+	 * value, one admin-ajax request asks for the current text of every marker on
+	 * it, and every mounted asset is filled again with the answer.
+	 */
+	const esLiveRoots = [];
+	const esLiveAnswers = {};
+	let esLiveTimer = null;
+
+	function esLiveKey(el) {
+		const field = (el.getAttribute('data-es-live') || '').trim().toLowerCase();
+		const raw = (el.getAttribute('data-es-product') || '').trim();
+		if (!/^\d+$/.test(raw) || parseInt(raw, 10) < 1) return null;
+		const pid = String(parseInt(raw, 10));
+		if (field.indexOf('coupon.') !== 0) return 'p:' + pid;
+		const code = (el.getAttribute('data-es-coupon') || '').trim().toLowerCase();
+		return code ? 'c:' + pid + ':' + code : null;
+	}
+
+	function esLiveName(el) {
+		const field = (el.getAttribute('data-es-live') || '').trim().toLowerCase();
+		const fmt = (el.getAttribute('data-es-format') || '').trim().toLowerCase();
+		return fmt ? field + '@' + fmt : field;
+	}
+
+	function esFillLive(root, live) {
+		if (!root || !root.querySelectorAll) return;
+		const markers = root.querySelectorAll('[data-es-live]');
+		if (!markers.length) return;
+		const map = live || {};
+
+		markers.forEach(function (el) {
+			if (el.__esFallback === undefined) el.__esFallback = el.innerHTML;
+			const key = esLiveKey(el);
+			const name = esLiveName(el);
+			const values = key && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null;
+			const text = values && Object.prototype.hasOwnProperty.call(values, name) ? values[name] : null;
+			const nested = el.parentElement && el.parentElement.closest('[data-es-live]');
+
+			if (typeof text === 'string' && text !== '' && !nested) {
+				el.textContent = text;
+				el.setAttribute('data-es-live-state', 'ok');
+			} else {
+				if (el.getAttribute('data-es-live-state') === 'ok') el.innerHTML = el.__esFallback;
+				el.setAttribute('data-es-live-state', 'fallback');
+			}
+		});
+
+		root.querySelectorAll('[data-es-live-show]').forEach(function (el) {
+			const scope = el.closest('[data-es-live-group]') || root;
+			const inScope = scope.querySelectorAll('[data-es-live]');
+			let ok = inScope.length > 0;
+			inScope.forEach(function (m) { if (m.getAttribute('data-es-live-state') !== 'ok') ok = false; });
+			const want = (el.getAttribute('data-es-live-show') || '').trim().toLowerCase();
+			const show = want === 'fallback' ? !ok : ok;
+			if (show) {
+				if (el.getAttribute('data-es-live-hidden') === '1') {
+					el.removeAttribute('hidden');
+					el.style.removeProperty('display');
+					el.removeAttribute('data-es-live-hidden');
+				}
+			} else {
+				el.setAttribute('hidden', '');
+				el.style.setProperty('display', 'none', 'important');
+				el.setAttribute('data-es-live-hidden', '1');
+			}
+		});
+	}
+
+	/** The map to fill one asset from: fresh answers where there are some, the page's own text otherwise. */
+	function esLiveMapFor(root) {
+		const map = {};
+		const inline = root.__esLiveInline || {};
+		root.querySelectorAll('[data-es-live]').forEach(function (el) {
+			const key = esLiveKey(el);
+			if (!key) return;
+			const name = esLiveName(el);
+			const id = key + '|' + name;
+			const text = Object.prototype.hasOwnProperty.call(esLiveAnswers, id)
+				? esLiveAnswers[id]
+				: (inline[key] && inline[key][name]);
+			if (typeof text === 'string' && text !== '') {
+				if (!map[key]) map[key] = {};
+				map[key][name] = text;
+			}
+		});
+		return map;
+	}
+
+	function esLiveMounted(root, inline) {
+		if (!root || !root.querySelector || !root.querySelector('[data-es-live]')) return;
+		root.__esLiveInline = inline || {};
+		esLiveRoots.push(root);
+		esFillLive(root, esLiveMapFor(root));
+		if (!esLiveTimer) esLiveTimer = setTimeout(esLiveAsk, 30);
+	}
+
+	function esLiveAsk() {
+		esLiveTimer = null;
+		const pairs = [];
+		const seen = {};
+		esLiveRoots.forEach(function (root) {
+			root.querySelectorAll('[data-es-live]').forEach(function (el) {
+				const key = esLiveKey(el);
+				if (!key) return;
+				const name = esLiveName(el);
+				const id = key + '|' + name;
+				if (seen[id] || Object.prototype.hasOwnProperty.call(esLiveAnswers, id)) return;
+				seen[id] = true;
+				pairs.push([key, name]);
+			});
+		});
+		if (!pairs.length) return;
+
+		fetch(ajax + (ajax.indexOf('?') === -1 ? '?' : '&') + 'action=es_live_values&m=' + encodeURIComponent(JSON.stringify(pairs)), { credentials: 'same-origin' })
+			.then(function (r) { return r.ok ? r.json() : null; })
+			.then(function (res) {
+				if (!res || !res.ok) return;
+				const live = res.live || {};
+				pairs.forEach(function (p) {
+					esLiveAnswers[p[0] + '|' + p[1]] = (live[p[0]] && live[p[0]][p[1]]) || '';
+				});
+				esLiveRoots.forEach(function (root) { esFillLive(root, esLiveMapFor(root)); });
+			})
+			.catch(function () { /* the page's own text stays */ });
+	}
+
 
 	function fireEvent(host, action) {
 		// In preview mode (form-edit's Preview button), don't fire any events —

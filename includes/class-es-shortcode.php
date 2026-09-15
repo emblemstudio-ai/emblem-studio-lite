@@ -229,11 +229,20 @@ class ES_Shortcode {
 		if ( class_exists( 'ES_Design_System' ) ) {
 			$css = ES_Design_System::compose( $form, $css );
 		}
+		$payload = [
+			'css'  => $css,
+			'html' => $html,
+		];
+		// Live values (SER-1352): the text of every price or discount this HTML shows
+		// that is safe to show now, from the chosen variant's own HTML. Absent for an
+		// asset with no markers. frontend.js also asks for fresher text once the page
+		// loads, because this page may be served from a cache.
+		$live = class_exists( 'ES_Live_Values' ) ? ES_Live_Values::resolve_html( $html ) : null;
+		if ( $live !== null ) {
+			$payload['live'] = (object) $live;
+		}
 		return (string) wp_json_encode(
-			[
-				'css'  => $css,
-				'html' => $html,
-			],
+			$payload,
 			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES
 		);
 	}

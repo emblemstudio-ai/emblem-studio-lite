@@ -772,6 +772,11 @@ class ES_Commerce {
 			'symbol'       => function_exists( 'get_woocommerce_currency_symbol' ) ? html_entity_decode( (string) get_woocommerce_currency_symbol() ) : '',
 			'includes_tax' => function_exists( 'wc_prices_include_tax' ) ? (bool) wc_prices_include_tax() : false,
 			'decimals'     => function_exists( 'wc_get_price_decimals' ) ? (int) wc_get_price_decimals() : 2,
+			// How the shop writes an amount, so a live value in an asset reads the way
+			// the shop's own price does (SER-1352): $73.50, 73,50 € and so on.
+			'position'           => function_exists( 'get_option' ) ? (string) get_option( 'woocommerce_currency_pos', 'left' ) : 'left',
+			'decimal_separator'  => function_exists( 'wc_get_price_decimal_separator' ) ? (string) wc_get_price_decimal_separator() : '.',
+			'thousand_separator' => function_exists( 'wc_get_price_thousand_separator' ) ? (string) wc_get_price_thousand_separator() : ',',
 		];
 	}
 

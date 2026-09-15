@@ -23,6 +23,7 @@ class ES_Plugin {
 			new ES_Auto_Shells( $shortcode );
 		}
 		new ES_Ajax();
+		ES_Live_Values::init();
 		new ES_Privacy();
 		new ES_Preview();
 		new ES_REST();

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.3.24-beta
+ * Version: 1.3.25-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.24-beta';
+    const VERSION = '1.3.25-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -107,6 +107,95 @@ final class Emblem_Studio_SaaS_Connector
         // manual offset, and WordPress clears one when you set the other.
         add_action('update_option_timezone_string', [__CLASS__, 'push_timezone']);
         add_action('update_option_gmt_offset', [__CLASS__, 'push_timezone']);
+        // Live values (SER-1351): ES_Live_Values measures, the connector supplies
+        // the SaaS's watch list and sends what changed.
+        add_filter('es_live_values_watch_list', [__CLASS__, 'live_values_watch_list']);
+        add_action('es_live_values_measured', [__CLASS__, 'push_live_values'], 10, 2);
+    }
+
+    /* ── Live values (SER-1351) ─────────────────────────────────────────── */
+
+    /**
+     * Which prices and coupons this site's assets show, from Emblem Studio.
+     *
+     * Connected, the assets live in the SaaS, variants and queued changes
+     * included, so the SaaS is the one that knows. The SaaS parses the HTML;
+     * WordPress never has to. When the SaaS cannot be reached this passes the
+     * value through untouched, and ES_Live_Values falls back to the local copy
+     * of the assets, which pull_assets() keeps.
+     *
+     * @param mixed $current
+     * @return mixed
+     */
+    public static function live_values_watch_list($current)
+    {
+        $cfg = self::config();
+        if (! $cfg) {
+            return $current;
+        }
+        $data = self::pull_post($cfg, '/v1/embed/live-values/watch');
+        if (! is_array($data) || empty($data['ok']) || ! isset($data['keys']) || ! is_array($data['keys'])) {
+            return $current;
+        }
+
+        $keys = [];
+        foreach ($data['keys'] as $row) {
+            if (! is_array($row) || empty($row['key']) || empty($row['product_id'])) {
+                continue;
+            }
+            $keys[(string) $row['key']] = [
+                'key'        => (string) $row['key'],
+                'product_id' => (int) $row['product_id'],
+                'coupon'     => isset($row['coupon']) && $row['coupon'] !== '' ? (string) $row['coupon'] : null,
+            ];
+        }
+
+        return $keys;
+    }
+
+    /**
+     * Send the readings that changed, and the keys that were measured again and
+     * found the same. The SaaS answers with any unchanged key it does not hold
+     * (a fresh install, a lost row), and those are sent again in full at once
+     * rather than waiting for them to change.
+     *
+     * @param array<int, array<string, mixed>> $changed
+     * @param array<int, string>               $unchanged
+     */
+    public static function push_live_values($changed, $unchanged): void
+    {
+        $cfg = self::config();
+        $changed = is_array($changed) ? array_values($changed) : [];
+        $unchanged = is_array($unchanged) ? array_values($unchanged) : [];
+        if (! $cfg || ($changed === [] && $unchanged === [])) {
+            return;
+        }
+
+        foreach (array_chunk($changed, 100) ?: [[]] as $i => $chunk) {
+            $data = self::pull_post($cfg, '/v1/embed/live-values', [
+                'values'    => $chunk,
+                'unchanged' => $i === 0 ? $unchanged : [],
+            ]);
+            if ($i !== 0 || ! is_array($data) || empty($data['missing']) || ! is_array($data['missing'])) {
+                continue;
+            }
+
+            $stored = class_exists('ES_Live_Values') ? ES_Live_Values::stored() : [];
+            $resend = [];
+            foreach ($data['missing'] as $key) {
+                if (is_string($key) && isset($stored[$key])) {
+                    $resend[] = [
+                        'key'        => $key,
+                        'product_id' => (int) $stored[$key]['product_id'],
+                        'coupon'     => $stored[$key]['coupon'],
+                        'answer'     => $stored[$key]['answer'],
+                    ];
+                }
+            }
+            if ($resend !== []) {
+                self::pull_post($cfg, '/v1/embed/live-values', ['values' => $resend, 'unchanged' => []]);
+            }
+        }
     }
 
     /* ── Connection state ──────────────────────────────────────────────── */
