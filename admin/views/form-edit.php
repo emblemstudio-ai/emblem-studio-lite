@@ -1572,12 +1572,12 @@ $check_groups = [
 					<div class="es-clicks-toggle-row">
 						<label class="es-clicks-toggle">
 							<input type="checkbox" class="es-toggle-input" name="track_purchases" value="1" <?php checked( $f->track_purchases ); ?>>
-							<?php esc_html_e( 'Measure purchases after a click on this asset', 'emblem-studio' ); ?>
+							<?php esc_html_e( 'Count sales that follow this asset', 'emblem-studio' ); ?>
 						</label>
-						<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'When somebody clicks a link in this asset and then buys, the order is credited to this asset. Nothing is stored on their device and no new personal data is collected: a short tag travels in the address bar, is written on the basket line out of sight, and lasts for that visit. Leave it off for assets that do not send people to the shop. To keep one link out of it, add data-es-buy="off" to that link.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
+						<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'Somebody clicks a link here, then buys. The sale is credited to this asset. Nothing is stored on their device: a short tag travels in the address bar and lasts for that visit. Leave it off for assets that do not send people to the shop. To keep one link out, add data-es-buy="off" to it.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
 					</div>
 					<?php if ( ! empty( $f->track_purchases ) && ( ! class_exists( 'ES_Purchases' ) || ! ES_Purchases::enabled() ) ) : ?>
-						<p><em><?php printf( esc_html__( 'This asset asks for purchase measuring, but the site switch is off, so nothing is being measured. Turn it on in %s.', 'emblem-studio' ), '<a href="' . esc_url( admin_url( 'admin.php?page=emblem-studio-settings' ) ) . '">' . esc_html__( 'Settings', 'emblem-studio' ) . '</a>' ); ?></em></p>
+						<p><em><?php printf( esc_html__( 'This asset is asking to count sales, but the site switch is off, so nothing is counted. Turn it on in %s.', 'emblem-studio' ), '<a href="' . esc_url( admin_url( 'admin.php?page=emblem-studio-settings' ) ) . '">' . esc_html__( 'Settings', 'emblem-studio' ) . '</a>' ); ?></em></p>
 					<?php endif; ?>
 				<?php endif; ?>
 				<?php if ( empty( $f->track_clicks ) ) : ?>
