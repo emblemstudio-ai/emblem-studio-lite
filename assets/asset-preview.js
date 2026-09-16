@@ -22,6 +22,12 @@
 	// display-only; the live frontend keeps its own (interactive) reset.
 	var BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;pointer-events:none!important;}';
 
+	// A card narrower than the space it is given sits in the MIDDLE of that space.
+	// Zero specificity, so any author margin rule wins without !important. TWIN of
+	// CENTER_CSS in frontend.js and the SaaS prepareCss.ts: what this preview shows
+	// and what a visitor gets have to be the same picture.
+	var CENTER_CSS = ':where(.esf-form){margin-inline:auto;}';
+
 	var cache       = {}; // id -> Promise<{html, css}>
 	var fontsLoaded = {};
 	var current     = null; // active popover element
@@ -112,7 +118,7 @@
 			loadFontImport( m[1] );
 			css = css.slice( m.index + m[0].length );
 		}
-		return ( withBoot ? BOOT_CSS : '' ) + css;
+		return ( withBoot ? BOOT_CSS : '' ) + CENTER_CSS + css;
 	}
 
 	function fetchPayload( id ) {

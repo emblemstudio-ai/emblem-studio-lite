@@ -45,6 +45,12 @@
 	// live CSS swap we lift @charset/@import out into non-blocking <link>s and
 	// keep only the reset + the asset's own rules in the (shadow) style.
 	var BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;}';
+
+	// A card narrower than the space it is given sits in the MIDDLE of that space.
+	// Zero specificity, so any author margin rule wins without !important. TWIN of
+	// CENTER_CSS in frontend.js and the SaaS prepareCss.ts: what this preview shows
+	// and what a visitor gets have to be the same picture.
+	var CENTER_CSS = ':where(.esf-form){margin-inline:auto;}';
 	var _esFontsLoaded = {};
 	// A shadow-root <style> that declares @font-face registers that font for
 	// the WHOLE document per spec, not just its own tree — so an unscoped name
@@ -140,7 +146,7 @@
 			link.onload = function () { this.media = 'all'; };
 			(document.head || document.documentElement).appendChild(link);
 		}
-		return (withBoot ? BOOT_CSS : '') + css;
+		return (withBoot ? BOOT_CSS : '') + CENTER_CSS + css;
 	}
 
 	var lastHoverUid = null; // dedupe HOVERED posts to element changes only

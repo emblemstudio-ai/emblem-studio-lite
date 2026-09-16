@@ -98,6 +98,28 @@
 	const FIELD_CSS = ':where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 
+	// A card narrower than the space it is given sits in the MIDDLE of that space.
+	//
+	// The host is always the full width it was handed: a page's content column for
+	// an inline asset, the modal for a popup, the screen for a ribbon. An asset
+	// sets its own width (the authoring spec tells every asset to), so it is
+	// narrower than its host nearly always, and a block element with a set width
+	// and no margin sits hard against the left edge. Every place that draws an
+	// asset used to do exactly that, which is not what anyone designing a 480px
+	// card means by it.
+	//
+	// ':where()' holds specificity at zero, so ANY author rule that sets a margin
+	// wins without '!important'. '.esf-form{margin:0}' pins it left again, which
+	// is how an author asks for left on purpose.
+	//
+	// The inline axis only. Vertical placement is a shell's business, not ours.
+	// The non-shadow copy is scoped to the host, since that CSS lands in the
+	// customer's own document and must not reach a '.esf-form' we did not render.
+	//
+	// TWIN of CENTER_CSS in the SaaS embed.js. Keep the two identical.
+	const CENTER_CSS = ':where(.esf-form){margin-inline:auto;}';
+	const CENTER_CSS_SCOPED = ':where(.esf-host) :where(.esf-form){margin-inline:auto;}';
+
 	// How long the submit button stays visibly busy before the thank-you takes
 	// over. This is NOT a network wait — the request is already in flight — it is
 	// a deliberate beat, because a state change on the same frame as the click
@@ -230,7 +252,7 @@
 			css = css.slice(m.index + m[0].length);
 		}
 		// Both defaults go BEFORE the asset's own CSS, so the author always wins.
-		return (withBoot ? BOOT_CSS + FIELD_CSS : FIELD_CSS_SCOPED) + busyCss(!withBoot) + css;
+		return (withBoot ? BOOT_CSS + FIELD_CSS + CENTER_CSS : FIELD_CSS_SCOPED + CENTER_CSS_SCOPED) + busyCss(!withBoot) + css;
 	}
 
 	// ============================================================

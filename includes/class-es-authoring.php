@@ -112,6 +112,9 @@ CSS
   replace it.
 - Design ~480px wide, and set it on the root: width: 480px; max-width: 100%.
   With max-width alone, a popup shrinks a short form to 320px.
+- A card narrower than its space is centred for you: margin-inline: auto on
+  .esf-form, at zero specificity. Set your own margin to override it;
+  .esf-form { margin: 0 } pins the card left.
 - Add a @media (max-width: 480px) block.
 
 NOTES
