@@ -160,10 +160,11 @@ class ES_Shortcode {
 		$payload = $this->build_payload( $form );
 		$shadow  = ! empty( $form->use_shadow_dom ) ? '1' : '0';
 		$track   = ! empty( $form->track_clicks ) ? '1' : '0';
+		$buy     = $this->buy_attr( $form );
 
 		$variant = $this->variant_attr( $id );
 
-		return '<div class="esf-host" data-esf-id="' . $id . '" data-esf-type="inline" data-esf-success-mode="' . esc_attr( $form->success_mode ) . '" data-esf-shadow="' . $shadow . '" data-esf-track-clicks="' . $track . '"' . $variant . $conn['attrs'] . '>'
+		return '<div class="esf-host" data-esf-id="' . $id . '" data-esf-type="inline" data-esf-success-mode="' . esc_attr( $form->success_mode ) . '" data-esf-shadow="' . $shadow . '" data-esf-track-clicks="' . $track . '"' . $buy . $variant . $conn['attrs'] . '>'
 			. '<script type="application/json" class="esf-data">' . $payload . '</script>'
 			. '</div>';
 	}
@@ -189,6 +190,7 @@ class ES_Shortcode {
 		$fullscreen = ! empty( $form->popup_fullscreen ) ? '1' : '0';
 		$close_theme = ( ( $form->popup_close_theme ?? 'light' ) === 'dark' ) ? 'dark' : 'light';
 		$track      = ! empty( $form->track_clicks ) ? '1' : '0';
+		$buy        = $this->buy_attr( $form );
 
 		// Preserve any allowed HTML inside the wrapped content (links, spans, imgs).
 		$trigger_inner = wp_kses_post( $content );
@@ -200,7 +202,7 @@ class ES_Shortcode {
 		$out .= '</a>';
 
 		$out .= '<template class="esf-popup-data" data-esf-popup-id="' . $id . '">';
-		$out .= '<div class="esf-host esf-popup-host" data-esf-id="' . $id . '" data-esf-type="popup-click" data-esf-success-mode="' . esc_attr( $form->success_mode ) . '" data-esf-shadow="' . $shadow . '" data-esf-max-width="' . $max_width . '" data-esf-fullscreen="' . $fullscreen . '" data-esf-close-theme="' . $close_theme . '" data-esf-track-clicks="' . $track . '"' . $variant . $conn['attrs'] . '>';
+		$out .= '<div class="esf-host esf-popup-host" data-esf-id="' . $id . '" data-esf-type="popup-click" data-esf-success-mode="' . esc_attr( $form->success_mode ) . '" data-esf-shadow="' . $shadow . '" data-esf-max-width="' . $max_width . '" data-esf-fullscreen="' . $fullscreen . '" data-esf-close-theme="' . $close_theme . '" data-esf-track-clicks="' . $track . '"' . $buy . $variant . $conn['attrs'] . '>';
 		$out .= '<script type="application/json" class="esf-data">' . $payload . '</script>';
 		$out .= '</div>';
 		$out .= '</template>';
@@ -259,6 +261,20 @@ class ES_Shortcode {
 		return $slot === '' ? '' : ' data-esf-variant="' . esc_attr( $slot ) . '"';
 	}
 
+	/**
+	 * Does this asset ask for purchases after a click to be measured? (SER-1348)
+	 *
+	 * This attribute is the only thing that turns it on. Every other asset on the
+	 * page is left alone, and a site that has not switched the feature on sends the
+	 * attribute for nobody.
+	 */
+	public function buy_attr( object $form ): string {
+		$on = ! empty( $form->track_purchases )
+			&& class_exists( 'ES_Purchases' )
+			&& ES_Purchases::enabled();
+
+		return $on ? ' data-esf-track-purchases="1"' : '';
+	}
 	/**
 	 * Already-subscribed suppression decision for a form. Delegates to
 	 * ES_Connections when present (Full); in the Lite build that module is

@@ -258,6 +258,13 @@ class ES_Form_Repo {
 			$row['track_clicks'] = ! empty( $data['track_clicks'] ) ? 1 : 0;
 		}
 
+		// Purchases after a click (SER-1348). OFF by default, and off for every
+		// asset that existed before the feature: a shop's takings are not a thing
+		// to start measuring on somebody's behalf without them asking.
+		if ( array_key_exists( 'track_purchases', $data ) ) {
+			$row['track_purchases'] = ! empty( $data['track_purchases'] ) ? 1 : 0;
+		}
+
 		// FunnelKit destination toggle — when OFF, ES_Ajax::submit skips
 		// the FK push for this form entirely.
 		if ( array_key_exists( 'funnelkit_enabled', $data ) ) {
@@ -585,6 +592,7 @@ class ES_Form_Repo {
 			'popup_fullscreen'     => ! empty( $form->popup_fullscreen ) ? 1 : 0,
 			'popup_close_theme'    => in_array( $form->popup_close_theme ?? 'light', [ 'light', 'dark' ], true ) ? $form->popup_close_theme : 'light',
 			'track_clicks'         => ! empty( $form->track_clicks ) ? 1 : 0,
+			'track_purchases'      => ! empty( $form->track_purchases ) ? 1 : 0,
 			'funnelkit_enabled'    => ! empty( $form->funnelkit_enabled ) ? 1 : 0,
 			'webhooks'             => class_exists( 'ES_Webhooks' ) ? ES_Webhooks::for_form( $form ) : [],
 			// Connections reference form IDs, so they round-trip on the same
@@ -650,6 +658,7 @@ class ES_Form_Repo {
 			'popup_fullscreen'     => ! empty( $data['popup_fullscreen'] ) ? 1 : 0,
 			'popup_close_theme'    => in_array( $popup_close_theme, [ 'light', 'dark' ], true ) ? $popup_close_theme : 'dark',
 			'track_clicks'         => array_key_exists( 'track_clicks', $data ) ? ( ! empty( $data['track_clicks'] ) ? 1 : 0 ) : 1,
+			'track_purchases'      => ! empty( $data['track_purchases'] ) ? 1 : 0,
 			// New forms (blank + template install) default FK off — user
 			// explicitly turns it on when they want this form's leads to
 			// push to FunnelKit. Round-tripped imports preserve whatever
@@ -729,6 +738,7 @@ class ES_Form_Repo {
 		$data['popup_fullscreen']   = ! empty( $source->popup_fullscreen ) ? 1 : 0;
 		$data['popup_close_theme']  = in_array( $source->popup_close_theme ?? 'light', [ 'light', 'dark' ], true ) ? $source->popup_close_theme : 'light';
 		$data['track_clicks']     = ! empty( $source->track_clicks ) ? 1 : 0;
+		$data['track_purchases']  = ! empty( $source->track_purchases ) ? 1 : 0;
 		$data['funnelkit_enabled'] = ! empty( $source->funnelkit_enabled ) ? 1 : 0;
 		$data['webhooks']         = class_exists( 'ES_Webhooks' ) ? ES_Webhooks::for_form( $source ) : [];
 		$data['connections']      = class_exists( 'ES_Connections' ) ? ES_Connections::for_form( $source ) : null;

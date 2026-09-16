@@ -26,6 +26,7 @@ $f = (object) [
 	'popup_fullscreen'     => isset( $form ) ? ! empty( $form->popup_fullscreen ) : false,
 	'popup_close_theme'    => isset( $form ) ? ( in_array( $form->popup_close_theme ?? 'light', [ 'light', 'dark' ], true ) ? $form->popup_close_theme : 'light' ) : 'dark',
 	'track_clicks'         => isset( $form ) ? ! empty( $form->track_clicks ) : true,
+	'track_purchases'      => isset( $form ) ? ! empty( $form->track_purchases ) : false,
 	'funnelkit_enabled'    => isset( $form ) ? ! empty( $form->funnelkit_enabled ) : false,
 	'active_from'          => isset( $form ) ? (string) ( $form->active_from  ?? '' ) : '',
 	'active_until'         => isset( $form ) ? (string) ( $form->active_until ?? '' ) : '',
@@ -1567,6 +1568,18 @@ $check_groups = [
 					</label>
 					<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'Click tracking is for non-form assets — links and buttons that aren\'t part of a form. Those (plus the shell close button) are tracked automatically. The form itself — its submit button, fields and labels — is not tracked, because submitting and filling it in are already measured as conversions and engagement. To track a specific in-form element anyway, add a data-es-track=&quot;my-label&quot; attribute to it: that opts it in and names it in the table below. On auto-tracked elements the attribute just sets the name; without it, the visible text or element id is used.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
 				</div>
+				<?php if ( class_exists( 'ES_Commerce' ) && ES_Commerce::available() ) : ?>
+					<div class="es-clicks-toggle-row">
+						<label class="es-clicks-toggle">
+							<input type="checkbox" class="es-toggle-input" name="track_purchases" value="1" <?php checked( $f->track_purchases ); ?>>
+							<?php esc_html_e( 'Measure purchases after a click on this asset', 'emblem-studio' ); ?>
+						</label>
+						<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'When somebody clicks a link in this asset and then buys, the order is credited to this asset. Nothing is stored on their device and no new personal data is collected: a short tag travels in the address bar, is written on the basket line out of sight, and lasts for that visit. Leave it off for assets that do not send people to the shop. To keep one link out of it, add data-es-buy="off" to that link.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
+					</div>
+					<?php if ( ! empty( $f->track_purchases ) && ( ! class_exists( 'ES_Purchases' ) || ! ES_Purchases::enabled() ) ) : ?>
+						<p><em><?php printf( esc_html__( 'This asset asks for purchase measuring, but the site switch is off, so nothing is being measured. Turn it on in %s.', 'emblem-studio' ), '<a href="' . esc_url( admin_url( 'admin.php?page=emblem-studio-settings' ) ) . '">' . esc_html__( 'Settings', 'emblem-studio' ) . '</a>' ); ?></em></p>
+					<?php endif; ?>
+				<?php endif; ?>
 				<?php if ( empty( $f->track_clicks ) ) : ?>
 					<p><em><?php esc_html_e( 'Click tracking is off for this form. Turn it on above to start collecting.', 'emblem-studio' ); ?></em></p>
 				<?php elseif ( empty( $clicks ) ) : ?>

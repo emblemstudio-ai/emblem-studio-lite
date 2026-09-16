@@ -50,6 +50,7 @@ class ES_Install {
 			popup_fullscreen TINYINT(1) NOT NULL DEFAULT 0,
 			popup_close_theme VARCHAR(10) NOT NULL DEFAULT 'dark',
 			track_clicks TINYINT(1) NOT NULL DEFAULT 1,
+			track_purchases TINYINT(1) NOT NULL DEFAULT 0,
 			funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 0,
 			webhooks LONGTEXT NULL,
 			connections LONGTEXT NULL,
@@ -222,6 +223,29 @@ class ES_Install {
 			UNIQUE KEY hash (hash)
 		) $charset_collate;";
 
+		// What somebody BOUGHT after an asset brought them in (SER-1346). One row
+		// per order, written on this site, holding no more about a person than the
+		// lead row it points at already holds. `needs_push` is what a refund moves:
+		// the row is rewritten and goes up again, so a sale that came back out of
+		// the shop comes back out of the numbers too.
+		$purchases = "CREATE TABLE {$prefix}emblemstudio_purchases (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			order_id BIGINT(20) UNSIGNED NOT NULL,
+			ordered_at DATETIME NOT NULL,
+			currency VARCHAR(8) NOT NULL DEFAULT '',
+			total DECIMAL(18,2) NOT NULL DEFAULT 0,
+			refunded DECIMAL(18,2) NOT NULL DEFAULT 0,
+			is_renewal TINYINT(1) NOT NULL DEFAULT 0,
+			status VARCHAR(20) NOT NULL DEFAULT '',
+			touches LONGTEXT NULL,
+			needs_push TINYINT(1) NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY order_id (order_id),
+			KEY needs_push (needs_push)
+		) $charset_collate;";
+
 		$lead_consents = "CREATE TABLE {$prefix}emblemstudio_lead_consents (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			lead_id BIGINT(20) UNSIGNED NOT NULL,
@@ -249,6 +273,7 @@ class ES_Install {
 		dbDelta( $presets );
 		dbDelta( $consent_texts );
 		dbDelta( $lead_consents );
+		dbDelta( $purchases );
 
 		update_option( 'emblem_studio_db_version', EMBLEM_STUDIO_DB_VERSION );
 	}
@@ -1131,6 +1156,52 @@ class ES_Install {
 			self::backfill_schedule_segments();
 			update_option( 'emblem_studio_db_version', '42' );
 		}
+
+		// Purchases after an asset brought somebody in (SER-1346). The column is
+		// the per-asset switch, off for every asset that already exists: nobody
+		// gets a new kind of tracking turned on for them by an update.
+		if ( version_compare( $current, '43', '<' ) ) {
+			self::create_purchases_table();
+			global $wpdb;
+			$forms     = self::table( 'forms' );
+			$form_cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $forms" );
+			if ( ! in_array( 'track_purchases', $form_cols, true ) ) {
+				$wpdb->query( "ALTER TABLE $forms ADD COLUMN track_purchases TINYINT(1) NOT NULL DEFAULT 0 AFTER track_clicks" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			update_option( 'emblem_studio_db_version', '43' );
+		}
+	}
+
+	/**
+	 * The purchases table on its own, so both a fresh install and a site updating
+	 * in place get it. DB 40 and 41 were stamped without their tables on sites that
+	 * never re-ran activate(), and this is the shape that stopped that happening.
+	 */
+	private static function create_purchases_table(): void {
+		global $wpdb;
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		$prefix          = $wpdb->prefix;
+		$charset_collate = $wpdb->get_charset_collate();
+
+		dbDelta(
+			"CREATE TABLE {$prefix}emblemstudio_purchases (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			order_id BIGINT(20) UNSIGNED NOT NULL,
+			ordered_at DATETIME NOT NULL,
+			currency VARCHAR(8) NOT NULL DEFAULT '',
+			total DECIMAL(18,2) NOT NULL DEFAULT 0,
+			refunded DECIMAL(18,2) NOT NULL DEFAULT 0,
+			is_renewal TINYINT(1) NOT NULL DEFAULT 0,
+			status VARCHAR(20) NOT NULL DEFAULT '',
+			touches LONGTEXT NULL,
+			needs_push TINYINT(1) NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY order_id (order_id),
+			KEY needs_push (needs_push)
+		) $charset_collate"
+		);
 	}
 
 	/**

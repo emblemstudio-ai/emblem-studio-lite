@@ -111,6 +111,10 @@ final class Emblem_Studio_SaaS_Connector
         // the SaaS's watch list and sends what changed.
         add_filter('es_live_values_watch_list', [__CLASS__, 'live_values_watch_list']);
         add_action('es_live_values_measured', [__CLASS__, 'push_live_values'], 10, 2);
+        // Purchases after an asset brought somebody in (SER-1346). Sent the
+        // moment the shop records one, and again on every periodic pull, so a
+        // site that was unreachable catches up without anybody noticing.
+        add_action('es_purchases_ready', [__CLASS__, 'push_purchases']);
     }
 
     /* ── Live values (SER-1351) ─────────────────────────────────────────── */
@@ -194,6 +198,65 @@ final class Emblem_Studio_SaaS_Connector
             }
             if ($resend !== []) {
                 self::pull_post($cfg, '/v1/embed/live-values', ['values' => $resend, 'unchanged' => []]);
+            }
+        }
+    }
+
+    /* ── Purchases after an asset (SER-1346) ───────────────────────────── */
+
+    /**
+     * Send what the shop said, and nothing else.
+     *
+     * The buyer was matched to their sign-up HERE, by ES_Purchases, using the address
+     * WooCommerce already holds. What travels is the lead's id, the order's id and
+     * numbers. No email address, no name, no address of any kind.
+     *
+     * A row is only marked as sent once the SaaS has taken it, so a site that was
+     * offline sends it again later rather than losing it. A refund rewrites the row
+     * and marks it unsent, which is how money coming back out reaches the numbers.
+     */
+    public static function push_purchases(): void
+    {
+        $cfg = self::config();
+        if (! $cfg || ! class_exists('ES_Purchases')) {
+            return;
+        }
+
+        // Somebody asked to be erased and their row has already gone from this site.
+        // Emblem Studio is told first, so an interrupted run leaves the erasure
+        // outstanding rather than quietly finished.
+        $forget = ES_Purchases::forgotten();
+        if ($forget !== []) {
+            foreach (array_chunk($forget, 200) as $chunk) {
+                $data = self::pull_post($cfg, '/v1/embed/purchases', ['forget' => array_values($chunk)]);
+                if (! is_array($data) || empty($data['ok'])) {
+                    return;
+                }
+                ES_Purchases::clear_forgotten($chunk);
+            }
+        }
+
+        // Ten passes of 200 is a deliberate ceiling. A site coming back after a long
+        // silence catches up over a few runs instead of holding one request open.
+        for ($pass = 0; $pass < 10; $pass++) {
+            $rows = ES_Purchases::pending(200);
+            if ($rows === []) {
+                return;
+            }
+
+            $ids = array_column($rows, 'id');
+            foreach ($rows as $i => $row) {
+                unset($rows[$i]['id']);
+            }
+
+            $data = self::pull_post($cfg, '/v1/embed/purchases', ['purchases' => array_values($rows)]);
+            if (! is_array($data) || empty($data['ok'])) {
+                return; // Leave them unsent; the next run tries again.
+            }
+
+            ES_Purchases::mark_sent($ids);
+            if (count($rows) < 200) {
+                return;
             }
         }
     }
@@ -1163,6 +1226,7 @@ final class Emblem_Studio_SaaS_Connector
         self::pull_stats($cfg);
         self::pull_leads($cfg);
         self::pull_lead_deletions($cfg);
+        self::push_purchases();
     }
 
     /** WP-cron tick — refresh the local copy while connected. */
@@ -1593,6 +1657,7 @@ final class Emblem_Studio_SaaS_Connector
                 'popup_fullscreen'     => ! empty($a['popup_fullscreen']),
                 'popup_close_theme'    => $a['popup_close_theme'] ?? 'light',
                 'track_clicks'         => ! empty($a['track_clicks']),
+                'track_purchases'      => ! empty($a['track_purchases']),
                 'funnelkit_enabled'    => ! empty($a['funnelkit_enabled']),
                 'webhooks'             => is_array($a['webhooks'] ?? null) ? $a['webhooks'] : [],
                 'connections'          => is_array($a['connections'] ?? null) ? $a['connections'] : [],
@@ -2222,6 +2287,13 @@ final class Emblem_Studio_SaaS_Connector
             'api'       => $cfg['api_base'].'/v1',
             'wpContext' => self::context(),
         ];
+
+        // Where the shop half listens (SER-1348). Only on a site with a shop, and
+        // only used when a visitor is actually carrying a tag: it is the safety net
+        // for a basket filled by a path the page could not see.
+        if (class_exists('WooCommerce')) {
+            $config['ajax'] = admin_url('admin-ajax.php');
+        }
 
         // The site's public code, which is what lets the SaaS runtime ask for the
         // whole page in one request instead of downloading every asset and only

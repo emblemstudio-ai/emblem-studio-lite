@@ -48,6 +48,18 @@ class ES_Privacy {
 				[ 'name' => __( 'Submitted at', 'emblem-studio' ), 'value' => $r->created_at ],
 			];
 
+			// What they bought afterwards, where the shop told us (SER-1346). It is
+			// a fact about this person, so it belongs in their own copy of the file.
+			if ( class_exists( 'ES_Purchases' ) ) {
+				foreach ( ES_Purchases::for_lead( (int) $r->id ) as $i => $purchase ) {
+					$item_data[] = [
+						/* translators: %d: the number of this purchase in the list */
+						'name'  => sprintf( __( 'Purchase %d after signing up', 'emblem-studio' ), $i + 1 ),
+						'value' => sprintf( '%s %s, order #%d, %s', $purchase['total'], $purchase['currency'], $purchase['order_id'], $purchase['ordered_at'] ),
+					];
+				}
+			}
+
 			$data[] = [
 				'group_id'    => 'emblem-studio-leads',
 				'group_label' => __( 'Emblem Studio Form Submissions', 'emblem-studio' ),
@@ -60,6 +72,15 @@ class ES_Privacy {
 	}
 
 	public function eraser( string $email, int $page = 1 ): array {
+		// Take this person out of the purchase records BEFORE the leads go, while
+		// there is still a lead id to find them by. An order stays with the shop,
+		// which has its own rules about keeping it; what goes is the line joining
+		// that order to this person.
+		if ( class_exists( 'ES_Purchases' ) ) {
+			foreach ( ES_Leads::find_by_email( $email ) as $lead ) {
+				ES_Purchases::forget_lead( (int) $lead->id );
+			}
+		}
 		$removed = ES_Leads::delete_by_email( $email );
 		return [
 			'items_removed'  => $removed > 0,

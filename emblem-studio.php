@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.3.60-beta
+ * Version:           1.3.61-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,8 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.3.60-beta' );
-define( 'EMBLEM_STUDIO_DB_VERSION', '42' );
+define( 'EMBLEM_STUDIO_VERSION', '1.3.61-beta' );
+define( 'EMBLEM_STUDIO_DB_VERSION', '43' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'EMBLEM_STUDIO_URL', plugin_dir_url( __FILE__ ) );
@@ -74,6 +74,10 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-commerce.php';
 // Live values (SER-1351): a price or discount in an asset that stays true by
 // itself. Every edition, for the same reason as the store reader above.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-live-values.php';
+// Which asset sent somebody to the shop, and what they bought after it
+// (SER-1346, SER-1348). Every edition, and inert where WooCommerce is absent.
+require_once EMBLEM_STUDIO_PATH . 'includes/class-es-click-tag.php';
+require_once EMBLEM_STUDIO_PATH . 'includes/class-es-purchases.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-rest.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-shortcode.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preview.php';
