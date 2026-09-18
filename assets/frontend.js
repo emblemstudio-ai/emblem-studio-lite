@@ -1627,6 +1627,92 @@
 		obs.observe(trigger);
 	}
 
+	/* ── THE "AUTO" CLOSE BUTTON ───────────────────────────────────────────
+	   TWIN of esAutoCloseCss() in the SaaS public/embed/embed.js, verbatim, so
+	   an asset set to Auto looks the same on every site (SER-1403). Change both.
+
+	   The same button as 'light' and 'dark' — faint ring, see-through
+	   middle, stroked X — with the one difference that its colour is worked
+	   out from what is behind it instead of chosen in advance.
+
+	   IT EXISTS BECAUSE SOME BACKGROUNDS MOVE. A ribbon whose slides swap
+	   between a pale ground and a near-black one every ten seconds has no
+	   right answer among the fixed themes: whichever you pick is wrong for
+	   half the cycle.
+
+	   HOW. backdrop-filter INVERTS whatever sits behind the button, so the
+	   element becomes near black over a light asset and near white over a
+	   dark one. grayscale strips the hue, so the button is only ever black
+	   or white and a green ribbon cannot hand back a magenta one. contrast
+	   pushes it to the ends so it is a definite tone rather than a wash.
+
+	   THE SHAPE COMES FROM THE MASK, AND SO DOES THE TRANSLUCENCY. Three
+	   layers: the X, the ring, the disc. Each carries the SAME alpha the
+	   fixed themes use for that part (0.70, 0.15, 0.10), and because the
+	   element being masked is the inverted backdrop, a layer at 15% alpha
+	   puts 15% of the inverted colour over 85% of the real background. That
+	   is what keeps the middle see-through and the ring a hairline, rather
+	   than stamping a solid disc over the asset.
+
+	   TWO THINGS THAT LOOK RIGHT AND ARE NOT, both measured at 1.00:1
+	   before this version was arrived at. An <svg> glyph with
+	   mix-blend-mode does NOT blend against the filtered element; it blends
+	   against the raw background, so over a dark ground the button turned
+	   white and the glyph turned white with it. A nested backdrop-filter
+	   does not double-invert either, because it re-reads the same backdrop
+	   root rather than its parent's result. Neither is worth trying again.
+
+	   MEASURED, Chromium, X against the disc behind it: white 7.6:1, black
+	   9.0:1, pale red 7.0:1, mint 7.3:1, near-black red 7.5:1, dark green
+	   7.0:1. The fixed themes beat that on the ground they were picked for
+	   and disappear on the other one; this holds everywhere.
+
+	   TWO GROUNDS IT CANNOT DO, and they are exactly why 'light' and 'dark'
+	   are still offered. A background within a few percent of mid grey,
+	   because inverting mid grey returns mid grey, and no amount of
+	   contrast fixes it: contrast pivots on the middle. And a busy photo
+	   directly under the corner, where the inversion changes across the
+	   button. Pick a fixed theme for those two.
+
+	   The whole block sits inside @supports. A browser without masks or
+	   backdrop-filter matches none of it and renders 'auto' as the light
+	   theme, which is the base rule, so there is no state where the button
+	   disappears.
+
+	   GEOMETRY IS TIED TO THE 26px BUTTON. The circle stops and the viewBox
+	   below are that size. Change the button and change these with it. */
+	function esAutoCloseCss(scope, btn) {
+		var sel = scope + '[data-esf-close-theme="auto"] ' + btn;
+		// Alphas match the fixed themes part for part: X 0.70, ring 0.15, fill 0.10.
+		var cross = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'><path d='M9.5 9.5l7 7M16.5 9.5l-7 7' stroke='rgba(0,0,0,0.7)' stroke-width='1.6' stroke-linecap='round' fill='none'/></svg>\")";
+		var ring = 'radial-gradient(circle at 50% 50%,transparent 0 11.6px,rgba(0,0,0,.15) 11.9px 12.5px,transparent 12.8px)';
+		var fill = 'radial-gradient(circle at 50% 50%,rgba(0,0,0,.10) 0 11.8px,transparent 12.1px)';
+		var mask = cross + ',' + ring + ',' + fill;
+		var sizes = '26px 26px,26px 26px,26px 26px';
+		var filter = function (c) { return 'blur(3px) grayscale(1) invert(1) contrast(' + c + ')'; };
+		return '@supports (((-webkit-mask-image:none) or (mask-image:none)) and ((-webkit-backdrop-filter:invert(1)) or (backdrop-filter:invert(1)))){' +
+			sel + '{background:transparent!important;border:0!important;box-shadow:none!important;' +
+			'-webkit-backdrop-filter:' + filter(3) + '!important;backdrop-filter:' + filter(3) + '!important;' +
+			'-webkit-mask-image:' + mask + '!important;mask-image:' + mask + '!important;' +
+			'-webkit-mask-size:' + sizes + '!important;mask-size:' + sizes + '!important;' +
+			'-webkit-mask-repeat:no-repeat!important;mask-repeat:no-repeat!important;' +
+			'-webkit-mask-position:center,center,center!important;mask-position:center,center,center!important;}' +
+			// The real glyph stays in the DOM for assistive tech and for the
+			// no-@supports fallback. Here the mask draws it, so hide the duplicate.
+			sel + ' svg{display:none!important;}' +
+			// The base rule brightens the background on hover, which does nothing
+			// to a masked element. Deepen the inversion instead, so the button
+			// still answers the pointer.
+			sel + ':hover{background:transparent!important;' +
+			'-webkit-backdrop-filter:' + filter(5) + '!important;backdrop-filter:' + filter(5) + '!important;}}';
+	}
+
+	/** Which close-button theme an asset asked for. Anything unrecognised is
+	 *  'light', which is what every asset got before the column existed. */
+	function esCloseTheme(v) {
+		return (v === 'dark' || v === 'auto') ? v : 'light';
+	}
+
 	function ensurePopupStyles() {
 		if (document.getElementById('esf-popup-styles')) return;
 		const style = document.createElement('style');
@@ -1697,6 +1783,7 @@
 			'.esf-popup-close:hover{background:var(--esf-close-hover-bg,rgba(255,255,255,0.18))!important;color:var(--esf-close-hover-fg,#fff)!important;transform:rotate(90deg)!important;}' +
 			'.esf-popup-close:focus-visible{outline:2px solid #2271b1!important;outline-offset:2px!important;}' +
 			'.esf-popup-overlay[data-esf-close-theme="dark"]{--esf-close-fg:rgba(0,0,0,0.55);--esf-close-bg:rgba(0,0,0,0.06);--esf-close-border:rgba(0,0,0,0.12);--esf-close-hover-fg:#1d2327;--esf-close-hover-bg:rgba(0,0,0,0.10);}' +
+			esAutoCloseCss('.esf-popup-overlay', '.esf-popup-close') +
 			// isolation:isolate covers a LIGHT-DOM form (use_shadow_dom off): its
 			// content sits as a plain descendant of .esf-host with no shadow
 			// boundary, so without this an author's own z-index can climb up and
@@ -1707,6 +1794,36 @@
 			'@keyframes esf-popup-fade{from{opacity:0}to{opacity:1}}' +
 			'@keyframes esf-popup-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}';
 		document.head.appendChild(style);
+	}
+
+	/* ── THE CARD'S CORNER, FOR A FULL-SCREEN POPUP ────────────────────────
+	   A full-screen modal fills the viewport, so its top-right corner is the
+	   SCREEN's. The close button used to sit there, and on a 480px card that
+	   left it half a screen away from the thing it closes, over the dimmed
+	   page, where neither the light nor the dark style could be seen
+	   (SER-1403, items 10 and 12 of Catalina's Lite test pass).
+
+	   So in full screen the button is placed on the card's own corner,
+	   measured. The card is the union of the asset's visible top-level
+	   elements, which covers the form and a thank-you state that replaces
+	   it. A design that fills the screen has its corner at the screen's, so
+	   it lands exactly where it always did.
+
+	   Returns a rect in viewport coordinates, or null when nothing is drawn
+	   yet (the caller then leaves the button in the modal's corner).
+
+	   TWIN of esCardRect in the SaaS public/embed/embed.js. */
+	function esCardRect(root) {
+		let box = null;
+		for (const el of root.children) {
+			if (el.tagName === 'STYLE' || el.tagName === 'SCRIPT' || el.tagName === 'TEMPLATE') continue;
+			const r = el.getBoundingClientRect();
+			if (r.width === 0 && r.height === 0) continue;
+			box = box
+				? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right) }
+				: { left: r.left, top: r.top, right: r.right };
+		}
+		return box;
 	}
 
 	function openPopup(popupId, opts) {
@@ -1754,10 +1871,13 @@
 			content.dataset.fullscreen = '1';
 		}
 
-		// Close-button theme — defaults to 'light' (translucent white) for dark
-		// form backgrounds. 'dark' flips to translucent black for light forms.
-		if (host.getAttribute('data-esf-close-theme') === 'dark') {
-			overlay.dataset.esfCloseTheme = 'dark';
+		// Close-button theme. 'light' (translucent white) suits a dark form,
+		// 'dark' flips to translucent black for a light one, and 'auto' works
+		// it out from what is actually behind the button, frame by frame —
+		// see esAutoCloseCss for how, and for the two grounds it cannot do.
+		const overlayCloseTheme = esCloseTheme(host.getAttribute('data-esf-close-theme'));
+		if (overlayCloseTheme !== 'light') {
+			overlay.dataset.esfCloseTheme = overlayCloseTheme;
 		}
 
 		let closeBtn = null;
@@ -1769,11 +1889,13 @@
 			closeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12"/></svg>';
 		}
 
-		// Close is a sibling of content (direct child of modal), not a child of
-		// content — it stays pinned to the modal's top-right corner via absolute
-		// positioning regardless of what's underneath it.
+		// Normally the close is a sibling of content (a direct child of modal),
+		// pinned to the modal's top-right corner, which is the card's, because
+		// the modal shrink-wraps it. In full screen the modal is the whole
+		// viewport, so the button goes inside content, the scroll container
+		// there, and syncCloseOffset puts it on the card's corner.
 		modal.appendChild(content);
-		if (closeBtn) modal.appendChild(closeBtn);
+		if (closeBtn) (content.dataset.fullscreen === '1' ? content : modal).appendChild(closeBtn);
 		overlay.appendChild(modal);
 		document.body.appendChild(overlay);
 		document.documentElement.classList.add('esf-popup-open');
@@ -1784,9 +1906,27 @@
 		// card, so offset the button by the scrollbar's measured width. The
 		// ResizeObserver re-syncs when a form height change (e.g. a success
 		// state) makes the scrollbar appear or disappear.
+		//
+		// FULL SCREEN is placed differently: see esCardRect. The button lives
+		// inside `content`, which is the scroll container there, so it scrolls
+		// with the card, and its position comes from the card's measured corner.
+		const isFull = content.dataset.fullscreen === '1';
+		let cardRoot = null; // set once the asset is mounted
 		let closeObserver = null;
 		const syncCloseOffset = () => {
 			if (!closeBtn) return;
+			if (isFull && cardRoot) {
+				const card = esCardRect(cardRoot);
+				if (card) {
+					const box = content.getBoundingClientRect();
+					const top = card.top - box.top + content.scrollTop + 12;
+					const left = card.right - box.left + content.scrollLeft - 12 - closeBtn.offsetWidth;
+					closeBtn.style.setProperty('top', top + 'px', 'important');
+					closeBtn.style.setProperty('left', left + 'px', 'important');
+					closeBtn.style.setProperty('right', 'auto', 'important');
+					return;
+				}
+			}
 			// content.offsetWidth includes the scrollbar; clientWidth doesn't.
 			const sbw = Math.max(0, content.offsetWidth - content.clientWidth);
 			// setProperty with 'important' is required — the .esf-popup-close
@@ -1796,9 +1936,12 @@
 		};
 		if (closeBtn && window.ResizeObserver) {
 			// Observe `content`: its width changes precisely when the
-			// scrollbar appears or disappears, whatever the cause.
+			// scrollbar appears or disappears, whatever the cause. In full
+			// screen, also the host, whose height moves when the card does
+			// (a thank-you state, an image arriving).
 			closeObserver = new ResizeObserver(syncCloseOffset);
 			closeObserver.observe(content);
+			if (isFull) closeObserver.observe(host);
 		}
 
 		function close() {
@@ -1833,6 +1976,7 @@
 		// Mount the form inside the cloned host and wire its submit.
 		const shadow = mount(host);
 		if (!shadow) return;
+		cardRoot = shadow;
 		syncCloseOffset(); // form is in the DOM now — measure real scrollbar state
 		// Images load async and can push the form past the scroll threshold
 		// after open — re-measure as each one finishes.
@@ -2019,6 +2163,7 @@
 			'.esf-ribbon-close:hover{background:var(--esf-close-hover-bg,rgba(255,255,255,0.18))!important;color:var(--esf-close-hover-fg,#fff)!important;transform:rotate(90deg)!important;}' +
 			'.esf-ribbon-close:focus-visible{outline:2px solid #2271b1!important;outline-offset:2px!important;}' +
 			'.esf-ribbon[data-esf-close-theme="dark"]{--esf-close-fg:rgba(0,0,0,0.55);--esf-close-bg:rgba(0,0,0,0.06);--esf-close-border:rgba(0,0,0,0.12);--esf-close-hover-fg:#1d2327;--esf-close-hover-bg:rgba(0,0,0,0.10);}' +
+			esAutoCloseCss('.esf-ribbon', '.esf-ribbon-close') +
 			'@keyframes esf-ribbon-in{from{transform:translateY(-100%)}to{transform:translateY(0)}}' +
 			'@keyframes esf-ribbon-in-bottom{from{transform:translateY(100%)}to{transform:translateY(0)}}' +
 			'@keyframes esf-ribbon-fade{from{opacity:0}to{opacity:1}}';
@@ -2051,8 +2196,9 @@
 		const host = cloned.cloneNode(true);
 		ribbon.appendChild(host);
 
-		if (host.getAttribute('data-esf-close-theme') === 'dark') {
-			ribbon.dataset.esfCloseTheme = 'dark';
+		const ribbonCloseTheme = esCloseTheme(host.getAttribute('data-esf-close-theme'));
+		if (ribbonCloseTheme !== 'light') {
+			ribbon.dataset.esfCloseTheme = ribbonCloseTheme;
 		}
 
 		let closeBtn = null;
@@ -2296,6 +2442,7 @@
 			'.esf-slide-in-close:hover{background:var(--esf-close-hover-bg,rgba(255,255,255,0.18))!important;color:var(--esf-close-hover-fg,#fff)!important;transform:rotate(90deg)!important;}' +
 			'.esf-slide-in-close:focus-visible{outline:2px solid #2271b1!important;outline-offset:2px!important;}' +
 			'.esf-slide-in[data-esf-close-theme="dark"]{--esf-close-fg:rgba(0,0,0,0.55);--esf-close-bg:rgba(0,0,0,0.06);--esf-close-border:rgba(0,0,0,0.12);--esf-close-hover-fg:#1d2327;--esf-close-hover-bg:rgba(0,0,0,0.10);}' +
+			esAutoCloseCss('.esf-slide-in', '.esf-slide-in-close') +
 			'@keyframes esf-slide-in-from-right{from{transform:translateX(calc(100% + 30px))}to{transform:translateX(0)}}' +
 			'@keyframes esf-slide-in-from-left{from{transform:translateX(calc(-100% - 30px))}to{transform:translateX(0)}}';
 		document.head.appendChild(style);
@@ -2321,8 +2468,9 @@
 
 		const cloned = tpl.content.querySelector('.esf-host');
 		if (!cloned) return;
-		if (cloned.getAttribute('data-esf-close-theme') === 'dark') {
-			card.dataset.esfCloseTheme = 'dark';
+		const cardCloseTheme = esCloseTheme(cloned.getAttribute('data-esf-close-theme'));
+		if (cardCloseTheme !== 'light') {
+			card.dataset.esfCloseTheme = cardCloseTheme;
 		}
 		const host = cloned.cloneNode(true);
 		card.appendChild(host);

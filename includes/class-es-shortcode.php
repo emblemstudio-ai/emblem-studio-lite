@@ -188,7 +188,7 @@ class ES_Shortcode {
 		$shadow     = ! empty( $form->use_shadow_dom ) ? '1' : '0';
 		$max_width  = max( 100, (int) ( $form->popup_max_width ?? 720 ) );
 		$fullscreen = ! empty( $form->popup_fullscreen ) ? '1' : '0';
-		$close_theme = ( ( $form->popup_close_theme ?? 'light' ) === 'dark' ) ? 'dark' : 'light';
+		$close_theme = ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
 		$track      = ! empty( $form->track_clicks ) ? '1' : '0';
 		$buy        = $this->buy_attr( $form );
 

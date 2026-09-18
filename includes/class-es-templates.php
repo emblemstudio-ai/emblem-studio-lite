@@ -172,7 +172,7 @@ class ES_Templates {
 			'display_rules'       => [],
 			'popup_max_width'     => $form['popup_max_width']    ?? 720,
 			'popup_fullscreen'    => ! empty( $form['popup_fullscreen'] ) ? 1 : 0,
-			'popup_close_theme'   => $form['popup_close_theme']  ?? 'light',
+			'popup_close_theme'   => $form['popup_close_theme']  ?? 'auto', // new assets start on Auto (SER-1403)
 			'track_clicks'        => 1,
 		];
 	}

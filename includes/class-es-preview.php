@@ -189,7 +189,7 @@ class ES_Preview {
 		$form_name    = (string) $form->name;
 		$success_mode = (string) $form->success_mode;
 		$use_shadow   = ! empty( $form->use_shadow_dom ) ? '1' : '0';
-		$close_theme  = ( ! empty( $form->popup_close_theme ) && $form->popup_close_theme === 'dark' ) ? 'dark' : 'light';
+		$close_theme  = ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
 
 		// Preview-only close affordance. On the live frontend, frontend.js's
 		// openRibbon() / openSlideIn() inject the close button on top of
@@ -362,7 +362,7 @@ class ES_Preview {
 		$form_id      = (int) $form->id;
 		$success_mode = (string) $form->success_mode;
 		$use_shadow   = ! empty( $form->use_shadow_dom ) ? '1' : '0';
-		$close_theme  = ( ! empty( $form->popup_close_theme ) && $form->popup_close_theme === 'dark' ) ? 'dark' : 'light';
+		$close_theme  = ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
 
 		// The form's enabled shells — the inspector switcher only offers these.
 		$types  = ES_Form_Repo::types_for( $form );
@@ -478,6 +478,7 @@ window.__esInspectorShell = <?php echo wp_json_encode( $shell ); ?>;</script>
 <?php // Host is always wrapped: the entrance animates the wrapper, and the close button (when present) anchors to it. ?>
 <div class="esf-inspect-shell"><?php echo $host; ?><?php echo $close_html; ?></div>
 <script src="<?php echo esc_url( $frontend_src ); ?>"></script>
+<?php if ( $is_fullscreen && $has_close ) : ?><script><?php echo self::inspector_fullscreen_close_js(); // phpcs:ignore WordPress.Security.EscapeOutput ?></script><?php endif; ?>
 <?php if ( $preview ) : // Design-tab preview: positioned shell, no selection instrumentation — just a Replay listener. ?>
 <script><?php echo self::preview_replay_js(); // phpcs:ignore WordPress.Security.EscapeOutput ?></script>
 <script>
@@ -711,8 +712,72 @@ JS;
 			// Slide-in hugs its content but never exceeds the cap.
 			return '.esf-inspect-shell{position:relative!important;display:inline-block!important;max-width:min(92%,' . $mw . 'px)!important;}';
 		}
-		// Popups read as a centered modal box capped at the configured width.
-		return '.esf-inspect-shell{position:relative!important;display:block!important;width:min(92%,' . $mw . 'px)!important;}';
+		// Popups read as a centered modal box capped at the configured width, and
+		// SHRINK TO FIT inside that cap, as the live .esf-popup-modal does (it is a
+		// shrink-to-fit flex item). This used to be a fixed width:min(92%,cap), so a
+		// 480px card in a 720px popup left the close button 108px off the card's
+		// corner here while the page showed it on the card (SER-1403). The min-width
+		// is the live .esf-popup-content floor, which keeps a container-query asset
+		// from collapsing to nothing.
+		return '.esf-inspect-shell{position:relative!important;display:block!important;max-width:min(92%,' . $mw . 'px)!important;min-width:min(320px,' . $mw . 'px,92%)!important;}';
+	}
+
+	/**
+	 * CSS that draws an Auto close button on the element matching $sel.
+	 *
+	 * TWIN of esAutoCloseCss() in assets/frontend.js and the SaaS embed.js, which
+	 * explain how it works and the two backgrounds it cannot read. The preview and
+	 * the inspector draw their own close button, so without this an asset set to
+	 * Auto showed the Light button while you edited it and a different one on the
+	 * page (SER-1403). Geometry is tied to the 26px button.
+	 */
+	private static function auto_close_css( string $sel ): string {
+		// Alphas match the fixed themes part for part: X 0.70, ring 0.15, fill 0.10.
+		$cross  = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'><path d='M9.5 9.5l7 7M16.5 9.5l-7 7' stroke='rgba(0,0,0,0.7)' stroke-width='1.6' stroke-linecap='round' fill='none'/></svg>\")";
+		$ring   = 'radial-gradient(circle at 50% 50%,transparent 0 11.6px,rgba(0,0,0,.15) 11.9px 12.5px,transparent 12.8px)';
+		$fill   = 'radial-gradient(circle at 50% 50%,rgba(0,0,0,.10) 0 11.8px,transparent 12.1px)';
+		$mask   = $cross . ',' . $ring . ',' . $fill;
+		$sizes  = '26px 26px,26px 26px,26px 26px';
+		$filter = static function ( int $c ): string {
+			return 'blur(3px) grayscale(1) invert(1) contrast(' . $c . ')';
+		};
+		return '@supports (((-webkit-mask-image:none) or (mask-image:none)) and ((-webkit-backdrop-filter:invert(1)) or (backdrop-filter:invert(1)))){'
+			. $sel . '{background:transparent!important;border:0!important;box-shadow:none!important;'
+			. '-webkit-backdrop-filter:' . $filter( 3 ) . '!important;backdrop-filter:' . $filter( 3 ) . '!important;'
+			. '-webkit-mask-image:' . $mask . '!important;mask-image:' . $mask . '!important;'
+			. '-webkit-mask-size:' . $sizes . '!important;mask-size:' . $sizes . '!important;'
+			. '-webkit-mask-repeat:no-repeat!important;mask-repeat:no-repeat!important;'
+			. '-webkit-mask-position:center,center,center!important;mask-position:center,center,center!important;}'
+			. $sel . ' svg{display:none!important;}'
+			. $sel . ':hover{background:transparent!important;'
+			. '-webkit-backdrop-filter:' . $filter( 5 ) . '!important;backdrop-filter:' . $filter( 5 ) . '!important;}}';
+	}
+
+	/**
+	 * Full-screen popup in the inspector: put the close button on the card's
+	 * corner, not the frame's. Same rule as esCardRect in assets/frontend.js, so
+	 * the editor and the live page agree (SER-1403). A design that fills the frame
+	 * has its corner at the frame's, so it lands where it always did.
+	 */
+	private static function inspector_fullscreen_close_js(): string {
+		return '(function(){'
+			. 'var shell=document.querySelector(".esf-inspect-shell");'
+			. 'var btn=document.querySelector(".esf-inspect-close");'
+			. 'if(!shell||!btn||!window.ResizeObserver)return;'
+			. 'function els(){var h=shell.querySelector(".esf-host");if(!h)return[];var r=h.shadowRoot||h;'
+			. 'return Array.prototype.filter.call(r.children,function(e){return e.tagName!=="STYLE"&&e.tagName!=="SCRIPT"&&e.tagName!=="TEMPLATE";});}'
+			. 'var ro=new ResizeObserver(place);'
+			. 'function place(){var box=null;els().forEach(function(e){ro.observe(e);var r=e.getBoundingClientRect();'
+			. 'if(!r.width&&!r.height)return;'
+			. 'box=box?{top:Math.min(box.top,r.top),right:Math.max(box.right,r.right)}:{top:r.top,right:r.right};});'
+			. 'if(!box)return;var s=shell.getBoundingClientRect();'
+			. 'btn.style.setProperty("top",(box.top-s.top+12)+"px","important");'
+			. 'btn.style.setProperty("left",(box.right-s.left-12-btn.offsetWidth)+"px","important");'
+			. 'btn.style.setProperty("right","auto","important");}'
+			. 'ro.observe(shell);'
+			// The host mounts after this runs; watch it appear.
+			. 'new MutationObserver(place).observe(shell,{childList:true,subtree:true});'
+			. 'place();})();';
 	}
 
 	/**
@@ -749,6 +814,9 @@ JS;
 			. 'text-shadow:none!important;text-decoration:none!important;letter-spacing:0!important;opacity:1!important;'
 			. 'transition:background .15s, color .15s, transform .25s!important;}'
 			. '.esf-inspect-close:hover{background:var(--esf-close-hover-bg)!important;color:var(--esf-close-hover-fg)!important;transform:rotate(90deg)!important;}';
+		if ( $close_theme === 'auto' ) {
+			$css .= self::auto_close_css( '.esf-inspect-close' );
+		}
 		return [ $html, $css ];
 	}
 
@@ -775,6 +843,9 @@ JS;
 			. 'text-shadow:none!important;text-decoration:none!important;letter-spacing:0!important;opacity:1!important;'
 			. 'transition:background .15s, color .15s, transform .25s!important;}'
 			. '.esf-ribbon-close:hover{background:var(--esf-close-hover-bg)!important;color:var(--esf-close-hover-fg)!important;transform:rotate(90deg)!important;}';
+		if ( $close_theme === 'auto' ) {
+			$css .= self::auto_close_css( '.esf-ribbon-close' );
+		}
 		return [ $html, $css ];
 	}
 

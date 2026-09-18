@@ -24,7 +24,7 @@ $f = (object) [
 	'use_design_system'    => isset( $form ) ? ! empty( $form->use_design_system ) : true,
 	'popup_max_width'      => isset( $form ) ? (int) ( $form->popup_max_width ?? 720 ) : 720,
 	'popup_fullscreen'     => isset( $form ) ? ! empty( $form->popup_fullscreen ) : false,
-	'popup_close_theme'    => isset( $form ) ? ( in_array( $form->popup_close_theme ?? 'light', [ 'light', 'dark' ], true ) ? $form->popup_close_theme : 'light' ) : 'dark',
+	'popup_close_theme'    => isset( $form ) ? ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' ) : 'auto',
 	'track_clicks'         => isset( $form ) ? ! empty( $form->track_clicks ) : true,
 	'track_purchases'      => isset( $form ) ? ! empty( $form->track_purchases ) : false,
 	'funnelkit_enabled'    => isset( $form ) ? ! empty( $form->funnelkit_enabled ) : false,
@@ -974,12 +974,14 @@ $check_groups = [
 								<div class="es-close-theme-row es-close-theme-row--bare">
 									<label class="es-dr-label" for="es-close-theme-popup-click" style="margin-bottom:4px;">
 										<?php esc_html_e( 'Close button style', 'emblem-studio' ); ?>
-										<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'Pick the close-button color that contrasts with your form\'s background. Light = white-on-dark glass (default, for dark forms). Dark = dark-on-light glass (for light forms). Applies to every close button this form renders.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
+										<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'Auto takes its color from whatever is behind the button, and keeps up if that changes. Light = white-on-dark glass, for dark forms. Dark = dark-on-light glass, for light forms. Applies to every close button this form renders.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
 									</label>
 									<select id="es-close-theme-popup-click" name="popup_close_theme" class="es-formlevel-sync es-close-theme-select">
+										<option value="auto"  <?php selected( $f->popup_close_theme ?? 'light', 'auto'  ); ?>><?php esc_html_e( 'Auto (follows the background)', 'emblem-studio' ); ?></option>
 										<option value="light" <?php selected( $f->popup_close_theme ?? 'light', 'light' ); ?>><?php esc_html_e( 'Light (for dark form backgrounds)', 'emblem-studio' ); ?></option>
 										<option value="dark"  <?php selected( $f->popup_close_theme ?? 'light', 'dark'  ); ?>><?php esc_html_e( 'Dark (for light form backgrounds)', 'emblem-studio' ); ?></option>
 									</select>
+									<p class="es-close-theme-auto-note"><?php esc_html_e( 'Inverts against whatever is behind it, and keeps up if that changes. Pick Light or Dark instead when the corner sits on a mid grey or on a busy photo.', 'emblem-studio' ); ?></p>
 								</div>
 							</div>
 						</div>

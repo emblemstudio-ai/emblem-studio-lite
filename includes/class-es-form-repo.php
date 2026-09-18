@@ -5,6 +5,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ES_Form_Repo {
 
+	/** The close-button themes an asset can ask for. */
+	const CLOSE_THEMES = [ 'light', 'dark', 'auto' ];
+
+	/**
+	 * One close-button theme, clamped to the three that exist.
+	 *
+	 * 'auto' works its colour out from what is behind the button (see
+	 * esAutoCloseCss in assets/frontend.js). Every spot that read this column
+	 * used to allow only 'light' and 'dark', so an asset set to Auto in the SaaS
+	 * came back as 'light' the moment it was mirrored here or drawn by a
+	 * shortcode. TST Prep's click popups were exactly that path (SER-1403).
+	 * Anything unrecognised falls back to $fallback.
+	 *
+	 * @param mixed $value
+	 */
+	public static function close_theme( $value, string $fallback = 'light' ): string {
+		return is_string( $value ) && in_array( $value, self::CLOSE_THEMES, true ) ? $value : $fallback;
+	}
+
 	public static function table(): string {
 		return ES_Install::table( 'forms' );
 	}
@@ -244,11 +263,9 @@ class ES_Form_Repo {
 			$row['popup_fullscreen'] = ! empty( $data['popup_fullscreen'] ) ? 1 : 0;
 		}
 
-		// Close-button theme: 'dark' (default) | 'light'. Whitelist-clamped.
+		// Close-button theme: 'light' | 'dark' | 'auto'. Whitelist-clamped.
 		if ( array_key_exists( 'popup_close_theme', $data ) ) {
-			$row['popup_close_theme'] = in_array( $data['popup_close_theme'], [ 'light', 'dark' ], true )
-				? $data['popup_close_theme']
-				: 'dark';
+			$row['popup_close_theme'] = self::close_theme( $data['popup_close_theme'], 'dark' );
 		}
 
 		// Per-form click tracking. Default ON for new forms; opt-out per form
@@ -590,7 +607,7 @@ class ES_Form_Repo {
 			'use_design_system'    => ! empty( $form->use_design_system ) ? 1 : 0,
 			'popup_max_width'      => (int) ( $form->popup_max_width ?? 720 ),
 			'popup_fullscreen'     => ! empty( $form->popup_fullscreen ) ? 1 : 0,
-			'popup_close_theme'    => in_array( $form->popup_close_theme ?? 'light', [ 'light', 'dark' ], true ) ? $form->popup_close_theme : 'light',
+			'popup_close_theme'    => self::close_theme( $form->popup_close_theme ?? 'light' ),
 			'track_clicks'         => ! empty( $form->track_clicks ) ? 1 : 0,
 			'track_purchases'      => ! empty( $form->track_purchases ) ? 1 : 0,
 			'funnelkit_enabled'    => ! empty( $form->funnelkit_enabled ) ? 1 : 0,
@@ -633,7 +650,8 @@ class ES_Form_Repo {
 
 		// Coalesce once: in_array() must see a defined value AND the ternary's
 		// true-branch must not re-read a possibly-absent key.
-		$popup_close_theme = $data['popup_close_theme'] ?? 'dark';
+		// A new asset starts on Auto, as it does in the SaaS (SER-1403).
+		$popup_close_theme = $data['popup_close_theme'] ?? 'auto';
 
 		$payload = [
 			'name'                 => $name,
@@ -656,7 +674,7 @@ class ES_Form_Repo {
 			'use_design_system'    => array_key_exists( 'use_design_system', $data ) ? ( ! empty( $data['use_design_system'] ) ? 1 : 0 ) : 1,
 			'popup_max_width'      => (int) ( $data['popup_max_width'] ?? 720 ),
 			'popup_fullscreen'     => ! empty( $data['popup_fullscreen'] ) ? 1 : 0,
-			'popup_close_theme'    => in_array( $popup_close_theme, [ 'light', 'dark' ], true ) ? $popup_close_theme : 'dark',
+			'popup_close_theme'    => self::close_theme( $popup_close_theme, 'dark' ),
 			'track_clicks'         => array_key_exists( 'track_clicks', $data ) ? ( ! empty( $data['track_clicks'] ) ? 1 : 0 ) : 1,
 			'track_purchases'      => ! empty( $data['track_purchases'] ) ? 1 : 0,
 			// New forms (blank + template install) default FK off — user
@@ -736,7 +754,7 @@ class ES_Form_Repo {
 		$data['use_design_system'] = ! empty( $source->use_design_system ) ? 1 : 0;
 		$data['popup_max_width']  = (int) ( $source->popup_max_width ?? 720 );
 		$data['popup_fullscreen']   = ! empty( $source->popup_fullscreen ) ? 1 : 0;
-		$data['popup_close_theme']  = in_array( $source->popup_close_theme ?? 'light', [ 'light', 'dark' ], true ) ? $source->popup_close_theme : 'light';
+		$data['popup_close_theme']  = self::close_theme( $source->popup_close_theme ?? 'light' );
 		$data['track_clicks']     = ! empty( $source->track_clicks ) ? 1 : 0;
 		$data['track_purchases']  = ! empty( $source->track_purchases ) ? 1 : 0;
 		$data['funnelkit_enabled'] = ! empty( $source->funnelkit_enabled ) ? 1 : 0;

@@ -2895,6 +2895,9 @@
 	padding-left: 1.6em;
 }
 .emblem-studio-wrap .es-close-theme-row--bare { padding-left: 0; }
+/* The Auto caveat shows only while Auto is picked, as it does in the SaaS. */
+.emblem-studio-wrap .es-close-theme-auto-note { display: none; margin: 4px 0 0; max-width: 34em; font-size: 11px; line-height: 1.4; color: #646970; }
+.emblem-studio-wrap .es-close-theme-row:has(option[value="auto"]:checked) .es-close-theme-auto-note { display: block; }
 .emblem-studio-wrap .es-close-theme-select { max-width: 100%; }
 
 /* Click popup's modal options live inside its selector card (no separate
