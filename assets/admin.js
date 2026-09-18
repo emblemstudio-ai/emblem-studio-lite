@@ -2780,6 +2780,17 @@
 							warning.setAttribute('role', 'note');
 							warning.textContent = 'FunnelKit only keeps values it knows. These will be dropped: ' + dropped.join(', ') + '.';
 						}
+						// A message box holds an answer of any length. FunnelKit's
+						// single-line Text field is varchar(99), so it keeps the first
+						// 99 characters and drops the rest without a word (measured on
+						// a live FunnelKit, SER-1384). Its Text Area field is longtext
+						// and keeps the whole answer, line breaks included.
+						if (!warning && detected && detected.kind === 'textarea' && (f.kind || 'text') === 'text') {
+							warning = document.createElement('div');
+							warning.className = 'es-mapper-row-warning';
+							warning.setAttribute('role', 'note');
+							warning.textContent = '"' + f.label + '" is a single-line field in FunnelKit, so it keeps only the first 99 characters of a long answer. Make it a Text Area field there to keep the whole thing.';
+						}
 					} else {
 						var auto = autoDetected(f.key);
 						if (auto) {

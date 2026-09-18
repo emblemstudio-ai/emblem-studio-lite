@@ -946,19 +946,24 @@ class ES_Ajax {
 	 * the lead as an empty string and never reached the CSV, a webhook or
 	 * FunnelKit (SER-1370).
 	 *
-	 * A list stays a list: each scalar item is sanitize_text_field'd and capped,
-	 * anything nested is dropped, and at most MAX_FIELD_VALUES items survive.
+	 * A list stays a list: each scalar item is cleaned and capped, anything nested
+	 * is dropped, and at most MAX_FIELD_VALUES items survive.
+	 *
 	 * TWIN of the SaaS SubmissionController::sanitizeExtraValue, same caps.
 	 * Also used by the SaaS connector for values the SaaS forwards to FunnelKit.
+	 *
+	 * Line breaks survive. A <textarea> answer is written in paragraphs and was
+	 * arriving on the lead as one run-on line, because sanitize_text_field()
+	 * collapses every newline into a space by design (SER-1384). clean_answer()
+	 * uses sanitize_textarea_field() instead, which strips exactly the same tags
+	 * and octets but keeps the newlines.
 	 *
 	 * @param  mixed $value
 	 * @return string|array<int, string>
 	 */
 	public static function sanitize_field_value( $value ) {
 		if ( ! is_array( $value ) ) {
-			return is_scalar( $value )
-				? mb_substr( sanitize_text_field( (string) $value ), 0, self::MAX_FIELD_LENGTH )
-				: '';
+			return is_scalar( $value ) ? self::clean_answer( (string) $value ) : '';
 		}
 
 		$out = [];
@@ -966,12 +971,31 @@ class ES_Ajax {
 			if ( ! is_scalar( $item ) ) {
 				continue;
 			}
-			$out[] = mb_substr( sanitize_text_field( (string) $item ), 0, self::MAX_FIELD_LENGTH );
+			$out[] = self::clean_answer( (string) $item );
 			if ( count( $out ) >= self::MAX_FIELD_VALUES ) {
 				break;
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * One answer, cleaned and capped, with its line breaks intact.
+	 *
+	 * sanitize_textarea_field() is sanitize_text_field()'s twin: same tag
+	 * stripping, same invalid-UTF-8 and percent-encoding removal, same trim. The
+	 * only difference is that it does not collapse newlines into spaces, which is
+	 * what flattened every <textarea> answer before SER-1384.
+	 *
+	 * Windows browsers post CRLF and the rest post LF, so the breaks are
+	 * normalised first. Otherwise the same three paragraphs are stored as
+	 * different bytes depending on who typed them, and a CSV or a FunnelKit field
+	 * shows a stray carriage return.
+	 */
+	private static function clean_answer( string $value, int $max = self::MAX_FIELD_LENGTH ): string {
+		$value = str_replace( [ "\r\n", "\r" ], "\n", $value );
+
+		return mb_substr( sanitize_textarea_field( $value ), 0, $max );
 	}
 
 	private function collect_fields(): array {
@@ -1067,7 +1091,7 @@ class ES_Ajax {
 			} else {
 				continue;
 			}
-			$captured[ sanitize_key( $k ) ] = mb_substr( sanitize_text_field( $flat ), 0, 500 );
+			$captured[ sanitize_key( $k ) ] = self::clean_answer( $flat, 500 );
 		}
 
 		$wpdb->insert( ES_Install::table( 'leads' ), [

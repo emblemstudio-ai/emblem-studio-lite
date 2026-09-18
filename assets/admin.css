@@ -5492,7 +5492,9 @@
 
 .es-lead-fields { margin: 0; }
 .es-lead-fields dt { font-size: 12px; color: #646970; }
-.es-lead-fields dd { margin: 0 0 8px; word-break: break-word; }
+/* pre-line: a long answer is typed in paragraphs, and HTML would fold it into
+   one run-on line. The breaks are stored, so show them (SER-1384). */
+.es-lead-fields dd { margin: 0 0 8px; word-break: break-word; white-space: pre-line; }
 
 .es-lead-detail-none { margin: 0; font-size: 12px; color: #646970; }
 

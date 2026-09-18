@@ -2839,8 +2839,9 @@ final class Emblem_Studio_SaaS_Connector
      * One answer the SaaS forwards for FunnelKit. A ticked checkbox group is a
      * LIST and must stay one all the way to ES_FunnelKit_Upsert, which turns it
      * into what FunnelKit stores (SER-1370). Same rule and caps as a submission
-     * taken on this site: each item sanitize_text_field'd, 100 items, 5000
-     * characters each.
+     * taken on this site: each item cleaned, 100 items, 5000 characters each,
+     * and its line breaks kept (SER-1384), so a long answer written in paragraphs
+     * reaches FunnelKit in paragraphs.
      *
      * @param mixed $value
      * @return string|array<int, string>
