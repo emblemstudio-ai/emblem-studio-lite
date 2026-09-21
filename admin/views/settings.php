@@ -47,7 +47,7 @@ $logs   = ES_Logger::recent( 50 );
 	<p class="description">
 		<?php esc_html_e( 'Only needed if the direct PHP integration fails. Generate a key/secret in FunnelKit → Settings → REST API.', 'emblem-studio' ); ?>
 	</p>
-	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+	<form method="post" data-es-leave-guard action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 		<?php wp_nonce_field( 'es_save_settings' ); ?>
 		<input type="hidden" name="action" value="es_save_settings">
 

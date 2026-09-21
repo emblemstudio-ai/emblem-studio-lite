@@ -49,7 +49,15 @@
 			return;
 		}
 		var el = document.getElementById(id);
-		if (el) el.value = value;
+		if (!el) return;
+		if (el.value === value) return;
+		el.value = value;
+		// Setting .value fires nothing, and the Design tab keeps the code in these
+		// hidden fields, so the page's unsaved-changes tracker (admin.js) never
+		// heard about an edit kept with Done. Leaving then lost it with no warning
+		// (SER-1421, item 21 of Catalina's test pass). A bubbling input event is
+		// exactly what a person typing would have sent.
+		el.dispatchEvent(new Event('input', { bubbles: true }));
 	}
 
 	// ── Module state ──────────────────────────────────────────────
@@ -469,6 +477,7 @@
 		document.addEventListener('keydown', onKeydown, true);
 		window.addEventListener('message', onFrameMessage);
 		window.addEventListener('popstate', onPopState);
+		window.addEventListener('beforeunload', onBeforeUnload);
 		document.addEventListener('visibilitychange', onVisibilityRefresh);
 		window.addEventListener('focus', onVisibilityRefresh);
 		pushUrlState();
@@ -530,6 +539,7 @@
 		document.removeEventListener('keydown', onKeydown, true);
 		window.removeEventListener('message', onFrameMessage);
 		window.removeEventListener('popstate', onPopState);
+		window.removeEventListener('beforeunload', onBeforeUnload);
 		document.removeEventListener('visibilitychange', onVisibilityRefresh);
 		window.removeEventListener('focus', onVisibilityRefresh);
 		if (!fromHistory) restoreUrlState();
@@ -594,12 +604,29 @@
 	function onPopState() {
 		// Our own history.back() (from restoreUrlState) — swallow once.
 		if (state.suppressPop) { state.suppressPop = false; return; }
-		// User pressed Back while open → close (discard); the browser has
-		// already restored the URL, so don't touch history again.
-		if (state.open) {
+		if (!state.open) return;
+		// Back with edits made in here: put the overlay's history entry back, so
+		// nothing moves, and ask the same question Cancel asks. Back used to
+		// throw the edits away without a word (SER-1421). If they say Discard,
+		// close() pops the entry again through restoreUrlState().
+		if (state.dirty) {
 			state.pushedHistory = false;
-			close(false, true);
+			pushUrlState();
+			requestCancel();
+			return;
 		}
+		// Nothing to lose: close. The browser has already restored the URL, so
+		// don't touch history again.
+		state.pushedHistory = false;
+		close(false, true);
+	}
+
+	// A reload or a closed tab while the overlay holds edits. The page's own
+	// tracker cannot see them until Done writes them back (SER-1421).
+	function onBeforeUnload(e) {
+		if (!state.open || !state.dirty) return;
+		e.preventDefault();
+		e.returnValue = '';
 	}
 
 	// Enable/disable the Replay button to match whether the asset actually has

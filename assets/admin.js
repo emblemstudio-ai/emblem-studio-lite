@@ -3389,3 +3389,50 @@
 		panel.hidden = open;
 	});
 })();
+
+// ── Leave guard for the simple settings screens (SER-1421) ─────────────────
+// The asset screen has its own tracker (initDirtyTracker). The Design System
+// and Settings screens had nothing: edit the CSS, click another menu item, and
+// the edit was gone without a word. Any form marked data-es-leave-guard now
+// asks before the page is left with changes on it. Its own Save never asks.
+//
+// A CodeMirror editor keeps its text to itself until it is saved back into the
+// textarea, so every check flushes the editors first. The baseline is taken on
+// window load, once wp.codeEditor has mounted them, so mounting is not an edit.
+(function () {
+	var forms = document.querySelectorAll('form[data-es-leave-guard]');
+	if (!forms.length) return;
+
+	function state(form) {
+		form.querySelectorAll('.CodeMirror').forEach(function (el) {
+			if (el.CodeMirror) { try { el.CodeMirror.save(); } catch (e) {} }
+		});
+		var parts = [];
+		new FormData(form).forEach(function (value, key) {
+			if (key === '_wpnonce' || key === '_wp_http_referer') return;
+			parts.push(key + '=' + (typeof value === 'string' ? value : ''));
+		});
+		return parts.sort().join('&');
+	}
+
+	var watched = [];
+	function arm() {
+		forms.forEach(function (form) {
+			var entry = { form: form, baseline: state(form), submitting: false };
+			form.addEventListener('submit', function () { entry.submitting = true; });
+			watched.push(entry);
+		});
+	}
+	if (document.readyState === 'complete') arm(); else window.addEventListener('load', arm);
+
+	window.addEventListener('beforeunload', function (e) {
+		for (var i = 0; i < watched.length; i++) {
+			var w = watched[i];
+			if (!w.submitting && state(w.form) !== w.baseline) {
+				e.preventDefault();
+				e.returnValue = '';
+				return;
+			}
+		}
+	});
+})();
