@@ -205,7 +205,10 @@ class ES_Form_Repo {
 			? (bool) $data['enabled']
 			: in_array( ( $data['status'] ?? 'inactive' ), [ 'active', 'scheduled', 'expired' ], true );
 		$success_mode = $data['success_mode'] ?? 'inline_state';
-		$success_mode = in_array( $success_mode, [ 'inline_state', 'custom_message', 'redirect' ], true ) ? $success_mode : 'inline_state';
+		// Two modes. The plain message is retired (SER-1419): it replaced the card
+		// with an unstyled <div>, so a signup ended as black text in the corner of
+		// the page. An asset still carrying it lands on the thank-you state.
+		$success_mode = in_array( $success_mode, [ 'inline_state', 'redirect' ], true ) ? $success_mode : 'inline_state';
 
 		$row = [
 			'name'                 => $data['name'] ?? '',
@@ -660,7 +663,7 @@ class ES_Form_Repo {
 			'css'                  => (string) ( $data['css']  ?? '' ),
 			// Always inactive on import — reviewer flips it live after checking.
 			'status'               => 'inactive',
-			'success_mode'         => in_array( $data['success_mode'] ?? 'inline_state', [ 'inline_state', 'custom_message', 'redirect' ], true ) ? $data['success_mode'] : 'inline_state',
+			'success_mode'         => in_array( $data['success_mode'] ?? 'inline_state', [ 'inline_state', 'redirect' ], true ) ? $data['success_mode'] : 'inline_state',
 			'success_message'      => isset( $data['success_message'] ) ? (string) $data['success_message'] : '',
 			'success_redirect_url' => isset( $data['success_redirect_url'] ) ? (string) $data['success_redirect_url'] : '',
 			'funnelkit_lists'      => $decode_array( $data['funnelkit_lists'] ?? [] ),

@@ -2046,13 +2046,8 @@ $check_groups = [
 					<th><?php esc_html_e( 'Thank-you behavior', 'emblem-studio' ); ?></th>
 					<td>
 						<label><input type="radio" name="success_mode" value="inline_state"   <?php checked( $f->success_mode, 'inline_state' );   ?> data-es-success-mode> <?php esc_html_e( 'Show the form\'s inline thank-you state (element with data-esf-thankyou)', 'emblem-studio' ); ?></label><br>
-						<label><input type="radio" name="success_mode" value="custom_message" <?php checked( $f->success_mode, 'custom_message' ); ?> data-es-success-mode> <?php esc_html_e( 'Replace the form with a thank-you message', 'emblem-studio' ); ?></label><br>
 						<label><input type="radio" name="success_mode" value="redirect"       <?php checked( $f->success_mode, 'redirect' );       ?> data-es-success-mode> <?php esc_html_e( 'Redirect to a URL', 'emblem-studio' ); ?></label>
 					</td>
-				</tr>
-				<tr class="es-success-field es-success-field-custom_message">
-					<th><label for="es-success-message"><?php esc_html_e( 'Thank-you message', 'emblem-studio' ); ?></label></th>
-					<td><textarea id="es-success-message" name="success_message" rows="4" class="large-text"><?php echo esc_textarea( $f->success_message ); ?></textarea></td>
 				</tr>
 				<tr class="es-success-field es-success-field-redirect">
 					<th><label for="es-success-redirect-url"><?php esc_html_e( 'Redirect URL', 'emblem-studio' ); ?></label></th>

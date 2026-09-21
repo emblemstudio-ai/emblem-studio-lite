@@ -89,9 +89,10 @@ HTML
   the agreement. Being required doesn't make a checkbox a consent, and a
   consent needn't be required. Name it whatever fits; consent isn't only GDPR.
 - A submit <button type="submit"> (form assets only).
-- Thank-you state (optional, form assets only): one element marked
+- Thank-you state (required on a form asset): one element marked
   data-esf-thankyou hidden. It shows after a successful submit, with the
-  form hidden. Instead, the asset's settings can show a message or redirect.
+  form hidden. Without it the card just disappears. The only alternative is
+  the asset's redirect setting, which sends people to a page you wrote.
   It appears the instant someone submits, not when the server answers, so
   write it as a self-contained message. If the submission fails, the form
   comes back with the error.

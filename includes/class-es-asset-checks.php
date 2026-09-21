@@ -355,6 +355,31 @@ class ES_Asset_Checks {
 			);
 		}
 
+		// 22. no_thankyou: a form that says nothing back.
+		//
+		// On a successful submit the runtime hides the form and reveals the element
+		// marked data-esf-thankyou. With no such element the card simply vanishes,
+		// which reads as a bug to the person who just handed over their address
+		// (SER-1419, item 13 of Catalina's test pass). The plain "custom message"
+		// option used to paper over this and is gone, because it had no design of
+		// its own and landed as black text in the corner of the page.
+		//
+		// A warning, never an error. An asset that redirects after a signup is right
+		// to have no thank-you state, and only the settings know that, while this
+		// runs on the HTML and CSS alone. The legacy markers count: the runtime
+		// still reveals them, so an asset written before the rename works.
+		if ( $is_form ) {
+			$thanks = $xpath->query( '//*[@data-esf-thankyou or @data-esf-success or @data-osf-thankyou or @data-osf-success]' );
+			if ( ! $thanks || 0 === $thanks->length ) {
+				$items[] = self::item(
+					'no_thankyou',
+					'warning',
+					__( 'This form has no thank-you state, so it just disappears when someone signs up.', 'emblem-studio' ),
+					__( 'Add a hidden element with data-esf-thankyou. Ignore this if the asset redirects instead.', 'emblem-studio' )
+				);
+			}
+		}
+
 		return $items;
 	}
 

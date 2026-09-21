@@ -129,9 +129,7 @@
 		function syncSuccessFields() {
 			var mode = $('input[data-es-success-mode]:checked').val();
 			$('.es-success-field').removeClass('is-visible');
-			if (mode === 'custom_message') {
-				$('.es-success-field-custom_message').addClass('is-visible');
-			} else if (mode === 'redirect') {
+			if (mode === 'redirect') {
 				$('.es-success-field-redirect').addClass('is-visible');
 			}
 		}

@@ -1028,14 +1028,6 @@
 		shadow._esThankYouUndo = null;
 	}
 
-	function showCustomMessage(shadow, message) {
-		const form = shadow.querySelector('form');
-		const msg = document.createElement('div');
-		msg.className = 'esf-thank-you';
-		msg.innerHTML = message || 'Thanks!';
-		if (form) form.replaceWith(msg); else shadow.appendChild(msg);
-	}
-
 	function showInlineError(form, message) {
 		let err = form.querySelector('.esf-error');
 		if (!err) {
@@ -1202,8 +1194,6 @@
 				setSubmittingState(form, false);
 				if (mode === 'redirect') {
 					alert('(Preview) Would redirect to the configured URL.');
-				} else if (mode === 'custom_message') {
-					showCustomMessage(shadow, '<em>(Preview)</em> Your custom success message would show here.');
 				} else {
 					showInlineThankYou(shadow);
 				}
@@ -1325,10 +1315,6 @@
 				const d = json.data || {};
 				if (d.mode === 'redirect' && d.redirect_url) {
 					window.location.assign(d.redirect_url);
-					return;
-				}
-				if (d.mode === 'custom_message') {
-					showCustomMessage(shadow, d.success_message);
 					return;
 				}
 				// When the reveal is optimistic it is already on screen, or is about

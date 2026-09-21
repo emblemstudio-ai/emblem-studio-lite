@@ -703,7 +703,10 @@ class ES_Ajax {
 
 		wp_send_json_success( [
 			'mode'             => $form->success_mode,
-			'success_message'  => $form->success_mode === 'custom_message' ? $form->success_message : null,
+			// The plain message is retired (SER-1419): it replaced the card with an
+			// unstyled <div>, so a signup ended as black text in the corner of the
+			// page. The asset's own thank-you state is the designed answer.
+			'success_message'  => null,
 			'redirect_url'     => $form->success_mode === 'redirect' ? $form->success_redirect_url : null,
 			'funnelkit_pushed' => (bool) $push['ok'],
 		] );

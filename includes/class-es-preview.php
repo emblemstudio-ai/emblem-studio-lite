@@ -60,7 +60,7 @@ class ES_Preview {
 		}
 		if ( isset( $_POST['preview_success_mode'] ) ) {
 			$mode = sanitize_text_field( wp_unslash( $_POST['preview_success_mode'] ) );
-			if ( in_array( $mode, [ 'inline_state', 'custom_message', 'redirect' ], true ) ) {
+			if ( in_array( $mode, [ 'inline_state', 'redirect' ], true ) ) {
 				$form->success_mode = $mode;
 			}
 		}
