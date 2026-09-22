@@ -264,7 +264,7 @@ $status_labels = [
 						<button type="button" class="es-lead-toggle" aria-expanded="false" aria-controls="es-lead-detail-<?php echo (int) $r->id; ?>"><?php esc_html_e( 'View', 'emblem-studio' ); ?></button>
 						<br>
 						<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_lead&id=' . (int) $r->id ), 'es_delete_lead_' . (int) $r->id ) ); ?>"
-						   onclick="return confirm('<?php esc_attr_e( 'Permanently delete this lead from Emblem Studio? (Contact in FunnelKit is not affected.)', 'emblem-studio' ); ?>');"
+						   onclick="return confirm('<?php esc_attr_e( 'Delete this lead from Emblem Studio? The record of what they agreed to is kept. If this person asked to have their data deleted, use Tools > Erase Personal Data instead. The FunnelKit contact is not affected.', 'emblem-studio' ); ?>');"
 						   style="color:var(--es-danger,#b32d2e);"><?php esc_html_e( 'Delete', 'emblem-studio' ); ?></a>
 					</td>
 				</tr>

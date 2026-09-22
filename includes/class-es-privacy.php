@@ -72,23 +72,90 @@ class ES_Privacy {
 	}
 
 	public function eraser( string $email, int $page = 1 ): array {
+		$lead_ids = array_map( static fn ( $lead ) => (int) $lead->id, ES_Leads::find_by_email( $email ) );
+
 		// Take this person out of the purchase records BEFORE the leads go, while
 		// there is still a lead id to find them by. An order stays with the shop,
 		// which has its own rules about keeping it; what goes is the line joining
 		// that order to this person.
 		if ( class_exists( 'ES_Purchases' ) ) {
-			foreach ( ES_Leads::find_by_email( $email ) as $lead ) {
-				ES_Purchases::forget_lead( (int) $lead->id );
+			foreach ( $lead_ids as $lead_id ) {
+				ES_Purchases::forget_lead( $lead_id );
 			}
 		}
+
+		// The proof of what they agreed to goes too (SER-1431). A normal lead
+		// delete keeps it; a request like this one is the only thing that
+		// removes it. Also found by lead id, for records written before the
+		// address was stored on them.
+		$consents = ES_Consent_Log::erase( $email, $lead_ids );
+
 		$removed = ES_Leads::delete_by_email( $email );
+
+		// On a site connected to Emblem Studio the leads live there, and this
+		// site holds only a mirror. Erasing the mirror alone would erase nothing.
+		$messages = [];
+		if ( class_exists( 'Emblem_Studio_SaaS_Connector' ) && Emblem_Studio_SaaS_Connector::is_connected() ) {
+			self::queue_saas_erasure( $email );
+			do_action( 'es_erasure_ready' );
+			// Said either way. On a connected site the leads are mostly held in
+			// Emblem Studio, so "nothing removed here" alone would read as
+			// "nothing found", which is not true.
+			$messages[] = in_array( strtolower( trim( $email ) ), self::queued_saas_erasures(), true )
+				? __( 'Emblem Studio will also erase this person from your connected dashboard the next time this site syncs.', 'emblem-studio' )
+				: __( 'Emblem Studio also erased this person from your connected dashboard.', 'emblem-studio' );
+		}
+
+		if ( $removed ) {
+			/* translators: %d: number of leads */
+			$messages[] = sprintf( _n( '%d Emblem Studio lead removed.', '%d Emblem Studio leads removed.', $removed, 'emblem-studio' ), $removed );
+		}
+		if ( $consents ) {
+			/* translators: %d: number of consent records */
+			$messages[] = sprintf( _n( '%d Emblem Studio consent record removed.', '%d Emblem Studio consent records removed.', $consents, 'emblem-studio' ), $consents );
+		}
+
 		return [
-			'items_removed'  => $removed > 0,
+			'items_removed'  => ( $removed + $consents ) > 0,
 			'items_retained' => false,
-			'messages'       => $removed
-				? [ sprintf( _n( '%d Emblem Studio lead removed.', '%d Emblem Studio leads removed.', $removed, 'emblem-studio' ), $removed ) ]
-				: [],
+			'messages'       => $messages,
 			'done'           => true,
 		];
+	}
+
+	/**
+	 * Addresses erased here that Emblem Studio still has to erase (SER-1431).
+	 *
+	 * Held only until Emblem Studio confirms, then cleared. Kept only while the
+	 * site is connected, so an address is never parked here with nobody to
+	 * send it to.
+	 */
+	public const SAAS_ERASE_OPTION = 'emblem_studio_saas_erasures';
+
+	public static function queue_saas_erasure( string $email ): void {
+		$email = strtolower( trim( $email ) );
+		if ( $email === '' ) {
+			return;
+		}
+		$queue = self::queued_saas_erasures();
+		if ( ! in_array( $email, $queue, true ) ) {
+			$queue[] = $email;
+			update_option( self::SAAS_ERASE_OPTION, $queue, false );
+		}
+	}
+
+	/** @return array<int, string> */
+	public static function queued_saas_erasures(): array {
+		return array_values( array_filter( array_map( 'strval', (array) get_option( self::SAAS_ERASE_OPTION, [] ) ) ) );
+	}
+
+	/** @param array<int, string> $done */
+	public static function clear_saas_erasures( array $done ): void {
+		$left = array_values( array_diff( self::queued_saas_erasures(), array_map( 'strval', $done ) ) );
+		if ( $left === [] ) {
+			delete_option( self::SAAS_ERASE_OPTION );
+			return;
+		}
+		update_option( self::SAAS_ERASE_OPTION, $left, false );
 	}
 }

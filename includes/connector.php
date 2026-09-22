@@ -115,6 +115,36 @@ final class Emblem_Studio_SaaS_Connector
         // moment the shop records one, and again on every periodic pull, so a
         // site that was unreachable catches up without anybody noticing.
         add_action('es_purchases_ready', [__CLASS__, 'push_purchases']);
+        // WordPress's "Erase Personal Data" ran here (SER-1431). Sent at once,
+        // and again on every periodic pull until Emblem Studio confirms.
+        add_action('es_erasure_ready', [__CLASS__, 'push_erasures']);
+    }
+
+    /* ── Erasure requests (SER-1431) ───────────────────────────────────── */
+
+    /**
+     * Tell Emblem Studio about everyone erased on this site.
+     *
+     * On a connected site the leads and the consent records live in Emblem
+     * Studio, and this site holds a mirror. WordPress's own erase tool removes
+     * the mirror, so without this the person would still be there.
+     *
+     * An address leaves the queue only once Emblem Studio has taken it, so a
+     * site that was offline sends it again later rather than dropping it.
+     */
+    public static function push_erasures(): void
+    {
+        $cfg = self::config();
+        if (! $cfg || ! class_exists('ES_Privacy')) {
+            return;
+        }
+        foreach (array_chunk(ES_Privacy::queued_saas_erasures(), 50) as $chunk) {
+            $data = self::pull_post($cfg, '/v1/embed/erase', ['emails' => array_values($chunk)]);
+            if (! is_array($data) || empty($data['ok'])) {
+                return; // Kept; the next run tries again.
+            }
+            ES_Privacy::clear_saas_erasures($chunk);
+        }
     }
 
     /* ── Live values (SER-1351) ─────────────────────────────────────────── */
@@ -1227,6 +1257,7 @@ final class Emblem_Studio_SaaS_Connector
         self::pull_leads($cfg);
         self::pull_lead_deletions($cfg);
         self::push_purchases();
+        self::push_erasures();
     }
 
     /** WP-cron tick — refresh the local copy while connected. */

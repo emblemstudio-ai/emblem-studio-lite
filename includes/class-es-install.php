@@ -249,6 +249,7 @@ class ES_Install {
 		$lead_consents = "CREATE TABLE {$prefix}emblemstudio_lead_consents (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			lead_id BIGINT(20) UNSIGNED NOT NULL,
+			email VARCHAR(191) NULL,
 			field_name VARCHAR(191) NOT NULL DEFAULT '',
 			consent_text_hash VARCHAR(64) NOT NULL,
 			checkbox_state TINYINT(1) NOT NULL,
@@ -258,7 +259,8 @@ class ES_Install {
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY lead_field (lead_id, field_name),
-			KEY consent_text_hash (consent_text_hash)
+			KEY consent_text_hash (consent_text_hash),
+			KEY email (email)
 		) $charset_collate;";
 
 		dbDelta( $forms );
@@ -1169,6 +1171,21 @@ class ES_Install {
 				$wpdb->query( "ALTER TABLE $forms ADD COLUMN track_purchases TINYINT(1) NOT NULL DEFAULT 0 AFTER track_clicks" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			}
 			update_option( 'emblem_studio_db_version', '43' );
+		}
+
+		// v44 — a consent record carries the person's email (SER-1431). It held
+		// only the lead's id, so deleting the lead left proof nobody could find.
+		// Existing records are filled in from their lead. Those whose lead is
+		// already gone cannot be: the address went with it.
+		if ( version_compare( $current, '44', '<' ) ) {
+			global $wpdb;
+			$consents = self::table( 'lead_consents' );
+			$leads    = self::table( 'leads' );
+			if ( ! $wpdb->get_var( "SHOW COLUMNS FROM {$consents} LIKE 'email'" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( "ALTER TABLE {$consents} ADD COLUMN email VARCHAR(191) NULL AFTER lead_id, ADD KEY email (email)" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			$wpdb->query( "UPDATE {$consents} c JOIN {$leads} l ON l.id = c.lead_id SET c.email = l.email WHERE c.email IS NULL AND l.email IS NOT NULL AND l.email <> ''" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			update_option( 'emblem_studio_db_version', '44' );
 		}
 	}
 

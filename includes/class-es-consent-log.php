@@ -45,6 +45,12 @@ class ES_Consent_Log {
 		// once for all of them.
 		$revision_id = self::latest_revision_id( $form_id );
 		$page_url    = $post_id ? (string) get_permalink( $post_id ) : null;
+		// The address travels with the proof (SER-1431), so it can still be found
+		// after the lead is deleted, and an erasure can find it by address. The
+		// lead row already holds it normalised, so it is read from there.
+		$leads_table = ES_Install::table( 'leads' );
+		$email       = $wpdb->get_var( $wpdb->prepare( "SELECT email FROM {$leads_table} WHERE id = %d", $lead_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$email       = is_string( $email ) && $email !== '' ? $email : null;
 
 		foreach ( $consents as $consent ) {
 			$hash = hash( 'sha256', $consent['text'] );
@@ -76,6 +82,7 @@ class ES_Consent_Log {
 
 			$wpdb->insert( $consent_table, [
 				'lead_id'           => $lead_id,
+				'email'             => $email,
 				'field_name'        => $consent['field'],
 				'consent_text_hash' => $hash,
 				'checkbox_state'    => $checked ? 1 : 0,
@@ -84,6 +91,32 @@ class ES_Consent_Log {
 				'created_at'        => current_time( 'mysql' ),
 			] );
 		}
+	}
+
+	/**
+	 * A person asked to have their data deleted (SER-1431): remove every consent
+	 * record for the address, and every one belonging to their leads.
+	 *
+	 * Deleting a lead does NOT call this. The person may still be on the email
+	 * list, and the proof of what they agreed to is needed exactly then. Only an
+	 * erasure removes it.
+	 *
+	 * @param array<int, int> $lead_ids the person's leads, found before they go
+	 * @return int consent records removed
+	 */
+	public static function erase( string $email, array $lead_ids ): int {
+		global $wpdb;
+		$table = ES_Install::table( 'lead_consents' );
+		$email = strtolower( trim( $email ) );
+		$ids   = array_values( array_filter( array_map( 'intval', $lead_ids ) ) );
+
+		$removed = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE email = %s", $email ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $ids ) {
+			$in       = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			$removed += (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE lead_id IN ({$in})", ...$ids ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+
+		return $removed;
 	}
 
 	/** The HTML actually served to this visitor: their A/B slot if one was live, else the form's own. */
