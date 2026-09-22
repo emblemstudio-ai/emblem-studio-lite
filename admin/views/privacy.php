@@ -31,18 +31,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<p>
 		<?php esc_html_e( 'Paste this into whichever category covers analytics or performance:', 'emblem-studio' ); ?>
 	</p>
-	<p>
-		<textarea readonly rows="3" class="large-text code" onclick="this.select();"><?php echo esc_textarea( __( 'esf_visitor — an anonymous, first-party cookie (about 30 days) that lets us count unique visitors and tell new visitors from returning ones. No personal data.', 'emblem-studio' ) ); ?></textarea>
-	</p>
+	<?php
+	// Click-to-copy boxes, the same as the web app's CopyBox. They used to be
+	// read-only textareas, and a textarea's corner handle let the box be dragged
+	// to any size (item 17 of Catalina's Lite test pass). These grow with the
+	// text and have nothing to drag.
+	$es_copybox = static function ( string $text ): void {
+		?>
+		<button type="button" class="es-copybox es-copy" data-es-copy="<?php echo esc_attr( $text ); ?>" title="<?php esc_attr_e( 'Click to copy', 'emblem-studio' ); ?>">
+			<code class="es-copybox-text"><?php echo esc_html( $text ); ?></code>
+			<span class="es-copybox-btn"><?php esc_html_e( 'Copy', 'emblem-studio' ); ?></span>
+		</button>
+		<?php
+	};
+	$es_copybox( __( 'esf_visitor — an anonymous, first-party cookie (about 30 days) that lets us count unique visitors and tell new visitors from returning ones. No personal data.', 'emblem-studio' ) );
+	?>
 	<p>
 		<?php esc_html_e( 'Most WordPress banners already speak a shared standard (the WP Consent API) — if yours does, this is handled automatically, nothing else to do.', 'emblem-studio' ); ?>
 	</p>
 	<p>
 		<?php esc_html_e( 'If not, paste this one line into your banner\'s "on accept" script instead:', 'emblem-studio' ); ?>
 	</p>
-	<p>
-		<textarea readonly rows="1" class="large-text code" onclick="this.select();">EmblemStudio.setAnalyticsConsent(true);</textarea>
-	</p>
+	<?php $es_copybox( 'EmblemStudio.setAnalyticsConsent(true);' ); ?>
 
 	<h2><?php esc_html_e( 'No banner yet?', 'emblem-studio' ); ?></h2>
 	<p>
