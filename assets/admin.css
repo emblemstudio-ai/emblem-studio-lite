@@ -2751,7 +2751,21 @@
 
 /* ── Forms-table type & numbers (the "feel" pass) ─────────────────── */
 /* Asset name in the display face, dusk ink, sunset on hover. */
-.emblem-studio-wrap .es-forms-table .col-name strong { font-family: var(--es-font-display); font-weight: 600; }
+/* The name stays on one line, as in the web app. With the table at 1700px+ and
+   the stat columns all nowrap, the name was the only thing the browser could
+   squeeze, so a three-word name broke over three lines (item 6 of Catalina's
+   Lite test pass). Capped at 340px, because the name sits in the pinned lane
+   and an 80-character name would pin half the screen. Past the cap it ends in
+   "…", and the full name is in the link's title. */
+.emblem-studio-wrap .es-forms-table .col-name strong { font-family: var(--es-font-display); font-weight: 600; white-space: nowrap; }
+.emblem-studio-wrap .es-forms-table .col-name .es-asset-name,
+.emblem-studio-wrap .es-forms-table .col-name .es-asset-name-trash {
+	display: inline-block;
+	max-width: 340px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: bottom;
+}
 .emblem-studio-wrap .es-forms-table .col-name strong a {
 	font-size: 14px;
 	color: var(--es-gray-900);

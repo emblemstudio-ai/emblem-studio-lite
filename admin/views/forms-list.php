@@ -494,9 +494,9 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 							<td class="col-name">
 								<strong>
 									<?php if ( $is_trash ) : ?>
-										<?php echo esc_html( $f->name ); ?>
+										<span class="es-asset-name-trash" title="<?php echo esc_attr( $f->name ); ?>"><?php echo esc_html( $f->name ); ?></span>
 									<?php else : ?>
-										<a class="es-asset-name<?php echo $lite_off ? ' es-lite-off-name' : ''; ?>" data-es-preview-id="<?php echo (int) $f->id; ?>" data-es-preview-wide="<?php echo in_array( 'ribbon', $enabled_types, true ) ? '1' : '0'; ?>" href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) ); ?>"><?php echo esc_html( $f->name ); ?></a>
+										<a class="es-asset-name<?php echo $lite_off ? ' es-lite-off-name' : ''; ?>" title="<?php echo esc_attr( $f->name ); ?>" data-es-preview-id="<?php echo (int) $f->id; ?>" data-es-preview-wide="<?php echo in_array( 'ribbon', $enabled_types, true ) ? '1' : '0'; ?>" href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) ); ?>"><?php echo esc_html( $f->name ); ?></a>
 									<?php endif; ?>
 								</strong>
 								<?php if ( ! $is_trash && $lite_off ) : ?>
