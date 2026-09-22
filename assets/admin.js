@@ -1176,6 +1176,9 @@
 		// Click-to-copy on any element marked .es-copy / [data-es-copy].
 		initCopyTargets();
 
+		// Asset list: keep the "You're editing" labels current.
+		initLockLabels();
+
 		// Success notices float in as auto-dismissing toasts (like "Asset saved").
 		initAutoCloseNotices();
 
@@ -2170,6 +2173,63 @@
 				setTimeout(function () { el.remove(); }, 280);
 			}, 2000);
 		});
+	}
+
+	// The asset list drew its "You're editing" labels once, at page load, so a
+	// label stayed after you had left the editor: you often land here a moment
+	// before the editor's release reaches the server, and Back shows the page
+	// from the browser's cache (item 7 of Catalina's Lite test pass). Ask the
+	// server again shortly after loading, every 15 seconds while the tab is in
+	// view, when the tab comes back into view, and on Back.
+	function initLockLabels() {
+		var table = document.querySelector('.es-forms-table[data-es-lock-nonce]');
+		if (!table || typeof window.ajaxurl !== 'string') return;
+		var strings = {};
+		try { strings = JSON.parse(table.getAttribute('data-es-lock-strings') || '{}'); } catch (e) {}
+
+		function badge(state) {
+			var el = document.createElement('span');
+			el.className = 'es-lock-badge' + (state.is_me ? ' is-you' : '');
+			el.title = state.is_me ? (strings.youTitle || '') : String(strings.otherTitle || '').replace('%s', state.name);
+			var icon = document.createElement('span');
+			icon.className = 'dashicons dashicons-edit';
+			icon.setAttribute('aria-hidden', 'true');
+			el.appendChild(icon);
+			el.appendChild(document.createTextNode(' ' + (state.is_me ? (strings.you || '') : String(strings.other || '').replace('%s', state.name))));
+			return el;
+		}
+
+		function refresh() {
+			var groups = table.querySelectorAll('tbody[data-es-asset-id]');
+			if (!groups.length) return;
+			var ids = [];
+			groups.forEach(function (g) { ids.push(g.getAttribute('data-es-asset-id')); });
+			var body = new URLSearchParams();
+			body.append('action', 'es_lock_states');
+			body.append('nonce', table.getAttribute('data-es-lock-nonce'));
+			body.append('ids', ids.join(','));
+			fetch(window.ajaxurl, { method: 'POST', body: body, credentials: 'same-origin' })
+				.then(function (r) { return r.json(); })
+				.then(function (j) {
+					if (!j || !j.success) return;
+					var held = j.data || {};
+					groups.forEach(function (g) {
+						var slot = g.querySelector('.es-lock-slot');
+						if (!slot) return;
+						var state = held[g.getAttribute('data-es-asset-id')];
+						slot.textContent = '';
+						if (state) slot.appendChild(badge(state));
+					});
+				})
+				.catch(function () {}); // Keep what is shown; the next round tries again.
+		}
+
+		// Twice early: the editor's release can land a moment after this page.
+		setTimeout(refresh, 1500);
+		setTimeout(refresh, 4000);
+		setInterval(function () { if (document.visibilityState === 'visible') refresh(); }, 15000);
+		document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refresh(); });
+		window.addEventListener('pageshow', function (e) { if (e.persisted) refresh(); });
 	}
 
 	function initCopyTargets() {
@@ -3171,12 +3231,15 @@
 	var submitting = false; // skip release during our own save round-trip
 	var beatTimer = null;
 
-	function post(action, cb) {
+	function post(action, cb, claimIt) {
 		var body = new URLSearchParams();
 		body.append('action', action);
 		body.append('form_id', L.formId);
 		body.append('nonce', L.nonce);
 		body.append('token', myToken);
+		// Opening or returning to the editor claims a free lock outright; a plain
+		// check-in never takes back one this tab released (ES_Locks::beat).
+		if (claimIt) body.append('claim', '1');
 		fetch(L.ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
 			.then(function (r) { return r.json(); })
 			.then(function (j) { if (cb) cb(j); })
@@ -3303,16 +3366,29 @@
 	} else {
 		// Free or mine — claim it. beat() acquires if free/mine, or reports a
 		// race where someone grabbed it between page render and now.
+		claimOnOpen();
+	}
+	function claimOnOpen() {
 		post('es_lock_beat', function (j) {
 			if (j && j.success && j.data && j.data.held === false) bootedBy(j.data.by, j.data.by_is_me);
 			else claim();
-		});
+		}, true);
 	}
 
 	// Release on leave so others don't wait out the stale timeout — but not
 	// during our own save submit (the reload re-claims it).
-	window.addEventListener('beforeunload', function () {
+	//
+	// `pagehide`, not `beforeunload`: beforeunload also fires when the
+	// unsaved-changes prompt then keeps you on the page, and a lock released
+	// there stayed released while you went on editing. pagehide fires only
+	// when the page really goes. The heartbeat stops first, and the server
+	// ignores a check-in that was already in flight (ES_Locks::beat).
+	var heldWhenLeft = false;
+	window.addEventListener('pagehide', function () {
 		if (!held || submitting) return;
+		heldWhenLeft = true;
+		held = false;
+		stopHeartbeat();
 		try {
 			var body = new URLSearchParams();
 			body.append('action', 'es_lock_release');
@@ -3321,6 +3397,11 @@
 			body.append('token', myToken);
 			navigator.sendBeacon(L.ajaxUrl, body);
 		} catch (e) {}
+	});
+	// Back (or Forward) can bring this page back from the browser's cache with
+	// the lock already released. Claim it again, as on a fresh open.
+	window.addEventListener('pageshow', function (e) {
+		if (e.persisted && heldWhenLeft) { heldWhenLeft = false; claimOnOpen(); }
 	});
 })();
 

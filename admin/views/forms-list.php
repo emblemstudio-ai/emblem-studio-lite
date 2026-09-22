@@ -298,7 +298,16 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 
 	<?php $reorder_nonce = $filter === 'all' ? wp_create_nonce( 'es_reorder_forms' ) : ''; ?>
 	<div class="es-forms-table-scroll">
-	<table class="wp-list-table widefat fixed striped es-forms-table<?php echo $filter === 'all' ? ' es-forms-reorderable' : ''; ?>"<?php echo $reorder_nonce ? ' data-reorder-nonce="' . esc_attr( $reorder_nonce ) . '"' : ''; ?>>
+	<table class="wp-list-table widefat fixed striped es-forms-table<?php echo $filter === 'all' ? ' es-forms-reorderable' : ''; ?>"<?php echo $reorder_nonce ? ' data-reorder-nonce="' . esc_attr( $reorder_nonce ) . '"' : ''; ?>
+		data-es-lock-nonce="<?php echo esc_attr( wp_create_nonce( 'es_lock' ) ); ?>"
+		data-es-lock-strings="<?php echo esc_attr( (string) wp_json_encode( [
+			'you'      => __( 'You’re editing', 'emblem-studio' ),
+			'youTitle' => __( 'You have this asset open in the editor.', 'emblem-studio' ),
+			/* translators: %s: a user's name */
+			'other'      => __( '%s is editing', 'emblem-studio' ),
+			/* translators: %s: a user's name */
+			'otherTitle' => __( '%s is editing this asset right now.', 'emblem-studio' ),
+		] ) ); ?>">
 		<thead>
 			<tr>
 				<?php if ( $filter === 'all' && ! empty( $forms ) ) : ?>
@@ -391,7 +400,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						. '</div>';
 				}
 			?>
-			<tbody class="es-form-group"<?php echo $filter === 'all' ? ' data-form-id="' . (int) $f->id . '"' : ''; ?>>
+			<tbody class="es-form-group"<?php echo $filter === 'all' ? ' data-form-id="' . (int) $f->id . '"' : ''; ?><?php echo $is_trash ? '' : ' data-es-asset-id="' . (int) $f->id . '"'; ?>>
 				<?php foreach ( $render_types as $shell ) :
 					$row_blank = ( $shell === '' );
 					$k = $row_blank ? null : ES_Reports::all_time( (int) $f->id, $shell );
@@ -543,7 +552,13 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 								<?php endif; ?>
 								<?php
 								// "Edit lock" indicator — someone currently has this asset open.
+								// Always rendered, empty when free, so the list can fill or clear
+								// it as locks change (admin.js, initLockLabels). It used to be
+								// drawn once at page load and never updated (item 7).
 								$lock_uid = $is_trash ? 0 : ES_Locks::holder_of_row( $f );
+								?>
+								<span class="es-lock-slot">
+								<?php
 								if ( $lock_uid ) :
 									$lock_is_me = ( $lock_uid === get_current_user_id() );
 									$lock_name  = ES_Locks::user_label( $lock_uid );
@@ -556,6 +571,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 										<?php echo esc_html( $lock_is_me ? __( 'You’re editing', 'emblem-studio' ) : sprintf( __( '%s is editing', 'emblem-studio' ), $lock_name ) ); ?>
 									</span>
 								<?php endif; ?>
+								</span>
 							</td>
 						<?php else : ?>
 							<td class="col-cb" aria-hidden="true"></td>

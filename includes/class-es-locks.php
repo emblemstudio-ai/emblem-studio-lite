@@ -94,13 +94,62 @@ class ES_Locks {
 	 * if the asset is currently free (my lock went stale but nobody took over).
 	 * Returns false only when ANOTHER SESSION now holds it (I've been booted).
 	 */
-	public static function beat( int $form_id, int $user_id, string $token ): bool {
+	public static function beat( int $form_id, int $user_id, string $token, bool $claim = false ): bool {
 		$h = self::holder_token( $form_id );
-		if ( $h === '' || $h === $token ) {
+		if ( $h === $token ) {
+			self::acquire( $form_id, $user_id, $token );
+			return true;
+		}
+		if ( $h === '' ) {
+			// A tab that released on leaving must not take the lock back with a
+			// check-in that was already in flight. That late check-in used to land
+			// after the release and lock the asset for another TIMEOUT, so the
+			// list kept saying "You're editing" after you had left (item 7 of
+			// Catalina's Lite test pass). Opening, reloading or returning to the
+			// editor sends $claim, which always takes a free lock.
+			if ( ! $claim && self::released_by( $form_id, $token ) ) {
+				return true;
+			}
 			self::acquire( $form_id, $user_id, $token );
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Did $token release this lock on purpose? release() clears the time and
+	 * the user but keeps the token, which is how this tells a lock its tab
+	 * handed back from one that merely went stale (a laptop asleep, say), where
+	 * re-claiming on the next check-in is still right.
+	 */
+	private static function released_by( int $form_id, string $token ): bool {
+		$row = self::row( $form_id );
+		return is_object( $row ) && empty( $row->locked_at ) && $token !== '' && (string) $row->locked_token === $token;
+	}
+
+	/**
+	 * Who holds each of these assets right now, for the asset list's labels.
+	 *
+	 * @param array<int, int> $form_ids
+	 * @return array<int, int> form id => holder user id, only for held assets
+	 */
+	public static function holders( array $form_ids ): array {
+		$ids = array_values( array_filter( array_map( 'intval', $form_ids ) ) );
+		if ( ! $ids ) {
+			return [];
+		}
+		global $wpdb;
+		$t    = self::table();
+		$in   = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, locked_by, locked_token, locked_at FROM $t WHERE id IN ($in)", ...$ids ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$out  = [];
+		foreach ( $rows as $row ) {
+			$uid = self::holder_of_row( $row );
+			if ( $uid ) {
+				$out[ (int) $row->id ] = $uid;
+			}
+		}
+		return $out;
 	}
 
 	/** Force the lock to ($user_id, $token) (the "Take over" action). */
@@ -108,12 +157,16 @@ class ES_Locks {
 		self::acquire( $form_id, $user_id, $token );
 	}
 
-	/** Release the lock, but only if $token currently holds it. */
+	/**
+	 * Release the lock, but only if $token currently holds it. The token stays
+	 * behind with no time, so a late check-in from the same tab can tell it
+	 * let go on purpose (see beat()). With no time the lock is free to anyone.
+	 */
 	public static function release( int $form_id, string $token ): void {
 		global $wpdb;
 		$wpdb->query(
 			$wpdb->prepare(
-				"UPDATE " . self::table() . " SET locked_by = NULL, locked_token = NULL, locked_at = NULL WHERE id = %d AND locked_token = %s",
+				"UPDATE " . self::table() . " SET locked_by = NULL, locked_at = NULL WHERE id = %d AND locked_token = %s",
 				$form_id,
 				$token
 			)

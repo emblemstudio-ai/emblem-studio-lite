@@ -64,6 +64,7 @@ class ES_Admin {
 		add_action( 'wp_ajax_es_lock_beat',                  [ $this, 'handle_lock_beat'              ] );
 		add_action( 'wp_ajax_es_lock_takeover',              [ $this, 'handle_lock_takeover'          ] );
 		add_action( 'wp_ajax_es_lock_release',               [ $this, 'handle_lock_release'           ] );
+		add_action( 'wp_ajax_es_lock_states',                [ $this, 'handle_lock_states'            ] );
 		// Live Checks list while the HTML/CSS is being edited (SER-1358).
 		add_action( 'wp_ajax_es_check_asset',                [ $this, 'handle_check_asset'            ] );
 		// Per-post form-exclusion metabox on page / post edit screens.
@@ -632,7 +633,9 @@ class ES_Admin {
 	/** Heartbeat: refresh my lock, or report who took it over (by name). */
 	public function handle_lock_beat(): void {
 		list( $form_id, $me, $token ) = $this->lock_request();
-		$held = ES_Locks::beat( $form_id, $me, $token );
+		// `claim` is sent when the editor opens or comes back (reload, Back);
+		// a plain check-in never takes back a lock this tab released.
+		$held = ES_Locks::beat( $form_id, $me, $token, ! empty( $_POST['claim'] ) );
 		$holder = $held ? 0 : ES_Locks::holder( $form_id );
 		wp_send_json_success( [
 			'held'    => $held,
@@ -647,6 +650,27 @@ class ES_Admin {
 		list( $form_id, $me, $token ) = $this->lock_request();
 		ES_Locks::take_over( $form_id, $me, $token );
 		wp_send_json_success();
+	}
+
+	/**
+	 * Who is editing which asset right now, for the asset list's labels. The
+	 * list drew them once, at page load, so "You're editing" stayed after you
+	 * had left the editor (item 7 of Catalina's Lite test pass). The list now
+	 * asks again shortly after loading, every 15 seconds, and on Back.
+	 */
+	public function handle_lock_states(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
+		}
+		check_ajax_referer( 'es_lock', 'nonce' );
+		$raw = isset( $_POST['ids'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['ids'] ) ) : '';
+		$ids = array_slice( array_map( 'intval', explode( ',', $raw ) ), 0, 500 );
+		$me  = get_current_user_id();
+		$out = [];
+		foreach ( ES_Locks::holders( $ids ) as $form_id => $uid ) {
+			$out[ $form_id ] = [ 'is_me' => $uid === $me, 'name' => ES_Locks::user_label( $uid ) ];
+		}
+		wp_send_json_success( (object) $out );
 	}
 
 	/** Release the lock on leaving (fired from beforeunload / sendBeacon). */

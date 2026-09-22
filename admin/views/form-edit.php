@@ -1007,7 +1007,7 @@ $check_groups = [
 					<div class="es-lite-upsell">
 						<span class="es-lite-upsell-eyebrow"><?php esc_html_e( 'Free with an account', 'emblem-studio' ); ?></span>
 						<strong><?php esc_html_e( 'Auto popup, ribbon &amp; slide-in', 'emblem-studio' ); ?></strong>
-						<p><?php esc_html_e( 'Show a form automatically — on a delay, on scroll, or on exit-intent — as a pop-up, a sticky ribbon, or a slide-in. Unlocks free when you connect an Emblem Studio account.', 'emblem-studio' ); ?></p>
+						<p><?php esc_html_e( 'Show a form automatically — on a delay, on scroll, or on exit-intent — as a popup, a sticky ribbon, or a slide-in. Unlocks free when you connect an Emblem Studio account.', 'emblem-studio' ); ?></p>
 					</div>
 				</div>
 				<?php endif; ?>
