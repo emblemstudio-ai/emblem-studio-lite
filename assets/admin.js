@@ -2137,7 +2137,14 @@
 		// toast used for "Asset saved": over the content, no close button,
 		// smooth in/out, auto-dismiss. Errors/warnings keep WP's persistent
 		// notice so they don't vanish before they're read.
-		document.querySelectorAll('.emblem-studio-wrap .notice.notice-success').forEach(function (notice) {
+		//
+		// `.inline` notices are left alone. Those are boxes placed inside the
+		// page on purpose, like the Connect tab's "Direct integration" status,
+		// and pulling one out turned a permanent status into a toast on every
+		// page load while the box vanished from its tab (item 25 of Catalina's
+		// Lite test pass). The "just happened" messages are all top-of-page
+		// dismissible notices, never inline.
+		document.querySelectorAll('.emblem-studio-wrap .notice.notice-success:not(.inline)').forEach(function (notice) {
 			var p = notice.querySelector('p');
 			var text = ((p ? p.textContent : notice.textContent) || '').trim();
 			if (!text) { return; }
