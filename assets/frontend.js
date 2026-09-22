@@ -1066,7 +1066,10 @@
 	// has not filled in properly, or null when there is nothing to complain
 	// about (including a form-less asset, which has no email field at all).
 	function findBadEmailInput(form) {
-		const input = form.querySelector('input[name="email"], input[type="email"]');
+		// The other usual names count too, as they do on the server (EmailField /
+		// ES_Field_Matcher::EMAIL_NAME_VARIANTS). A `your-email` text box used to
+		// skip this check and leave a mistyped address to the server (SER-1430).
+		const input = form.querySelector('input[name="email"], input[name="your-email"], input[name="email_address"], input[name="user_email"], input[name="e-mail"], input[type="email"]');
 		if (!input) return null;
 		return EMAIL_SHAPE.test(String(input.value || '').trim()) ? null : input;
 	}

@@ -82,16 +82,33 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 2. no_email
+		// 2. no_email: no email field the runtime can find. That is more than a
+		// field named `email`: ES_Ajax also takes the usual other names and the
+		// only email-type box on the form. This used to be an error for those,
+		// although signups through them worked (SER-1430). They hear about the
+		// name in email_misnamed at the end instead, as a warning.
+		$email_field = null;
 		if ( $is_form ) {
-			$has_email = false;
+			$input_names = [];
+			$typed       = [];
 			foreach ( $xpath->query( '//input' ) ?: [] as $input ) {
-				if ( $input instanceof DOMElement && $input->getAttribute( 'name' ) === 'email' ) {
-					$has_email = true;
-					break;
+				if ( ! $input instanceof DOMElement ) {
+					continue;
+				}
+				$name = trim( $input->getAttribute( 'name' ) );
+				if ( $name === '' ) {
+					continue;
+				}
+				$input_names[] = $name;
+				if ( strtolower( trim( $input->getAttribute( 'type' ) ) ) === 'email' && ! in_array( $name, $typed, true ) ) {
+					$typed[] = $name;
 				}
 			}
-			if ( ! $has_email ) {
+			$email_field = ES_Field_Matcher::find_by_name( $input_names, ES_Field_Matcher::EMAIL_NAME_VARIANTS );
+			if ( $email_field === null && count( $typed ) === 1 ) {
+				$email_field = $typed[0];
+			}
+			if ( $email_field === null ) {
 				$items[] = self::item(
 					'no_email',
 					'error',
@@ -378,6 +395,19 @@ class ES_Asset_Checks {
 					__( 'Add a hidden element with data-esf-thankyou. Ignore this if the asset redirects instead.', 'emblem-studio' )
 				);
 			}
+		}
+
+		// 23. email_misnamed: the address works, under a name the rules don't use.
+		// Both apps accept it (SER-1430) and nothing is lost, but every tool,
+		// mapping and AI prompt expects `email`.
+		if ( $email_field !== null && $email_field !== 'email' ) {
+			$items[] = self::item(
+				'email_misnamed',
+				'warning',
+				/* translators: %s: the email field's name */
+				sprintf( __( 'The email field is named "%s". Signups still work, but the rules expect "email".', 'emblem-studio' ), $email_field ),
+				__( 'Rename it to name="email".', 'emblem-studio' )
+			);
 		}
 
 		return $items;
