@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.25-beta';
+    const VERSION = '1.3.26-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -2465,7 +2465,7 @@ final class Emblem_Studio_SaaS_Connector
             'headers' => ['X-ESS-Roles' => wp_json_encode(self::roles())],
         ]);
         if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
-            $empty = ['data' => [], 'wp_map' => []];
+            $empty = ['data' => [], 'wp_map' => [], 'wp_keys' => []];
             set_transient(self::FORMS_TRANSIENT, $empty, 60); // brief negative cache
 
             return $empty;
@@ -2473,8 +2473,10 @@ final class Emblem_Studio_SaaS_Connector
 
         $body = json_decode((string) wp_remote_retrieve_body($res), true);
         $out  = [
-            'data'   => (is_array($body) && isset($body['data']) && is_array($body['data'])) ? $body['data'] : [],
-            'wp_map' => (is_array($body) && isset($body['wp_map']) && is_array($body['wp_map'])) ? $body['wp_map'] : [],
+            'data'    => (is_array($body) && isset($body['data']) && is_array($body['data'])) ? $body['data'] : [],
+            'wp_map'  => (is_array($body) && isset($body['wp_map']) && is_array($body['wp_map'])) ? $body['wp_map'] : [],
+            // WP id → public code (SER-1235): what a shortcode placeholder carries.
+            'wp_keys' => (is_array($body) && isset($body['wp_keys']) && is_array($body['wp_keys'])) ? $body['wp_keys'] : [],
         ];
         set_transient(self::FORMS_TRANSIENT, $out, 5 * MINUTE_IN_SECONDS);
 
@@ -2501,6 +2503,46 @@ final class Emblem_Studio_SaaS_Connector
         $map = self::fetch_embed($cfg)['wp_map'];
 
         return isset($map[$wp_id]) ? (int) $map[$wp_id] : 0;
+    }
+
+    /**
+     * A WordPress form id's public code in Emblem Studio, or '' if not known.
+     *
+     * The shortcode placeholder must carry this, never the row id from
+     * saas_form_id(): public pages stopped answering to row ids (SER-1128
+     * stage 4) for every site whose connector version said it was current, so
+     * shortcodes on exactly those sites rendered nothing (SER-1235).
+     */
+    public static function saas_form_key(int $wp_id): string
+    {
+        $cfg = self::config();
+        if (! $cfg || $wp_id <= 0) {
+            return '';
+        }
+        $keys = self::fetch_embed($cfg)['wp_keys'] ?? [];
+        $key  = isset($keys[$wp_id]) ? (string) $keys[$wp_id] : '';
+
+        return preg_match('/^[A-Za-z0-9_-]{4,64}$/', $key) ? $key : '';
+    }
+
+    /**
+     * Every WordPress form id Emblem Studio knows this site by, so a shortcode
+     * for an asset whose local copy has not synced down yet still registers.
+     *
+     * @return array<int, int>
+     */
+    public static function mapped_wp_ids(): array
+    {
+        $cfg = self::config();
+        if (! $cfg) {
+            return [];
+        }
+        $embed = self::fetch_embed($cfg);
+
+        return array_values(array_filter(array_map('intval', array_merge(
+            array_keys((array) ($embed['wp_keys'] ?? [])),
+            array_keys((array) ($embed['wp_map'] ?? []))
+        ))));
     }
 
     /* ── Inbound lead relay → local FunnelKit ──────────────────────────── */

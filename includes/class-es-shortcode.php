@@ -12,6 +12,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * registered alongside so existing content keeps working. The admin UI only
  * shows the short `es-*` form.
  *
+ * And one by public code, which is what the web app's dashboard offers
+ * (SER-1235), because it works before this site has a local copy:
+ *   [emblem-studio asset="esf_…"]
+ *   [emblem-studio-popup asset="esf_…"]click target[/emblem-studio-popup]
+ *
  * The popup-auto shell has NO shortcode — instead it's injected into
  * `wp_footer` on every front-end page for any form that has popup-auto
  * enabled. The JS in frontend.js reads the per-form trigger config from
@@ -59,7 +64,14 @@ class ES_Shortcode {
 		// because to WordPress they were not shortcodes at all (item 1 of
 		// Catalina's Lite test pass).
 		$ids = $wpdb->get_col( "SELECT id FROM $t" );
-		foreach ( (array) $ids as $raw_id ) {
+		// On a connected site, also every id Emblem Studio knows this site by,
+		// in case a page carries one whose local copy has not synced down yet.
+		if ( self::connected() ) {
+			$ids = array_merge( (array) $ids, Emblem_Studio_SaaS_Connector::mapped_wp_ids() );
+		}
+		add_shortcode( 'emblem-studio', [ $this, 'render_asset_shortcode' ] );
+		add_shortcode( 'emblem-studio-popup', [ $this, 'render_asset_shortcode' ] );
+		foreach ( array_unique( array_map( 'intval', (array) $ids ) ) as $raw_id ) {
 			$form_id = (int) $raw_id;
 			if ( $form_id <= 0 ) {
 				continue;
@@ -103,15 +115,16 @@ class ES_Shortcode {
 	}
 
 	public function render_inline( int $id ): string {
+		// Connected to a free account: render the SaaS version (live dashboard
+		// edits + SaaS stats/leads). The SaaS decides active/inactive per request.
+		// Asked before the local copy, which may not have synced down yet.
+		$saas = $this->maybe_saas_slot( $id, 'inline' );
+		if ( $saas !== null ) {
+			return $saas;
+		}
 		$form = ES_Form_Repo::find( $id );
 		if ( ! $form ) {
 			return '';
-		}
-		// Connected to a free account: render the SaaS version (live dashboard
-		// edits + SaaS stats/leads). The SaaS decides active/inactive per request.
-		$saas = $this->maybe_saas_slot( $form, 'inline' );
-		if ( $saas !== null ) {
-			return $saas;
 		}
 		if ( ! ES_Form_Repo::is_currently_active( $form ) ) {
 			return '';
@@ -130,13 +143,14 @@ class ES_Shortcode {
 			? $content
 			: esc_html__( 'Click here', 'emblem-studio' );
 
-		if ( ! $form ) {
-			return is_string( $content ) ? $content : '';
-		}
 		// Connected: render the SaaS popup (the trigger content becomes its label).
-		$saas = $this->maybe_saas_slot( $form, 'popup-click', $label );
+		// Asked before the local copy, which may not have synced down yet.
+		$saas = $this->maybe_saas_slot( $id, 'popup-click', $label );
 		if ( $saas !== null ) {
 			return $saas;
+		}
+		if ( ! $form ) {
+			return is_string( $content ) ? $content : '';
 		}
 		if ( ! ES_Form_Repo::is_currently_active( $form ) ) {
 			return is_string( $content ) ? $content : '';
@@ -157,19 +171,71 @@ class ES_Shortcode {
 	 * Only present in the Lite build (the connector ships there); the Full plugin
 	 * has no connector class, so this is always null and rendering is unchanged.
 	 */
-	private function maybe_saas_slot( object $form, string $shell, string $label = '' ): ?string {
-		if ( ! class_exists( 'Emblem_Studio_SaaS_Connector' ) || ! Emblem_Studio_SaaS_Connector::is_connected() ) {
+	private function maybe_saas_slot( int $wp_id, string $shell, string $label = '' ): ?string {
+		if ( ! self::connected() ) {
 			return null;
 		}
-		$saas_id = Emblem_Studio_SaaS_Connector::saas_form_id( (int) $form->id );
-		if ( $saas_id <= 0 ) {
+		// The asset's public code, never the SaaS row id (SER-1235). Public
+		// pages stopped answering to the row id (SER-1128 stage 4), and they
+		// stopped for exactly the sites whose connector reported itself current,
+		// so every shortcode on a connected site rendered nothing. The row id is
+		// kept only for a SaaS too old to send codes.
+		$key = Emblem_Studio_SaaS_Connector::saas_form_key( $wp_id );
+		if ( $key === '' ) {
+			$saas_id = Emblem_Studio_SaaS_Connector::saas_form_id( $wp_id );
+			$key     = $saas_id > 0 ? (string) $saas_id : '';
+		}
+		if ( $key === '' ) {
 			return null; // not mirrored/mapped yet — fall back to local
 		}
+		return self::saas_slot( $key, $shell, $label );
+	}
 
+	private static function connected(): bool {
+		return class_exists( 'Emblem_Studio_SaaS_Connector' ) && Emblem_Studio_SaaS_Connector::is_connected();
+	}
+
+	/** The placeholder the SaaS embed script fills in, for one asset and shell. */
+	private static function saas_slot( string $key, string $shell, string $label = '' ): string {
 		if ( $shell === 'popup-click' ) {
-			return '<div data-es-form="' . $saas_id . '" data-es-shell="popup-click">' . wp_kses_post( $label ) . '</div>';
+			return '<div data-es-form="' . esc_attr( $key ) . '" data-es-shell="popup-click">' . wp_kses_post( $label ) . '</div>';
 		}
-		return '<div data-es-form="' . $saas_id . '" data-es-shell="inline"></div>';
+		return '<div data-es-form="' . esc_attr( $key ) . '" data-es-shell="inline"></div>';
+	}
+
+	/**
+	 * [emblem-studio asset="esf_…"] and
+	 * [emblem-studio-popup asset="esf_…"]Link text[/emblem-studio-popup]
+	 *
+	 * Keyed by the asset's public code, the one the dashboard shows (SER-1235),
+	 * so it works the moment the asset exists in Emblem Studio: no waiting for
+	 * this site to sync a local copy and number it. A number instead of a code
+	 * means this site's own asset, the same as [es-inline-N].
+	 *
+	 * Two names, not one with a shell="" switch. WordPress pairs a lone
+	 * [emblem-studio] with the next [/emblem-studio] it finds, so an inline one
+	 * above a popup one swallowed the popup and everything between them. That
+	 * is why the old pair was es-inline and es-popup too.
+	 *
+	 * Without a connection there is nothing to fetch a code from, so an inline
+	 * asset shows nothing and a click popup keeps its link text.
+	 *
+	 * @param array<string, string>|string $atts
+	 */
+	public function render_asset_shortcode( $atts, $content = null, $tag = 'emblem-studio' ): string {
+		$atts  = shortcode_atts( [ 'asset' => '' ], is_array( $atts ) ? $atts : [], (string) $tag );
+		$key   = trim( (string) $atts['asset'] );
+		$shell = $tag === 'emblem-studio-popup' ? 'popup-click' : 'inline';
+		$text  = is_string( $content ) ? $content : '';
+
+		if ( ctype_digit( $key ) ) {
+			return $shell === 'popup-click' ? $this->render_popup_click( (int) $key, $content ) : $this->render_inline( (int) $key );
+		}
+		if ( ! preg_match( '/^[A-Za-z0-9_-]{4,64}$/', $key ) || ! self::connected() ) {
+			return $shell === 'popup-click' ? $text : '';
+		}
+		$label = trim( wp_strip_all_tags( $text ) ) !== '' ? $text : esc_html__( 'Click here', 'emblem-studio' );
+		return self::saas_slot( $key, $shell, $label );
 	}
 
 	/**
