@@ -2827,6 +2827,13 @@
 }
 .emblem-studio-wrap .es-forms-table.es-forms-reorderable { --es-lane-drag: 26px; }
 
+/* `.widefat` sets overflow: hidden to round the corners, and that makes the
+   table its own scroll box. A sticky cell pins to the nearest scroll box, and
+   this one never scrolls, so the lane silently stopped pinning and slid away
+   with the stats. `clip` rounds the corners without being a scroll box, so
+   the lane pins to .es-forms-table-scroll, which is the one that scrolls. */
+.emblem-studio-wrap .wp-list-table.es-forms-table { overflow: clip; }
+
 .emblem-studio-wrap .es-forms-table .col-drag,
 .emblem-studio-wrap .es-forms-table .col-cb,
 .emblem-studio-wrap .es-forms-table .col-name {
@@ -2841,6 +2848,11 @@
 .emblem-studio-wrap .es-forms-table .col-drag { left: 0; }
 .emblem-studio-wrap .es-forms-table .col-cb {
 	left: var(--es-lane-drag);
+	/* The padding and border count inside the width. Without this the cell came
+	   out 47px (34 plus the table's 6px padding each side, plus the border),
+	   the name's `left` still assumed 34, and the pinned name slid 13px over
+	   the checkboxes. */
+	box-sizing: border-box;
 	width: var(--es-lane-cb);
 	min-width: var(--es-lane-cb);
 	max-width: var(--es-lane-cb);
