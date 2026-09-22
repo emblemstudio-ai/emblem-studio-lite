@@ -78,6 +78,7 @@
 		confirmAction: null, // callback to run if the confirmation is accepted
 		cards: [],         // rendered rule cards (for the cascade/cross pass)
 		editSelector: null, // selector of the focused rule editor (sticky highlight)
+		lastCssScrollUid: null, // selection the All view last auto-scrolled to (item 9)
 		hoverSelector: null, // selector being hovered (temporary highlight)
 		htmlEditing: false, // true while the Edit-HTML panel is open
 		htmlCm: null,      // the HTML editor instance
@@ -482,6 +483,7 @@
 		window.addEventListener('focus', onVisibilityRefresh);
 		pushUrlState();
 		state.selection = null;
+		state.lastCssScrollUid = null;
 		state.lastMatches = [];
 		state.pinned = [];
 		state.focusSelector = null;
@@ -551,6 +553,7 @@
 		state.overlay = null;
 		state.iframe = null;
 		state.selection = null;
+		state.lastCssScrollUid = null;
 		state.confirming = false;
 		state.confirmAction = null;
 		state.htmlEditing = false;
@@ -672,6 +675,7 @@
 			// Clicked empty space → clear the selection everywhere.
 			state.selection = null;
 			state.lastMatches = [];
+			state.lastCssScrollUid = null; // picking it again scrolls again
 			highlightTreeRow(null);
 			if (state.htmlView === 'html') highlightHtml(null);
 			updateCssHead(null);
@@ -761,6 +765,7 @@
 	// Clear the selection + CSS panel (the tree is rebuilt by the next READY).
 	function resetCanvasSelection() {
 		state.selection = null;
+		state.lastCssScrollUid = null;
 		state.lastMatches = [];
 		clearHighlights();
 		clearHtmlHighlight();
@@ -1425,6 +1430,40 @@
 			crossAllText(cm, matched);
 		});
 		updateRuler(matched);
+		scrollAllToFirstRule(matched);
+	}
+
+	// A selector whose last step is the universal `*` (`.co *`, `*`): it matches
+	// every element, so it says nothing about the one picked.
+	function isCatchAll(part) {
+		var steps = String(part || '').trim().split(/\s*[>+~]\s*|\s+/);
+		return /^\*(?::{1,2}[\w-]+(?:\([^)]*\))?)*$/.test(steps[steps.length - 1] || '');
+	}
+
+	// Centre the All view on the element's first rule for a NEW selection, as the
+	// HTML view centres on the element (item 9 of Catalina's Lite test pass).
+	// "First" skips a catch-all like `.co *`, which matches every element, sits
+	// near the top, and so would never move the view; it also skips :hover-style
+	// and @media rules, which are not how the element looks by default. With
+	// nothing else it falls back to the first match. Once per selection, so
+	// editing or re-matching never yanks the view away. Same rule as the web app.
+	function scrollAllToFirstRule(matched) {
+		var cm = state.allCm, sel = state.selection;
+		if (!cm || !sel || !matched || state.lastCssScrollUid === sel.uid) return;
+		var target = null, fallback = null;
+		for (var i = 0; i < state.rules.length; i++) {
+			var r = state.rules[i], m = matched[i];
+			if (r.type !== 'style' || !m) continue;
+			if (fallback === null) fallback = r;
+			if (!m.viaState && !r.media && !isCatchAll(m.part)) { target = r; break; }
+		}
+		var rule = target || fallback;
+		if (!rule) return;
+		state.lastCssScrollUid = sel.uid;
+		try {
+			var top = cm.charCoords(cm.posFromIndex(rule.start), 'local').top;
+			cm.scrollTo(null, Math.max(0, top - cm.getScrollInfo().clientHeight / 2));
+		} catch (e) {}
 	}
 
 	// Place a clickable marker on the right-edge ruler for each rule that
