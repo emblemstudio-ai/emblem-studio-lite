@@ -1755,7 +1755,14 @@
 			'.esf-popup-overlay::-webkit-scrollbar-thumb:hover{background:rgba(150,150,150,0.5);}' +
 			'.esf-popup-overlay::-webkit-scrollbar-button{display:none;width:0;height:0;}' +
 			'.esf-popup-overlay::-webkit-scrollbar-corner{background:transparent;}' +
-			'.esf-popup-content[data-fullscreen="1"]{height:100vh;overflow:auto;-webkit-overflow-scrolling:touch;}' +
+			// A short card in a full-screen popup sits in the MIDDLE, like a normal
+			// popup's. It used to sit hard against the top of the screen (Alex's call,
+			// 22 Sept, item 11 of Catalina's test pass). `safe center` falls back to the
+			// top once the card is taller than the screen, so it still scrolls from its
+			// start. The host stretches across, so a design that fills the screen still
+			// fills it. Full screen still never closes on a click outside: a full-screen
+			// design has no outside, and the choice is the same for both.
+			'.esf-popup-content[data-fullscreen="1"]{height:100vh;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;justify-content:safe center;}' +
 			'.esf-popup-close{all:revert!important;' +
 			'position:absolute!important;top:12px!important;right:12px!important;z-index:10!important;' +
 			'width:26px!important;height:26px!important;min-width:0!important;min-height:0!important;' +

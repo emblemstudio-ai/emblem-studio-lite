@@ -411,7 +411,7 @@ class ES_Preview {
 			: '';
 
 		$position_css = $is_fullscreen
-			? 'body{display:block;}.esf-host{display:block;width:100%;min-height:100vh;}'
+			? 'body{display:block;}.esf-host{display:block;width:100%;}'
 			: self::position_css( $position );
 
 		// Synthesized close button (chrome — excluded from the layer tree).
@@ -699,7 +699,10 @@ JS;
 	 */
 	private static function inspector_shell_wrap_css( string $shell, bool $is_fullscreen, int $max_width = 720 ): string {
 		if ( $is_fullscreen ) {
-			return '.esf-inspect-shell{position:relative!important;display:block!important;width:100%!important;}';
+			// Full screen: a column as tall as the frame, with the card in its middle,
+			// as live. safe center falls back to the top for a card taller than the
+			// frame, and a design that fills the screen still fills it (item 11).
+			return '.esf-inspect-shell{position:relative!important;display:flex!important;flex-direction:column!important;justify-content:safe center!important;width:100%!important;min-height:100vh!important;}';
 		}
 		if ( $shell === 'ribbon' || $shell === 'inline' ) {
 			return '.esf-inspect-shell{position:relative!important;width:100%!important;}';
