@@ -219,11 +219,12 @@ $status_labels = [
 					: ( $is_bot_row ? esc_attr__( 'Honeypot field was filled — submission blocked. Not sent to FunnelKit or webhooks.', 'emblem-studio' ) : '' );
 			?>
 				<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?><?php echo $row_title ? ' title="' . $row_title . '"' : ''; ?>>
-					<td>
+					<?php $display_name = ES_Leads::display_name( $r->extra_fields ); ?>
+					<td class="es-leads-col-name" title="<?php echo esc_attr( $display_name ); ?>">
 						<?php if ( $is_bot_row ) : ?><span class="es-bot-tag" aria-label="<?php esc_attr_e( 'Bot lead', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Caught by the hidden honeypot field — not sent to your CRM.', 'emblem-studio' ); ?>"><?php esc_html_e( 'BOT', 'emblem-studio' ); ?></span> <?php endif; ?>
-						<?php echo esc_html( ES_Leads::display_name( $r->extra_fields ) ); ?>
+						<?php echo esc_html( $display_name ); ?>
 					</td>
-					<td><?php echo esc_html( $r->email ); ?></td>
+					<td class="es-leads-col-email" title="<?php echo esc_attr( (string) $r->email ); ?>"><?php echo esc_html( $r->email ); ?></td>
 					<td class="es-leads-col-form">
 						<?php if ( $r->form_id ) : ?>
 							<a href="<?php echo esc_url( add_query_arg( 'form_id', (int) $r->form_id, $base_url ) ); ?>"><?php echo esc_html( $r->form_name ); ?></a>

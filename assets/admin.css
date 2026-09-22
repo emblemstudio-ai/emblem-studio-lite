@@ -4622,6 +4622,15 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+/* Name and Email the same way, with the full text in the cell's title. A long
+   name with no spaces broke over several lines and made one row very tall
+   (item 14 of Catalina's Lite test pass). */
+.emblem-studio-wrap .es-leads-col-name,
+.emblem-studio-wrap .es-leads-col-email {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
 
 /* ============================================================
  * Forms list — drag-reorder handle column
