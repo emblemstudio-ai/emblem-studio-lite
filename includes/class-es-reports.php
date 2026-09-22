@@ -797,17 +797,23 @@ class ES_Reports {
 		return $min ? substr( (string) $min, 0, 10 ) : null;
 	}
 
+	/**
+	 * People, not bots. Both lead counts leave out rows the bot filter caught,
+	 * as the web app's Reports::leadsInRange() does. They used to count them,
+	 * so "Leads (7d)" on the asset list showed a bigger number here than the
+	 * web app did for the same site (item 28 of Catalina's Lite test pass).
+	 */
 	public static function total_leads(): int {
 		global $wpdb;
 		$leads = ES_Install::table( 'leads' );
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $leads" );
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $leads WHERE is_bot = 0" );
 	}
 
 	public static function leads_in_range( string $from, string $to ): int {
 		global $wpdb;
 		$leads = ES_Install::table( 'leads' );
 		return (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM $leads WHERE created_at >= %s AND created_at <= %s",
+			"SELECT COUNT(*) FROM $leads WHERE is_bot = 0 AND created_at >= %s AND created_at <= %s",
 			self::pad_dt( $from, 'start' ), self::pad_dt( $to, 'end' )
 		) );
 	}
