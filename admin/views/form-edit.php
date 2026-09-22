@@ -1726,20 +1726,39 @@ $check_groups = [
 					<?php esc_html_e( 'Times are on this site’s clock. A change runs on the first page load after its time, so on a quiet site it may run a few minutes late. It runs late rather than not at all.', 'emblem-studio' ); ?>
 				</p>
 
-				<?php if ( ! $sched_ab ) : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="es-sched-new" style="margin:1em 0; padding:1em; border:1px solid #dcdcde; background:#fff;">
-					<input type="hidden" name="action" value="es_schedule_change">
-					<input type="hidden" name="form_id" value="<?php echo (int) $f->id; ?>">
-					<?php wp_nonce_field( 'es_schedule_change_' . (int) $f->id ); ?>
+				<?php
+				/*
+				 * NOT a <form>. This sits inside the editor's own form, and a form
+				 * inside a form does not exist in HTML: the browser drops the inner
+				 * tag and folds its fields into the editor's. The required date then
+				 * blocked every Save with no message ("An invalid form control ...
+				 * is not focusable"), and the extra `action` and `_wpnonce` would
+				 * have sent a Save to the scheduler anyway. Broken from 1.3.36
+				 * until 1.3.80, on every edition that shows this tab.
+				 *
+				 * So the fields name their form with `form=`, and the empty forms
+				 * are printed after the editor's closes (es_subforms, bottom of
+				 * this file). Same for the per-revision "Schedule this version".
+				 */
+				$es_subforms = $es_subforms ?? [];
+				?>
+				<?php if ( ! $sched_ab ) :
+					$es_sf         = 'es-sched-new-form';
+					$es_subforms[] = $es_sf;
+				?>
+				<div class="es-sched-new" style="margin:1em 0; padding:1em; border:1px solid #dcdcde; background:#fff;">
+					<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="action" value="es_schedule_change">
+					<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="form_id" value="<?php echo (int) $f->id; ?>">
+					<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="_wpnonce" value="<?php echo esc_attr( wp_create_nonce( 'es_schedule_change_' . (int) $f->id ) ); ?>">
 					<p style="margin:0 0 .6em;"><strong><?php esc_html_e( 'Schedule the form’s current content for a date', 'emblem-studio' ); ?></strong></p>
 					<p class="description" style="margin:0 0 .8em;"><?php esc_html_e( 'Save your edits first, then queue them here. The live form keeps what it has until the date you pick.', 'emblem-studio' ); ?></p>
 					<label style="margin-right:1em;">
 						<?php esc_html_e( 'When', 'emblem-studio' ); ?>
-						<input type="datetime-local" name="apply_at" required>
+						<input type="datetime-local" form="<?php echo esc_attr( $es_sf ); ?>" name="apply_at" required>
 					</label>
 					<label style="margin-right:1em;">
 						<?php esc_html_e( 'Name', 'emblem-studio' ); ?>
-						<input type="text" name="change_name" maxlength="191" placeholder="<?php esc_attr_e( 'Plain thank-you, no sale', 'emblem-studio' ); ?>">
+						<input type="text" form="<?php echo esc_attr( $es_sf ); ?>" name="change_name" maxlength="191" placeholder="<?php esc_attr_e( 'Plain thank-you, no sale', 'emblem-studio' ); ?>">
 					</label>
 					<?php
 					// "Schedule revision", not "Schedule". The Settings tab on this
@@ -1747,8 +1766,8 @@ $check_groups = [
 					// is the form's own start and end dates. The bare word here
 					// would read as the same thing.
 					?>
-					<button type="submit" class="button button-primary"><?php esc_html_e( 'Schedule revision', 'emblem-studio' ); ?></button>
-				</form>
+					<button type="submit" form="<?php echo esc_attr( $es_sf ); ?>" class="button button-primary"><?php esc_html_e( 'Schedule revision', 'emblem-studio' ); ?></button>
+				</div>
 				<?php endif; ?>
 
 				<?php if ( empty( $scheduled ) ) : ?>
@@ -1947,16 +1966,18 @@ $check_groups = [
 										<?php if ( ! $ab_running ) : ?>
 											<a href="<?php echo esc_url( $restore_as_variant_url ); ?>" class="button es-revision-restore-as-variant" title="<?php esc_attr_e( 'Start a new A/B test using this revision as variant B; the current design becomes variant A.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Restore as variant', 'emblem-studio' ); ?></a>
 										<?php endif; ?>
-										<?php if ( ! $sched_ab ) : ?>
+										<?php if ( ! $sched_ab ) :
+											// Not a <form> either: see the note on .es-sched-new above.
+											$es_sf         = 'es-sched-rev-' . (int) $rev->id;
+											$es_subforms[] = $es_sf;
+										?>
 											<span class="es-revision-schedule" style="display:inline-flex; align-items:center; gap:.3em;">
-												<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline-flex; align-items:center; gap:.3em;">
-													<input type="hidden" name="action" value="es_schedule_change">
-													<input type="hidden" name="form_id" value="<?php echo (int) $f->id; ?>">
-													<input type="hidden" name="revision_id" value="<?php echo (int) $rev->id; ?>">
-													<?php wp_nonce_field( 'es_schedule_change_' . (int) $f->id ); ?>
-													<input type="datetime-local" name="apply_at" required aria-label="<?php esc_attr_e( 'Put this version back at', 'emblem-studio' ); ?>">
-													<button type="submit" class="button" title="<?php esc_attr_e( 'Put this version back on a date you choose, instead of now.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Schedule this version', 'emblem-studio' ); ?></button>
-												</form>
+												<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="action" value="es_schedule_change">
+												<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="form_id" value="<?php echo (int) $f->id; ?>">
+												<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="revision_id" value="<?php echo (int) $rev->id; ?>">
+												<input type="hidden" form="<?php echo esc_attr( $es_sf ); ?>" name="_wpnonce" value="<?php echo esc_attr( wp_create_nonce( 'es_schedule_change_' . (int) $f->id ) ); ?>">
+												<input type="datetime-local" form="<?php echo esc_attr( $es_sf ); ?>" name="apply_at" required aria-label="<?php esc_attr_e( 'Put this version back at', 'emblem-studio' ); ?>">
+												<button type="submit" form="<?php echo esc_attr( $es_sf ); ?>" class="button" title="<?php esc_attr_e( 'Put this version back on a date you choose, instead of now.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Schedule this version', 'emblem-studio' ); ?></button>
 											</span>
 										<?php endif; ?>
 										<a href="<?php echo esc_url( $export_revision_url ); ?>" class="button" title="<?php esc_attr_e( 'Download this revision as a JSON file. Uses the revision\'s HTML/CSS plus the form\'s current settings.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Export', 'emblem-studio' ); ?></a>
@@ -2134,4 +2155,13 @@ $check_groups = [
 			<?php endif; ?>
 		</section>
 	</form>
+	<?php
+	// The schedule forms, outside the editor's form (see .es-sched-new). Their
+	// fields sit up in the Revisions tab and point here with `form=`.
+	foreach ( $es_subforms ?? [] as $es_sf ) :
+		?>
+		<form id="<?php echo esc_attr( $es_sf ); ?>" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" hidden></form>
+		<?php
+	endforeach;
+	?>
 </div>

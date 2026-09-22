@@ -9,6 +9,24 @@ class ES_Form_Repo {
 	const CLOSE_THEMES = [ 'light', 'dark', 'auto' ];
 
 	/**
+	 * An asset name as typed: one line, trimmed, at most 191 characters.
+	 *
+	 * It used to go through sanitize_text_field, which removes anything that
+	 * looks like an HTML tag. "Offer <b>new</b>" was saved as "Offer new" with
+	 * no word, while the web app kept it as typed, so one asset read two ways
+	 * (item 20 of Catalina's Lite test pass). A name is plain text and every
+	 * place that shows it escapes it, so the brackets are safe to keep.
+	 *
+	 * @param mixed $raw
+	 */
+	public static function clean_name( $raw ): string {
+		$name = wp_check_invalid_utf8( is_scalar( $raw ) ? (string) $raw : '' );
+		$name = preg_replace( '/[\r\n\t\x00-\x08\x0B\x0C\x0E-\x1F]+/', ' ', $name ) ?? '';
+		$name = trim( preg_replace( '/ {2,}/', ' ', $name ) ?? '' );
+		return mb_substr( $name, 0, 191 );
+	}
+
+	/**
 	 * One close-button theme, clamped to the three that exist.
 	 *
 	 * 'auto' works its colour out from what is behind the button (see
@@ -642,7 +660,7 @@ class ES_Form_Repo {
 			return [];
 		};
 
-		$name = isset( $data['name'] ) ? sanitize_text_field( (string) $data['name'] ) : '';
+		$name = isset( $data['name'] ) ? self::clean_name( $data['name'] ) : '';
 		if ( $name === '' ) {
 			$name = __( 'Imported form', 'emblem-studio' );
 		}

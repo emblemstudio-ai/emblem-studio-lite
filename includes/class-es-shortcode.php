@@ -17,8 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * enabled. The JS in frontend.js reads the per-form trigger config from
  * the bootstrap element and opens the modal when a trigger fires.
  *
- * Other shells are only registered when the form has them enabled in its
- * `form_types` config. A disabled shell renders nothing — "strict mode".
+ * Both shortcodes are registered for every asset. A shell the asset has
+ * switched off, or an asset that is inactive, trashed or archived, renders
+ * nothing (a click popup keeps its link text) — "strict mode". Registering
+ * only the live ones printed the others as raw code (item 1).
  *
  * Forms are mounted into a Shadow DOM by frontend.js (see assets/frontend.js).
  */
@@ -35,6 +37,10 @@ class ES_Shortcode {
 
 	public function __construct() {
 		add_action( 'init', [ $this, 'register_per_form_shortcodes' ] );
+		// After do_shortcode (priority 11): whatever is left belongs to an asset
+		// that no longer exists.
+		add_filter( 'the_content', [ $this, 'strip_orphan_shortcodes' ], 12 );
+		add_filter( 'widget_text_content', [ $this, 'strip_orphan_shortcodes' ], 12 );
 		// Auto-injected shells (popup-auto / ribbon / slide-in) are account-gated
 		// and live in ES_Auto_Shells, which registers its own wp_footer hook when
 		// the capability is on (and is absent entirely from the Lite build).
@@ -46,33 +52,54 @@ class ES_Shortcode {
 		}
 		global $wpdb;
 		$t = ES_Install::table( 'forms' );
-		// Trashed/archived forms don't render — their shortcodes are not registered.
-		$rows = $wpdb->get_results( "SELECT id, form_types FROM $t WHERE trashed_at IS NULL AND archived_at IS NULL" );
-		foreach ( (array) $rows as $row ) {
-			$form_id = (int) $row->id;
+		// EVERY asset's shortcodes are registered, trashed, archived and with the
+		// shell switched off included. The render methods already show nothing
+		// for those (a click popup keeps its link text, on purpose). Registering
+		// only the live ones left the rest as raw "[es-inline-12]" on the page,
+		// because to WordPress they were not shortcodes at all (item 1 of
+		// Catalina's Lite test pass).
+		$ids = $wpdb->get_col( "SELECT id FROM $t" );
+		foreach ( (array) $ids as $raw_id ) {
+			$form_id = (int) $raw_id;
 			if ( $form_id <= 0 ) {
 				continue;
 			}
-			$types = is_string( $row->form_types ) ? json_decode( $row->form_types, true ) : null;
-			if ( ! is_array( $types ) ) {
-				$types = [ 'inline' ];
-			}
+			$inline_cb = function () use ( $form_id ) {
+				return $this->render_inline( $form_id );
+			};
+			add_shortcode( 'es-inline-' . $form_id, $inline_cb );
+			add_shortcode( 'emblem-studio-inline-' . $form_id, $inline_cb ); // legacy alias
 
-			if ( in_array( 'inline', $types, true ) ) {
-				$inline_cb = function () use ( $form_id ) {
-					return $this->render_inline( $form_id );
-				};
-				add_shortcode( 'es-inline-' . $form_id, $inline_cb );
-				add_shortcode( 'emblem-studio-inline-' . $form_id, $inline_cb ); // legacy alias
-			}
-			if ( in_array( 'popup-click', $types, true ) ) {
-				$popup_cb = function ( $atts, $content = null ) use ( $form_id ) {
-					return $this->render_popup_click( $form_id, $content );
-				};
-				add_shortcode( 'es-popup-' . $form_id, $popup_cb );
-				add_shortcode( 'emblem-studio-popup-' . $form_id, $popup_cb ); // legacy alias
-			}
+			$popup_cb = function ( $atts, $content = null ) use ( $form_id ) {
+				return $this->render_popup_click( $form_id, $content );
+			};
+			add_shortcode( 'es-popup-' . $form_id, $popup_cb );
+			add_shortcode( 'emblem-studio-popup-' . $form_id, $popup_cb ); // legacy alias
 		}
+	}
+
+	/**
+	 * Shortcodes for an asset deleted for good. Its id is gone, so there is
+	 * nothing to register and WordPress would print the raw code. An inline
+	 * asset leaves nothing; a click popup leaves its link text, the same as an
+	 * inactive one.
+	 */
+	public function strip_orphan_shortcodes( $content ) {
+		if ( ! is_string( $content ) || strpos( $content, '[e' ) === false ) {
+			return $content;
+		}
+		// A code whose shortcode still exists was written on purpose, escaped as
+		// [[es-inline-5]] to show the code itself. Only a deleted asset's goes.
+		$content = preg_replace_callback(
+			'/\[(es|emblem-studio)-popup-(\d+)\](.*?)\[\/\1-popup-\2\]/s',
+			static fn ( $m ) => shortcode_exists( $m[1] . '-popup-' . $m[2] ) ? $m[0] : $m[3],
+			$content
+		) ?? $content;
+		return preg_replace_callback(
+			'/\[(es|emblem-studio)-(inline|popup)-(\d+)\s*\/?\]/',
+			static fn ( $m ) => shortcode_exists( $m[1] . '-' . $m[2] . '-' . $m[3] ) ? $m[0] : '',
+			$content
+		) ?? $content;
 	}
 
 	public function render_inline( int $id ): string {

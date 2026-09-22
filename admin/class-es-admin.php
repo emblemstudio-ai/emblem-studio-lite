@@ -1438,7 +1438,8 @@ class ES_Admin {
 		if ( ! $form || ! isset( $form->name ) ) {
 			return $admin_title;
 		}
-		$custom = sprintf( 'ES %d - %s', $id, wp_strip_all_tags( (string) $form->name ) );
+		// The name as typed; WordPress escapes the whole title when it prints it.
+		$custom = sprintf( 'ES %d - %s', $id, (string) $form->name );
 		return str_replace( $title, $custom, $admin_title );
 	}
 
@@ -1565,7 +1566,7 @@ class ES_Admin {
 			);
 		}
 
-		$name = sanitize_text_field( wp_unslash( $_POST['name'] ?? '' ) );
+		$name = ES_Form_Repo::clean_name( wp_unslash( $_POST['name'] ?? '' ) );
 		if ( $name === '' ) {
 			$name = 'Untitled form';
 		}
