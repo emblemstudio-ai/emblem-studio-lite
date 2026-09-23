@@ -2520,16 +2520,21 @@
 			}
 			suggEl.style.display = '';
 			suggEl.innerHTML = '';
+			// Two groups, not a label on each tag: where a tag sits says what it
+			// is. getMatches() lists FunnelKit's own first, so one heading each.
+			var lastGroup = null;
 			matches.forEach(function (name, i) {
+				var group = isPending(name) ? 'From your assets' : 'In FunnelKit';
+				if (group !== lastGroup) {
+					lastGroup = group;
+					var head = document.createElement('div');
+					head.className = 'es-tag-suggestion-group';
+					head.textContent = group;
+					suggEl.appendChild(head);
+				}
 				var item = document.createElement('div');
 				item.className = 'es-tag-suggestion' + (i === highlightIdx ? ' is-active' : '');
 				item.textContent = name;
-				if (isPending(name)) {
-					var note = document.createElement('span');
-					note.className = 'es-tag-suggestion-note';
-					note.textContent = 'not created yet';
-					item.appendChild(note);
-				}
 				item.addEventListener('mousedown', function (e) {
 					e.preventDefault();
 					addTag(name);

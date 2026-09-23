@@ -2500,12 +2500,16 @@
 	font-weight: 600;
 	color: #1d2327;
 }
-/* A tag one of this site's assets already names, which FunnelKit does not have
-   yet: it is created there on the first signup that carries it (SER-1464). */
-.emblem-studio-wrap .es-tag-suggestion-note {
-	margin-left: 6px;
+/* Two groups in the list: FunnelKit's own tags, then the ones this site's other
+   assets name, which FunnelKit gets on the first signup carrying them
+   (SER-1464). The heading says which is which, so no tag needs a label. */
+.emblem-studio-wrap .es-tag-suggestion-group {
+	padding: 6px 10px 2px;
 	color: var(--es-text-muted);
-	font-size: 11px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 }
 /* "Beta users" exists and you typed "beta users". */
 .emblem-studio-wrap .es-tag-warning {
