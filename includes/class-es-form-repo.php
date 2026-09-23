@@ -67,6 +67,40 @@ class ES_Form_Repo {
 	}
 
 	/**
+	 * Every FunnelKit tag name this site's assets carry, once each (SER-1464).
+	 *
+	 * A tag is created in FunnelKit only on the first signup that carries it,
+	 * so a tag typed on one asset exists nowhere to pick from until then. The
+	 * editor offers these alongside FunnelKit's own, marked as not created yet,
+	 * so the next asset gets the same spelling instead of "beta users " with a
+	 * stray space. Nothing is written to FunnelKit for them.
+	 *
+	 * @return array<int, string>
+	 */
+	public static function all_funnelkit_tags(): array {
+		global $wpdb;
+		$rows = (array) $wpdb->get_col( 'SELECT funnelkit_tags FROM ' . self::table() . " WHERE funnelkit_tags IS NOT NULL AND funnelkit_tags <> ''" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$out  = [];
+		foreach ( $rows as $raw ) {
+			$tags = json_decode( (string) $raw, true );
+			foreach ( (array) ( is_array( $tags ) ? $tags : [] ) as $tag ) {
+				$name = trim( (string) $tag );
+				$key  = self::tag_key( $name );
+				if ( $name !== '' && ! isset( $out[ $key ] ) ) {
+					$out[ $key ] = $name;
+				}
+			}
+		}
+		sort( $out ); // Also drops the keys, which were only there to de-duplicate.
+		return $out;
+	}
+
+	/** One tag under one key, so case and stray spaces don't make a second. */
+	public static function tag_key( string $name ): string {
+		return mb_strtolower( trim( preg_replace( '/\s+/', ' ', $name ) ?? '' ) );
+	}
+
+	/**
 	 * Fetch forms. By default, only non-trashed, non-archived rows.
 	 *
 	 * Filter values: 'all' | 'active' | 'inactive' | 'scheduled' | 'expired' |

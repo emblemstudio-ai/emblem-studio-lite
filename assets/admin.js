@@ -2433,11 +2433,36 @@
 		});
 	}
 
+	/**
+	 * Tags are matched by name, and a tag is created in FunnelKit only on the
+	 * first signup that carries it. So a tag typed here exists nowhere to pick
+	 * from until then, the next asset gets it retyped, and "Beta users" and
+	 * "beta users " end up as two tags on two groups of people (SER-1464).
+	 *
+	 * Tags this site's other assets already name are offered too, marked "not
+	 * created yet". Picking one keeps the spelling identical, and still writes
+	 * nothing to FunnelKit early. The near-match line catches the rest.
+	 */
 	function initTagInput(container) {
-		var allTags = [];
+		var funnelkitTags = [];
+		var pendingTags = [];
 		var selected = [];
-		try { allTags = JSON.parse(container.dataset.suggestions || '[]'); } catch (e) {}
+		try { funnelkitTags = JSON.parse(container.dataset.suggestions || '[]'); } catch (e) {}
+		try { pendingTags = JSON.parse(container.dataset.pending || '[]'); } catch (e) {}
 		try { selected = JSON.parse(container.dataset.value || '[]'); } catch (e) {}
+
+		function tagKey(s) { return String(s).trim().toLowerCase().replace(/\s+/g, ' '); }
+		function isPending(name) {
+			return pendingTags.some(function (p) { return tagKey(p) === tagKey(name); })
+				&& !funnelkitTags.some(function (t) { return tagKey(t) === tagKey(name); });
+		}
+		var allTags = funnelkitTags.concat(pendingTags.filter(function (p) {
+			return !funnelkitTags.some(function (t) { return tagKey(t) === tagKey(p); });
+		}));
+		// Same tag, different spelling: one typed, or one already picked.
+		function nearMatch(name) {
+			return allTags.find(function (t) { return tagKey(t) === tagKey(name) && t !== String(name).trim(); });
+		}
 
 		var hidden = container.querySelector('input[type="hidden"]');
 		var chipsEl = container.querySelector('.es-tag-chips');
@@ -2499,6 +2524,12 @@
 				var item = document.createElement('div');
 				item.className = 'es-tag-suggestion' + (i === highlightIdx ? ' is-active' : '');
 				item.textContent = name;
+				if (isPending(name)) {
+					var note = document.createElement('span');
+					note.className = 'es-tag-suggestion-note';
+					note.textContent = 'not created yet';
+					item.appendChild(note);
+				}
 				item.addEventListener('mousedown', function (e) {
 					e.preventDefault();
 					addTag(name);
@@ -2515,6 +2546,37 @@
 				});
 				suggEl.appendChild(newItem);
 			}
+		}
+
+		// "Beta users" exists and you typed "beta users": say so, and offer the
+		// one that exists. Same line for a tag already picked that way.
+		function renderWarning() {
+			var warn = container.querySelector('.es-tag-warning');
+			if (!warn) {
+				warn = document.createElement('p');
+				warn.className = 'es-tag-warning';
+				container.appendChild(warn);
+			}
+			var typed = input.value.trim();
+			var near = typed && allTags.indexOf(typed) === -1 ? nearMatch(typed) : null;
+			var picked = selected.map(nearMatch).filter(Boolean);
+			warn.innerHTML = '';
+			warn.style.display = (near || picked.length) ? '' : 'none';
+			if (near) {
+				warn.innerHTML = '<strong>' + esc(near) + '</strong> already exists. ';
+				var use = document.createElement('button');
+				use.type = 'button';
+				use.className = 'es-tag-warning-use';
+				use.textContent = 'Use that one';
+				use.addEventListener('mousedown', function (e) { e.preventDefault(); addTag(near); });
+				warn.appendChild(use);
+			}
+			picked.forEach(function (other, i) {
+				var line = document.createElement('span');
+				line.textContent = '"' + selected.filter(nearMatch)[i] + '" and "' + other + '" are two different tags. Only the spelling differs.';
+				line.style.display = 'block';
+				warn.appendChild(line);
+			});
 		}
 
 		function addTag(name) {
@@ -2534,9 +2596,10 @@
 			renderChips();
 			renderSuggestions();
 			syncHidden();
+			renderWarning();
 		}
 
-		input.addEventListener('input', function () { highlightIdx = -1; renderSuggestions(); });
+		input.addEventListener('input', function () { highlightIdx = -1; renderSuggestions(); renderWarning(); });
 		input.addEventListener('keydown', function (e) {
 			var matches = getMatches();
 			var q = input.value.trim();

@@ -2500,6 +2500,29 @@
 	font-weight: 600;
 	color: #1d2327;
 }
+/* A tag one of this site's assets already names, which FunnelKit does not have
+   yet: it is created there on the first signup that carries it (SER-1464). */
+.emblem-studio-wrap .es-tag-suggestion-note {
+	margin-left: 6px;
+	color: var(--es-text-muted);
+	font-size: 11px;
+}
+/* "Beta users" exists and you typed "beta users". */
+.emblem-studio-wrap .es-tag-warning {
+	margin: 6px 0 0;
+	color: #9a5b00;
+	font-size: 12px;
+}
+.emblem-studio-wrap .es-tag-warning-use {
+	border: 0;
+	padding: 0;
+	background: none;
+	color: #9a5b00;
+	font-size: 12px;
+	font-weight: 600;
+	text-decoration: underline;
+	cursor: pointer;
+}
 
 /* Field mapper */
 .emblem-studio-wrap .es-mapper { margin: 1em 0 1.5em; }

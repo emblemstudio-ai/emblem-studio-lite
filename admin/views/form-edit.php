@@ -1116,8 +1116,20 @@ $check_groups = [
 			<tr>
 				<th><label for="es-fk-tags-typer"><?php esc_html_e( 'Add tags', 'emblem-studio' ); ?></label></th>
 				<td>
+					<?php
+					// Tags this site's other assets already name, which FunnelKit
+					// does not have yet: a tag is created there on the first signup
+					// that carries it (SER-1464). Offered alongside FunnelKit's own,
+					// marked "not created yet", so the spelling stays one person's.
+					$es_fk_known   = array_map( [ 'ES_Form_Repo', 'tag_key' ], array_column( $fk_tags, 'name' ) );
+					$es_fk_pending = array_values( array_filter(
+						ES_Form_Repo::all_funnelkit_tags(),
+						static fn ( string $name ): bool => ! in_array( ES_Form_Repo::tag_key( $name ), $es_fk_known, true )
+					) );
+					?>
 					<div class="es-tag-input"
 						data-suggestions="<?php echo esc_attr( wp_json_encode( array_column( $fk_tags, 'name' ) ) ); ?>"
+						data-pending="<?php echo esc_attr( wp_json_encode( $es_fk_pending ) ); ?>"
 						data-value="<?php echo esc_attr( wp_json_encode( array_values( (array) $f->funnelkit_tags ) ) ); ?>">
 						<div class="es-tag-chips"></div>
 						<input id="es-fk-tags-typer" type="text" class="es-tag-typer"
@@ -1127,7 +1139,7 @@ $check_groups = [
 						<input type="hidden" name="funnelkit_tags_csv" value="<?php echo esc_attr( implode( ',', (array) $f->funnelkit_tags ) ); ?>">
 					</div>
 					<p class="description">
-						<?php esc_html_e( 'Type to search existing tags. Enter, comma, or Tab adds. Backspace on empty removes. New tag names are auto-created in FunnelKit on first submission. Tags are what FunnelKit automations listen for as triggers.', 'emblem-studio' ); ?>
+						<?php esc_html_e( 'Type to search. Enter, comma, or Tab adds. Backspace on empty removes. A tag is created in FunnelKit on the first signup that carries it, so tags used on your other assets are offered here before that, marked "not created yet". Tags are what FunnelKit automations listen for as triggers.', 'emblem-studio' ); ?>
 					</p>
 				</td>
 			</tr>
