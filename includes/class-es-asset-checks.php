@@ -128,10 +128,12 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 4. unnamed_field
+		// 4. unnamed_field. A hidden checkbox that the CSS reads with :checked is
+		// an open/close switch, not a field: nobody types in it and it has
+		// nothing to send, so it needs no name (TST's account drawer).
 		$unnamed = 0;
 		foreach ( $fields as $field ) {
-			if ( trim( $field->getAttribute( 'name' ) ) === '' ) {
+			if ( trim( $field->getAttribute( 'name' ) ) === '' && ! self::is_css_switch( $field, $css ) ) {
 				++$unnamed;
 			}
 		}
@@ -485,6 +487,31 @@ class ES_Asset_Checks {
 		$type = strtolower( trim( $input->getAttribute( 'type' ) ) );
 
 		return $type === '' ? 'text' : $type;
+	}
+
+	/**
+	 * A checkbox or radio carrying the `hidden` attribute, whose id or one of
+	 * whose classes the CSS selects with :checked. `hidden` is what keeps a real
+	 * consent box out: one a visitor has to tick can't be hidden, and a styled
+	 * one that hides the native box does it with CSS, not the attribute.
+	 */
+	private static function is_css_switch( DOMElement $el, string $css ): bool {
+		if ( strtolower( $el->tagName ) !== 'input' || ! in_array( self::input_type( $el ), [ 'checkbox', 'radio' ], true ) || ! $el->hasAttribute( 'hidden' ) ) {
+			return false;
+		}
+		$selectors = [];
+		foreach ( self::class_tokens( $el ) as $class ) {
+			$selectors[] = '\.' . preg_quote( $class, '~' );
+		}
+		$id = trim( $el->getAttribute( 'id' ) );
+		if ( $id !== '' ) {
+			$selectors[] = '#' . preg_quote( $id, '~' );
+		}
+		if ( ! $selectors ) {
+			return false;
+		}
+
+		return (bool) preg_match( '~(?:' . implode( '|', $selectors ) . ')(?![\w-])[^\s{},>+\~]*:checked~', $css );
 	}
 
 	/** @return list<string> */
