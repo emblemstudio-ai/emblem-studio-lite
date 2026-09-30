@@ -23,6 +23,9 @@ class ES_Plugin {
 			new ES_Auto_Shells( $shortcode );
 		}
 		new ES_Ajax();
+		// Speed plugins' opt-outs for our scripts. Filters only, so it costs
+		// nothing on a site without one.
+		ES_No_Delay::register();
 		ES_Live_Values::init();
 		ES_Click_Tag::init();
 		ES_Purchases::init();

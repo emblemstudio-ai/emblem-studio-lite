@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Emblem Studio SaaS Connector
  * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
- * Version: 1.3.25-beta
+ * Version: 1.3.27-beta
  * Requires PHP: 7.4
  *
  * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.26-beta';
+    const VERSION = '1.3.27-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -118,6 +118,25 @@ final class Emblem_Studio_SaaS_Connector
         // WordPress's "Erase Personal Data" ran here (SER-1431). Sent at once,
         // and again on every periodic pull until Emblem Studio confirms.
         add_action('es_erasure_ready', [__CLASS__, 'push_erasures']);
+        // Name embed.js to the speed plugins that exclude by URL (ES_No_Delay).
+        add_filter('es_no_delay_urls', [__CLASS__, 'no_delay_urls']);
+    }
+
+    /**
+     * Add embed.js to the URLs speed plugins are asked not to delay.
+     *
+     * @param mixed $urls
+     * @return array<mixed>
+     */
+    public static function no_delay_urls($urls): array
+    {
+        $urls = is_array($urls) ? $urls : [];
+        $cfg = self::config();
+        if ($cfg && ! empty($cfg['api_base'])) {
+            $urls[] = $cfg['api_base'].'/embed/embed.js';
+        }
+
+        return $urls;
     }
 
     /* ── Erasure requests (SER-1431) ───────────────────────────────────── */
@@ -2344,9 +2363,20 @@ final class Emblem_Studio_SaaS_Connector
             $config['site'] = (string) $cfg['code'];
         }
 
+        // Speed plugins delay or defer third-party JavaScript by default, and
+        // several of them rewrite our tags so they only load once the visitor
+        // scrolls or moves the mouse. On a page whose asset is above the fold,
+        // that is the asset not loading until the visitor touches something,
+        // and never for a search engine, which touches nothing. ES_No_Delay
+        // holds each plugin's opt-out; the fallback is the older, shorter set
+        // for a connector running without the plugin's classes.
+        $skip = class_exists('ES_No_Delay')
+            ? ' '.ES_No_Delay::ATTRS
+            : ' data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1"';
+
         // Same opt-out on the config: an optimizer that encodes this inline
         // script leaves embed.js with no api base to read.
-        echo '<script data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1">window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
+        echo '<script'.$skip.'>window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
             .wp_json_encode($config).');</script>'."\n";
 
         foreach ($forms as $form) {
@@ -2377,19 +2407,9 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
-        // Speed plugins delay or defer third-party JavaScript by default, and
-        // several of them rewrite this tag's src to data-src and hold the load
-        // until the visitor scrolls or moves the mouse. On a page whose asset is
-        // above the fold, that is the asset not loading at all until the visitor
-        // touches something. These attributes are the opt-out that Cloudflare's
-        // Rocket Loader, Autoptimize, WP Rocket and their relatives honour.
-        //
-        // They do NOT cover every plugin: some exclude by URL from a settings
-        // list and ignore markup entirely. The durable fix is not needing this
-        // script for first paint at all, which means WordPress rendering the
-        // inline asset itself from the local copy pull_assets() already keeps.
-        $skip = ' data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1"';
-
+        // The same opt-outs ($skip, above) on embed.js. Plugins that exclude by
+        // URL instead are covered by no_delay_urls(). data-cfasync must stay
+        // before src: Rocket Loader ignores it after.
         printf('<script%s src="%s" defer></script>'."\n", $skip, esc_url($cfg['api_base'].'/embed/embed.js'));
     }
 

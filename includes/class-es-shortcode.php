@@ -404,12 +404,11 @@ class ES_Shortcode {
 	 * clicks or moves the mouse. That is a sensible default for a chat widget
 	 * and a bad one for a form that is already on screen: the visitor stares at
 	 * an empty space until they touch something. These attributes are the
-	 * opt-out that Cloudflare's Rocket Loader, Autoptimize, WP Rocket and their
-	 * relatives read.
+	 * opt-outs that each speed plugin reads; ES_No_Delay has the list and the
+	 * filters for the plugins that exclude by URL instead.
 	 *
-	 * Not a complete fix. Some plugins exclude by URL from their own settings
-	 * list and ignore markup entirely, so a site owner may still have to add
-	 * ours by hand.
+	 * Still not complete: a plugin that reads neither markup nor a filter, only
+	 * its own settings list, may need ours added there by hand.
 	 *
 	 * @param string $tag    The full <script> tag.
 	 * @param string $handle The script's registered handle.
@@ -421,7 +420,7 @@ class ES_Shortcode {
 
 		return str_replace(
 			'<script ',
-			'<script data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1" ',
+			'<script ' . ES_No_Delay::ATTRS . ' ',
 			$tag
 		);
 	}
