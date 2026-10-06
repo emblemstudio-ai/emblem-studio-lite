@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.28-beta';
+    const VERSION = '1.3.29-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -56,10 +56,12 @@ final class Emblem_Studio_SaaS_Connector
     const POSTDECOUPLE_STATE = 'es_postdecouple_state';
     const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';
     const FK_SYNC_HOOK = 'es_saas_funnelkit_sync';
-    /** While the SaaS cannot reach this site, check for waiting leads this often. */
-    const FK_SYNC_ACTIVE_SECONDS = 2 * MINUTE_IN_SECONDS;
-    /** Otherwise only now and then, in case the SaaS loses sight of us later. */
-    const FK_SYNC_IDLE_SECONDS = 10 * MINUTE_IN_SECONDS;
+    /**
+     * How often to ask for waiting leads. Always this often: a slower "idle"
+     * pace (1.3.28) left a site asleep for ten minutes whenever it checked in
+     * before the SaaS had found out it could not reach it.
+     */
+    const FK_SYNC_SECONDS = 2 * MINUTE_IN_SECONDS;
     const POSTDECOUPLE_MAX_ATTEMPTS = 40; // ~13 min of real effort before giving up and revoking anyway
 
     /** WP admin page slug → embedded SaaS path (under /app/s/<code>/…). */
@@ -1308,7 +1310,7 @@ final class Emblem_Studio_SaaS_Connector
     {
         $schedules = is_array($schedules) ? $schedules : [];
         $schedules['es_saas_fk_sync'] = [
-            'interval' => self::FK_SYNC_ACTIVE_SECONDS,
+            'interval' => self::FK_SYNC_SECONDS,
             'display'  => 'Emblem Studio: collect FunnelKit leads',
         ];
 
@@ -1333,8 +1335,8 @@ final class Emblem_Studio_SaaS_Connector
      * reports each result back. It also sends up the FunnelKit catalog when
      * asked, so the dashboard can still offer this site's lists and tags.
      *
-     * Checks every couple of minutes while the SaaS says it cannot reach us,
-     * and only every ten minutes otherwise, so a reachable site barely notices.
+     * Checks every couple of minutes. For a site the SaaS can reach, the answer
+     * is an empty list, one small request.
      */
     public static function sync_funnelkit(): void
     {
@@ -1342,18 +1344,11 @@ final class Emblem_Studio_SaaS_Connector
         if (! $cfg || ! self::is_connected()) {
             return;
         }
-        $active  = (bool) get_option('es_saas_fk_pull_active', false);
-        $checked = (int) get_option('es_saas_fk_pull_checked', 0);
-        if (! $active && time() - $checked < self::FK_SYNC_IDLE_SECONDS) {
-            return;
-        }
-        update_option('es_saas_fk_pull_checked', time(), false);
 
         $data = self::pull_post($cfg, '/v1/embed/funnelkit/pending');
         if (! $data) {
             return; // the SaaS is unreachable or older; try again next tick
         }
-        update_option('es_saas_fk_pull_active', ! empty($data['pull_delivery']), false);
 
         if (! self::funnelkit_available()) {
             return; // nothing to deliver into; the leads keep waiting
