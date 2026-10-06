@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.27-beta';
+    const VERSION = '1.3.28-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -55,6 +55,11 @@ final class Emblem_Studio_SaaS_Connector
     const POSTDECOUPLE_OPTION = 'es_postdecouple_cfg';
     const POSTDECOUPLE_STATE = 'es_postdecouple_state';
     const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';
+    const FK_SYNC_HOOK = 'es_saas_funnelkit_sync';
+    /** While the SaaS cannot reach this site, check for waiting leads this often. */
+    const FK_SYNC_ACTIVE_SECONDS = 2 * MINUTE_IN_SECONDS;
+    /** Otherwise only now and then, in case the SaaS loses sight of us later. */
+    const FK_SYNC_IDLE_SECONDS = 10 * MINUTE_IN_SECONDS;
     const POSTDECOUPLE_MAX_ATTEMPTS = 40; // ~13 min of real effort before giving up and revoking anyway
 
     /** WP admin page slug → embedded SaaS path (under /app/s/<code>/…). */
@@ -95,6 +100,11 @@ final class Emblem_Studio_SaaS_Connector
         add_action('admin_notices', [__CLASS__, 'connect_notice']);
         // Periodic copy-down: refresh WP's local copy of assets/stats/leads.
         add_action('es_saas_pull', [__CLASS__, 'cron_pull']);
+        // Pull-based FunnelKit delivery: collect leads the SaaS could not push
+        // here (a LocalWP site, a firewalled one). See sync_funnelkit().
+        add_filter('cron_schedules', [__CLASS__, 'cron_schedules']);
+        add_action(self::FK_SYNC_HOOK, [__CLASS__, 'sync_funnelkit']);
+        add_action('init', [__CLASS__, 'schedule_funnelkit_sync']);
         // Background import (mirror up + copy down) kicked off at connect, plus the
         // status endpoint the dashboard's loading screen polls.
         add_action('es_saas_import', [__CLASS__, 'run_import']);
@@ -1289,6 +1299,95 @@ final class Emblem_Studio_SaaS_Connector
     }
 
     /**
+     * The timer sync_funnelkit() runs on.
+     *
+     * @param mixed $schedules
+     * @return array<string, mixed>
+     */
+    public static function cron_schedules($schedules): array
+    {
+        $schedules = is_array($schedules) ? $schedules : [];
+        $schedules['es_saas_fk_sync'] = [
+            'interval' => self::FK_SYNC_ACTIVE_SECONDS,
+            'display'  => 'Emblem Studio: collect FunnelKit leads',
+        ];
+
+        return $schedules;
+    }
+
+    /** Keep the FunnelKit collect timer running while this site is connected. */
+    public static function schedule_funnelkit_sync(): void
+    {
+        if (self::is_connected() && ! wp_next_scheduled(self::FK_SYNC_HOOK)) {
+            wp_schedule_event(time() + MINUTE_IN_SECONDS, 'es_saas_fk_sync', self::FK_SYNC_HOOK);
+        }
+    }
+
+    /**
+     * Collect the FunnelKit leads the SaaS could not push here.
+     *
+     * Normally the SaaS calls this site for every lead. A site it cannot reach
+     * (a LocalWP site like test-es.local, a firewalled one) would never get
+     * them. This site CAN reach the SaaS, so it asks: which leads are waiting
+     * for me? It delivers them through the same run_dispatch() a push uses and
+     * reports each result back. It also sends up the FunnelKit catalog when
+     * asked, so the dashboard can still offer this site's lists and tags.
+     *
+     * Checks every couple of minutes while the SaaS says it cannot reach us,
+     * and only every ten minutes otherwise, so a reachable site barely notices.
+     */
+    public static function sync_funnelkit(): void
+    {
+        $cfg = self::config();
+        if (! $cfg || ! self::is_connected()) {
+            return;
+        }
+        $active  = (bool) get_option('es_saas_fk_pull_active', false);
+        $checked = (int) get_option('es_saas_fk_pull_checked', 0);
+        if (! $active && time() - $checked < self::FK_SYNC_IDLE_SECONDS) {
+            return;
+        }
+        update_option('es_saas_fk_pull_checked', time(), false);
+
+        $data = self::pull_post($cfg, '/v1/embed/funnelkit/pending');
+        if (! $data) {
+            return; // the SaaS is unreachable or older; try again next tick
+        }
+        update_option('es_saas_fk_pull_active', ! empty($data['pull_delivery']), false);
+
+        if (! self::funnelkit_available()) {
+            return; // nothing to deliver into; the leads keep waiting
+        }
+        if (! empty($data['want_meta'])) {
+            self::pull_post($cfg, '/v1/embed/funnelkit/meta', ['meta' => self::funnelkit_meta_payload()]);
+        }
+
+        $results = [];
+        foreach ((array) ($data['leads'] ?? []) as $lead) {
+            $lead_id = (int) ($lead['lead_id'] ?? 0);
+            if (! $lead_id || ! is_array($lead['dispatch'] ?? null)) {
+                continue;
+            }
+            [$res] = self::run_dispatch($lead['dispatch']);
+            // Another delivery of this lead is running right now. Leave it
+            // waiting; the next tick replays whatever that one recorded.
+            if (($res['mode'] ?? '') === 'in_progress') {
+                continue;
+            }
+            $results[] = [
+                'lead_id'    => $lead_id,
+                'ok'         => ! empty($res['ok']),
+                'mode'       => isset($res['mode']) ? (string) $res['mode'] : null,
+                'contact_id' => isset($res['contact_id']) && is_numeric($res['contact_id']) ? (int) $res['contact_id'] : null,
+                'error'      => isset($res['error']) ? mb_substr((string) $res['error'], 0, 1000) : null,
+            ];
+        }
+        if ($results) {
+            self::pull_post($cfg, '/v1/embed/funnelkit/results', ['results' => $results]);
+        }
+    }
+
+    /**
      * Make sure the SaaS knows this site's clock, and keep checking until it does.
      *
      * Every schedule on a connected site runs on the timezone the SaaS holds for
@@ -2158,6 +2257,7 @@ final class Emblem_Studio_SaaS_Connector
         $cfg = self::config();
 
         wp_clear_scheduled_hook('es_saas_pull');
+        wp_clear_scheduled_hook(self::FK_SYNC_HOOK);
         // Stop any in-flight import and forget its cursor, so a later reconnect
         // starts a clean run instead of resuming into a severed connection.
         wp_clear_scheduled_hook('es_saas_import');
@@ -2806,6 +2906,17 @@ final class Emblem_Studio_SaaS_Connector
     /** Versioned local FunnelKit capabilities and runtime Form Feed state. */
     public static function funnelkit_meta(WP_REST_Request $request)
     {
+        return new WP_REST_Response(self::funnelkit_meta_payload(), 200);
+    }
+
+    /**
+     * The catalog itself: what funnelkit/meta answers, and what sync_funnelkit()
+     * sends up when the SaaS cannot ask for it.
+     *
+     * @return array<string, mixed>
+     */
+    private static function funnelkit_meta_payload(): array
+    {
         $catalog = class_exists('ES_FunnelKit_Form_Feed') ? ES_FunnelKit_Form_Feed::catalog() : [];
         $assets  = [];
         foreach ($catalog as $asset) {
@@ -2824,7 +2935,7 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
-        return new WP_REST_Response([
+        return [
             'ok'               => true,
             'contract_version' => 1,
             'connector_version'=> '1.0.24-beta',
@@ -2841,21 +2952,35 @@ final class Emblem_Studio_SaaS_Connector
             'tags'             => ES_FunnelKit::get_tags(),
             'fields'           => $fields,
             'assets'           => $assets,
-        ], 200);
+        ];
     }
 
     /** Unified local dispatch: an active native feed wins; direct sync is fallback. */
     public static function dispatch_funnelkit(WP_REST_Request $request)
     {
+        [$body, $status] = self::run_dispatch((array) $request->get_json_params());
+
+        return new WP_REST_Response($body, $status);
+    }
+
+    /**
+     * One FunnelKit delivery, wherever it came from: pushed by the SaaS through
+     * dispatch_funnelkit(), or collected by sync_funnelkit(). The same replay
+     * memory and lock cover both, so a lead that arrives both ways lands once.
+     *
+     * @param array<string, mixed> $p
+     * @return array{0: array<string, mixed>, 1: int} The reply body and its HTTP status.
+     */
+    private static function run_dispatch(array $p): array
+    {
         if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Delivery')) {
-            return new WP_REST_Response(['ok' => false, 'error' => 'FunnelKit not installed'], 503);
+            return [['ok' => false, 'error' => 'FunnelKit not installed'], 503];
         }
 
-        $p             = (array) $request->get_json_params();
         $submission_id = sanitize_key((string) ($p['submission_id'] ?? ''));
         $asset_key     = sanitize_text_field((string) ($p['asset_key'] ?? ''));
         if ($submission_id === '' || ! preg_match('/^(?:saas|wp):\d+$/', $asset_key)) {
-            return new WP_REST_Response(['ok' => false, 'error' => 'Invalid dispatch identity'], 400);
+            return [['ok' => false, 'error' => 'Invalid dispatch identity'], 400];
         }
 
         $idempotency_key = 'ess_fk_' . md5($submission_id . '|' . $asset_key);
@@ -2863,12 +2988,12 @@ final class Emblem_Studio_SaaS_Connector
         if (is_array($cached)) {
             $cached['idempotent_replay'] = true;
             $cached_status = ! empty($cached['ok']) || ($cached['mode'] ?? '') === 'disabled' ? 200 : 500;
-            return new WP_REST_Response($cached, $cached_status);
+            return [$cached, $cached_status];
         }
 
         $direct = self::normalize_direct_lead((array) ($p['direct'] ?? []));
         if (empty($direct['email']) || ! is_email($direct['email'])) {
-            return new WP_REST_Response(['ok' => false, 'error' => 'Invalid email'], 400);
+            return [['ok' => false, 'error' => 'Invalid email'], 400];
         }
         $fields = self::sanitize_submission_fields((array) ($p['fields'] ?? []));
         if (! isset($fields['email'])) {
@@ -2886,14 +3011,14 @@ final class Emblem_Studio_SaaS_Connector
             if (is_array($cached)) {
                 $cached['idempotent_replay'] = true;
                 $cached_status = ! empty($cached['ok']) || ($cached['mode'] ?? '') === 'disabled' ? 200 : 500;
-                return new WP_REST_Response($cached, $cached_status);
+                return [$cached, $cached_status];
             }
-            return new WP_REST_Response([
+            return [[
                 'ok' => false,
                 'mode' => 'in_progress',
                 'contact_id' => null,
                 'error' => 'This submission is already being processed. Retry shortly.',
-            ], 409);
+            ], 409];
         }
 
         try {
@@ -2909,7 +3034,7 @@ final class Emblem_Studio_SaaS_Connector
             $result['idempotent_replay']= false;
             set_transient($idempotency_key, $result, DAY_IN_SECONDS);
 
-            return new WP_REST_Response($result, ! empty($result['ok']) || $result['mode'] === 'disabled' ? 200 : 500);
+            return [$result, ! empty($result['ok']) || $result['mode'] === 'disabled' ? 200 : 500];
         } finally {
             delete_option($lock_key);
         }
