@@ -233,7 +233,8 @@ if ( ES_Caps::has( 'ab' ) && ! $is_new ) {
 	$ab_archived = [];
 }
 $ab_running    = $ab_test && isset( $ab_variants['A'], $ab_variants['B'] );
-$ab_day        = ( $ab_running && ES_Caps::has( 'ab' ) ) ? ES_AB::test_day_for( $ab_test ) : 0;
+// $ab_running already implies the 'ab' cap: $ab_test is only set when it is on.
+$ab_day        = $ab_running ? ES_AB::test_day_for( $ab_test ) : 0;
 $ab_archive_ct = count( $ab_archived );
 
 // Checks list (SER-1358), from what is STORED: the form's own HTML/CSS, or
