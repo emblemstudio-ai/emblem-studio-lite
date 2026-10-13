@@ -265,6 +265,28 @@ class ES_Admin {
 		exit;
 	}
 
+	/**
+	 * Where a lead action returns to: the Leads page the user was on, with
+	 * its filters. The browser's referrer is only trusted when it IS the
+	 * Leads page. A site whose Referrer-Policy sends only the origin
+	 * ("origin" / "strict-origin") reports "http://site.local/", which is
+	 * same-host and passed wp_get_referer(), so deleting a lead landed on the
+	 * site's front page at "/?lead_deleted=1".
+	 */
+	private static function leads_back_url(): string {
+		$fallback = admin_url( 'admin.php?page=emblem-studio-leads' );
+		$ref      = (string) wp_get_referer();
+		if ( $ref === '' || strpos( $ref, admin_url( 'admin.php' ) ) !== 0 ) {
+			return $fallback;
+		}
+		parse_str( (string) wp_parse_url( $ref, PHP_URL_QUERY ), $query );
+		if ( ( $query['page'] ?? '' ) !== 'emblem-studio-leads' ) {
+			return $fallback;
+		}
+		// Drop the previous action's notice so only this one shows.
+		return remove_query_arg( [ 'lead_deleted', 'lead_moved', 'lead_move_failed', 'lead_retried', 'lead_retry_failed' ], $ref );
+	}
+
 	public function handle_delete_lead(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -274,7 +296,7 @@ class ES_Admin {
 		if ( $id ) {
 			ES_Leads::delete( $id );
 		}
-		$back = wp_get_referer() ?: admin_url( 'admin.php?page=emblem-studio-leads' );
+		$back = self::leads_back_url();
 		wp_safe_redirect( add_query_arg( 'lead_deleted', '1', $back ) );
 		exit;
 	}
@@ -289,7 +311,7 @@ class ES_Admin {
 		// freebie use case (the whole reason the button exists) just works.
 		$push = ! isset( $_GET['push'] ) || (int) $_GET['push'] === 1;
 		$result = $id ? ES_Leads::move_to_humans( $id, $push ) : [ 'ok' => false ];
-		$back = wp_get_referer() ?: admin_url( 'admin.php?page=emblem-studio-leads' );
+		$back = self::leads_back_url();
 		$flag = $result['ok'] ? 'lead_moved' : 'lead_move_failed';
 		wp_safe_redirect( add_query_arg( $flag, '1', $back ) );
 		exit;
@@ -306,7 +328,7 @@ class ES_Admin {
 		$id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
 		check_admin_referer( 'es_retry_lead_' . $id );
 		$result = $id ? ES_Leads::retry_push( $id ) : [ 'ok' => false ];
-		$back = wp_get_referer() ?: admin_url( 'admin.php?page=emblem-studio-leads' );
+		$back = self::leads_back_url();
 		$flag = $result['ok'] ? 'lead_retried' : 'lead_retry_failed';
 		wp_safe_redirect( add_query_arg( $flag, '1', $back ) );
 		exit;
@@ -952,6 +974,31 @@ class ES_Admin {
 	}
 
 	/**
+	 * Files exported from the web app have no `emblem_studio_export_version`
+	 * key: one asset is `{schema: "emblem-studio/form", html, css, ...}` at the
+	 * top level, and "Export all" is `{schema: "emblem-studio/forms", forms}`.
+	 * The per-asset fields are the same as ours, so wrap either shape in our
+	 * envelope rather than reject it. Before this, every web-app export failed
+	 * here with "does not look like an Emblem Studio export".
+	 *
+	 * @param mixed $decoded
+	 * @return mixed
+	 */
+	public static function normalize_import_envelope( $decoded ) {
+		if ( ! is_array( $decoded ) || ! empty( $decoded['emblem_studio_export_version'] ) ) {
+			return $decoded;
+		}
+		$schema = isset( $decoded['schema'] ) ? (string) $decoded['schema'] : '';
+		if ( $schema === 'emblem-studio/forms' && isset( $decoded['forms'] ) && is_array( $decoded['forms'] ) ) {
+			return [ 'emblem_studio_export_version' => '1', 'forms' => $decoded['forms'] ];
+		}
+		if ( $schema === 'emblem-studio/form' && isset( $decoded['html'] ) ) {
+			return [ 'emblem_studio_export_version' => '1', 'forms' => [ $decoded ] ];
+		}
+		return $decoded;
+	}
+
+	/**
 	 * Multi-form import from an uploaded JSON file. Decodes the file,
 	 * validates the export-version envelope, runs each form through
 	 * Form_Repo::from_import_array, redirects back with a count.
@@ -973,7 +1020,7 @@ class ES_Admin {
 			exit;
 		}
 
-		$decoded = json_decode( $contents, true );
+		$decoded = self::normalize_import_envelope( json_decode( $contents, true ) );
 		if ( ! is_array( $decoded ) || empty( $decoded['emblem_studio_export_version'] ) || empty( $decoded['forms'] ) || ! is_array( $decoded['forms'] ) ) {
 			wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&import_error=invalid_format' ) );
 			exit;

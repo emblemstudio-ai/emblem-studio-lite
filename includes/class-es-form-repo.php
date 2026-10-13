@@ -739,8 +739,8 @@ class ES_Form_Repo {
 			'funnelkit_enabled'    => array_key_exists( 'funnelkit_enabled', $data ) ? ( ! empty( $data['funnelkit_enabled'] ) ? 1 : 0 ) : 0,
 			'webhooks'             => $decode_array( $data['webhooks'] ?? [] ),
 			'connections'          => $decode_array( $data['connections'] ?? [] ),
-			'active_from'          => isset( $data['active_from'] )  ? (string) $data['active_from']  : '',
-			'active_until'         => isset( $data['active_until'] ) ? (string) $data['active_until'] : '',
+			'active_from'          => isset( $data['active_from'] )  ? self::import_datetime( (string) $data['active_from'] )  : '',
+			'active_until'         => isset( $data['active_until'] ) ? self::import_datetime( (string) $data['active_until'] ) : '',
 		];
 
 		$new_id = self::save( $payload );
@@ -1029,6 +1029,23 @@ class ES_Form_Repo {
 	 *   $end_of_day = false → "00:00:00"  (start-of-day; intuitive for "from")
 	 *   $end_of_day = true  → "23:59:59"  (end-of-day;   intuitive for "until")
 	 */
+	/**
+	 * A web-app export writes schedule dates as ISO 8601 with an offset
+	 * ("2026-11-25T14:30:00+00:00"), which normalize_datetime() rejects, so
+	 * the schedule was silently dropped on import. Convert those to site-local
+	 * time, the way this plugin stores them. Anything else passes through.
+	 */
+	public static function import_datetime( string $value ): string {
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/', $value ) ) {
+			return $value;
+		}
+		try {
+			return ( new DateTimeImmutable( $value ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
+		} catch ( Exception $e ) {
+			return '';
+		}
+	}
+
 	public static function normalize_datetime( $value, bool $end_of_day = false ): ?string {
 		$s = trim( (string) ( $value ?? '' ) );
 		if ( $s === '' ) {

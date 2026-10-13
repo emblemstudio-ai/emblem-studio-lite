@@ -259,6 +259,7 @@ $check_groups = [
 	// (filters + resolved titles) so the picker JS can apply one without a
 	// round-trip. See docs comment on $dr_preset_payload above. ?>
 	<script type="application/json" id="es-presets-data"><?php echo $dr_presets_json; // phpcs:ignore WordPress.Security.EscapeOutput -- wp_json_encode output, safe inside a script tag ?></script>
+	<p class="es-back-link"><a href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio' ) ); ?>"><?php esc_html_e( '← Forms & Assets', 'emblem-studio' ); ?></a></p>
 	<h1><?php echo $is_new ? esc_html__( 'Add Form', 'emblem-studio' ) : esc_html__( 'Edit Form', 'emblem-studio' ); ?></h1>
 
 	<?php if ( isset( $_GET['saved'] ) ) : ?>

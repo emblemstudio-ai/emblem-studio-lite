@@ -240,6 +240,17 @@
 .emblem-studio-wrap > h1 {
 	margin: 0 0 var(--es-space-5);
 }
+/* "← Forms & Assets" above the editor title, the web app's "← Forms". */
+.emblem-studio-wrap > .es-back-link {
+	margin: 0 0 var(--es-space-2);
+}
+.emblem-studio-wrap > .es-back-link a {
+	color: var(--es-text-muted);
+	text-decoration: none;
+}
+.emblem-studio-wrap > .es-back-link a:hover {
+	text-decoration: underline;
+}
 /* .es-form-editor is intentionally not a card — it's an invisible
  * <form> wrapper. The form-header inside it IS a card (sticky top,
  * rounded corners, shadow) and each tab-panel IS a card too. Making
