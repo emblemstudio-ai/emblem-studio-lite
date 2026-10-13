@@ -400,6 +400,13 @@ class ES_Admin {
 			'emblem-studio-new',
 			[ $this, 'route_new' ]
 		);
+		// Surveys and Sales notifications (SER-1691): each asset type has its own
+		// list in the web app, so a connected site gets the same two entries, in
+		// the same place. Connected only: a standalone install has no types.
+		if ( $connected ) {
+			add_submenu_page( 'emblem-studio', __( 'Surveys', 'emblem-studio' ), __( 'Surveys', 'emblem-studio' ), 'manage_options', 'emblem-studio-surveys', [ $this, 'route_surveys' ] );
+			add_submenu_page( 'emblem-studio', __( 'Sales notifications', 'emblem-studio' ), __( 'Sales notifications', 'emblem-studio' ), 'manage_options', 'emblem-studio-sales-notifications', [ $this, 'route_sales_notifications' ] );
+		}
 		// Schedule (SER-1328) — connected only, and placed where the SaaS sidebar
 		// puts it, straight after the asset list. It has no local twin: the board
 		// reads every asset's periods and queued changes from the account.
@@ -447,6 +454,11 @@ class ES_Admin {
 			'emblem-studio-leads',
 			[ $this, 'route_leads' ]
 		);
+		// Survey answers, beside Leads as in the web app. Connected only: surveys
+		// exist only there.
+		if ( $connected ) {
+			add_submenu_page( 'emblem-studio', __( 'Survey results', 'emblem-studio' ), __( 'Survey results', 'emblem-studio' ), 'manage_options', 'emblem-studio-survey-results', [ $this, 'route_survey_results' ] );
+		}
 		add_submenu_page(
 			'emblem-studio',
 			__( 'Reports', 'emblem-studio' ),
@@ -477,6 +489,8 @@ class ES_Admin {
 				'emblem-studio-tickets',
 				[ $this, 'route_tickets' ]
 			);
+			// Team (who can work on this website), as in the web app's sidebar.
+			add_submenu_page( 'emblem-studio', __( 'Team', 'emblem-studio' ), __( 'Team', 'emblem-studio' ), 'manage_options', 'emblem-studio-team', [ $this, 'route_team' ] );
 		}
 		add_submenu_page(
 			'emblem-studio',
@@ -508,6 +522,35 @@ class ES_Admin {
 				'emblem-studio-account',
 				[ $this, 'route_account' ]
 			);
+		}
+	}
+
+	/**
+	 * Pages that exist only in the web app (SER-1691). Each embeds its SaaS twin;
+	 * if the site is not connected after all, the asset list is the honest
+	 * fallback, because there is nothing local to show.
+	 */
+	public function route_surveys(): void {
+		if ( ! $this->maybe_embed( 'emblem-studio-surveys' ) ) {
+			$this->route();
+		}
+	}
+
+	public function route_sales_notifications(): void {
+		if ( ! $this->maybe_embed( 'emblem-studio-sales-notifications' ) ) {
+			$this->route();
+		}
+	}
+
+	public function route_survey_results(): void {
+		if ( ! $this->maybe_embed( 'emblem-studio-survey-results' ) ) {
+			$this->route();
+		}
+	}
+
+	public function route_team(): void {
+		if ( ! $this->maybe_embed( 'emblem-studio-team' ) ) {
+			$this->route();
 		}
 	}
 

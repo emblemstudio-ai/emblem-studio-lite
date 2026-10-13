@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.31-beta';
+    const VERSION = '1.3.32-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -68,6 +68,11 @@ final class Emblem_Studio_SaaS_Connector
     const PAGE_MAP = [
         'emblem-studio'              => 'assets',     // Forms & Assets
         'emblem-studio-new'          => 'assets/new', // Add New
+        // One list per asset type (SER-1691), and the survey answers. SaaS-only:
+        // a standalone install has no types and no surveys.
+        'emblem-studio-surveys'      => 'surveys',
+        'emblem-studio-sales-notifications' => 'sales-notifications',
+        'emblem-studio-survey-results' => 'survey-results',
         // The Schedule board (SER-1328). SaaS-only: it reads every asset's
         // periods and queued changes from the account, which a standalone
         // install does not have. Must be mapped, because maybe_embed() on an
@@ -83,6 +88,8 @@ final class Emblem_Studio_SaaS_Connector
         // filed from wp-admin is always about THIS site; there's no "general
         // account" concept reachable from wp-admin to begin with.
         'emblem-studio-tickets'      => 'tickets',
+        // Who can work on this website, site-scoped like the rest.
+        'emblem-studio-team'         => 'team',
     ];
 
     public static function init(): void
@@ -618,6 +625,10 @@ final class Emblem_Studio_SaaS_Connector
             var VIEW_SLUG = {
                 'assets': 'emblem-studio',
                 'assets-new': 'emblem-studio-new',
+                'surveys': 'emblem-studio-surveys',
+                'sales-notifications': 'emblem-studio-sales-notifications',
+                'survey-results': 'emblem-studio-survey-results',
+                'team': 'emblem-studio-team',
                 'schedule': 'emblem-studio-schedule',
                 'tests': 'emblem-studio-tests',
                 'leads': 'emblem-studio-leads',
