@@ -29,6 +29,7 @@ class ES_Plugin {
 		ES_Live_Values::init();
 		ES_Click_Tag::init();
 		ES_Purchases::init();
+		ES_Recent_Orders::init();
 		new ES_Privacy();
 		new ES_Preview();
 		new ES_REST();

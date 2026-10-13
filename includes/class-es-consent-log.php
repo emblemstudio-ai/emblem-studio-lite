@@ -102,18 +102,21 @@ class ES_Consent_Log {
 	 * erasure removes it.
 	 *
 	 * @param array<int, int> $lead_ids the person's leads, found before they go
-	 * @return int consent records removed
+	 * @return int|false consent records removed, false on the first SQL failure
 	 */
-	public static function erase( string $email, array $lead_ids ): int {
+	public static function erase( string $email, array $lead_ids ) {
 		global $wpdb;
 		$table = ES_Install::table( 'lead_consents' );
 		$email = strtolower( trim( $email ) );
 		$ids   = array_values( array_filter( array_map( 'intval', $lead_ids ) ) );
 
-		$removed = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE email = %s", $email ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$removed = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE email = %s", $email ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $removed === false ) { return false; }
 		if ( $ids ) {
 			$in       = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-			$removed += (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE lead_id IN ({$in})", ...$ids ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$count = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE lead_id IN ({$in})", ...$ids ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( $count === false ) { return false; }
+			$removed += $count;
 		}
 
 		return $removed;

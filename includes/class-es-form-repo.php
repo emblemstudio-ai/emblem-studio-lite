@@ -868,6 +868,15 @@ class ES_Form_Repo {
 	 *   exit_buffer_seconds = int >= 0 (exit: ignore exit-intent for N s after load)
 	 *   exit_window_seconds = int >= 0 (exit: stop watching N s after load; 0 = no limit)
 	 *   exit_window_autofire = bool (exit: show the shell when that window runs out)
+	 *   order_wait_minutes  = int 0..1440 (order: wait after the first order; 0 = at once)
+	 *   order_min_count     = int 1..1000 (order: show only when at least this many)
+	 *   order_check_minutes = int 1..60   (order: how often the page asks for orders)
+	 *   order_close_seconds = int 0..600  (order: close by itself after N s; 0 = stays)
+	 *   order_backlog_minutes = int 0..1440 (order: a new visitor sees this far back; 0 = none)
+	 *   order_landing_seconds = int 0..600 (order: never in the first N s after landing)
+	 *
+	 * The order trigger is armed by the web app's embed.js only. A standalone plugin
+	 * keeps the settings so a round trip through WordPress never wipes them (SER-1689).
 	 *
 	 * All four value fields are kept regardless of which trigger is selected, so
 	 * the user doesn't lose what they typed when they switch the radio.
@@ -896,7 +905,7 @@ class ES_Form_Repo {
 			];
 		}
 
-		$valid_triggers = [ 'delay', 'scroll', 'inactivity', 'exit' ];
+		$valid_triggers = [ 'delay', 'scroll', 'inactivity', 'exit', 'order' ];
 		$trigger        = isset( $raw['trigger'] ) ? sanitize_key( (string) $raw['trigger'] ) : '';
 		if ( ! in_array( $trigger, $valid_triggers, true ) ) {
 			$trigger = '';
@@ -943,6 +952,12 @@ class ES_Form_Repo {
 			'exit_buffer_seconds' => max( 0, (int) ( $raw['exit_buffer_seconds'] ?? 0 ) ),
 			'exit_window_seconds' => max( 0, (int) ( $raw['exit_window_seconds'] ?? 0 ) ),
 			'exit_window_autofire' => ! empty( $raw['exit_window_autofire'] ),
+			'order_wait_minutes'  => max( 0, min( 1440, (int) ( $raw['order_wait_minutes'] ?? 5 ) ) ),
+			'order_min_count'     => max( 1, min( 1000, (int) ( $raw['order_min_count'] ?? 1 ) ) ),
+			'order_check_minutes' => max( 1, min( 60, (int) ( $raw['order_check_minutes'] ?? 1 ) ) ),
+			'order_close_seconds' => max( 0, min( 600, (int) ( $raw['order_close_seconds'] ?? 5 ) ) ),
+			'order_backlog_minutes' => max( 0, min( 1440, (int) ( $raw['order_backlog_minutes'] ?? 60 ) ) ),
+			'order_landing_seconds' => max( 0, min( 600, (int) ( $raw['order_landing_seconds'] ?? 5 ) ) ),
 			'position'            => $position,
 			'corner'              => $corner,
 			'sticky'              => $sticky,

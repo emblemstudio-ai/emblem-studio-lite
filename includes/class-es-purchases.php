@@ -382,13 +382,14 @@ class ES_Purchases {
 	/**
 	 * What this site holds about one lead's purchases, for the privacy export.
 	 *
-	 * @return array<int, array<string, mixed>>
+	 * @return array<int, array<string, mixed>>|WP_Error
 	 */
-	public static function for_lead( int $lead_id ): array {
+	public static function for_lead( int $lead_id ) {
 		global $wpdb;
 		$table = ES_Install::table( 'purchases' );
 		$like  = '%' . $wpdb->esc_like( '"wp_lead_id":' . $lead_id . ',' ) . '%';
-		$rows  = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE touches LIKE %s ORDER BY ordered_at DESC", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE touches LIKE %s ORDER BY ordered_at DESC", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( ! is_array( $rows ) || $wpdb->last_error !== '' ) { return new WP_Error( 'es_purchase_read_failed', __( 'Purchase data could not be read. Export completeness cannot be confirmed.', 'emblem-studio' ) ); }
 
 		$out = [];
 		foreach ( $rows as $row ) {
@@ -415,11 +416,12 @@ class ES_Purchases {
 	 * The order itself is untouched. It belongs to the shop, not to us, and the shop
 	 * has its own rules about keeping it.
 	 */
-	public static function forget_lead( int $lead_id ): int {
+	public static function forget_lead( int $lead_id, bool $notify = true ) {
 		global $wpdb;
 		$table   = ES_Install::table( 'purchases' );
 		$like    = '%' . $wpdb->esc_like( '"wp_lead_id":' . $lead_id . ',' ) . '%';
-		$rows    = (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, order_id, touches FROM {$table} WHERE touches LIKE %s", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows    = $wpdb->get_results( $wpdb->prepare( "SELECT id, order_id, touches FROM {$table} WHERE touches LIKE %s", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( ! is_array( $rows ) || $wpdb->last_error !== '' ) { return false; }
 		$removed = 0;
 
 		foreach ( $rows as $row ) {
@@ -435,18 +437,19 @@ class ES_Purchases {
 				// Nothing left pointing at anybody, so the row itself goes. Emblem
 				// Studio is told to drop its copy on the next send; erasing somebody
 				// here and leaving them counted there would be erasing nothing.
-				self::queue_forget( self::ref( (int) $row->order_id ) );
-				$wpdb->delete( $table, [ 'id' => (int) $row->id ] );
+				if ( $notify ) { self::queue_forget( self::ref( (int) $row->order_id ) ); }
+				if ( $wpdb->delete( $table, [ 'id' => (int) $row->id ] ) === false ) { return false; }
 				continue;
 			}
-			$wpdb->update(
+			$result = $wpdb->update(
 				$table,
 				[ 'touches' => (string) wp_json_encode( $kept ), 'needs_push' => 1, 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ],
 				[ 'id' => (int) $row->id ]
 			);
+			if ( $result === false ) { return false; }
 		}
 
-		if ( $removed > 0 ) {
+		if ( $notify && $removed > 0 ) {
 			do_action( self::HOOK_READY );
 		}
 

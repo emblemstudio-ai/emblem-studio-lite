@@ -193,14 +193,14 @@ class ES_Ajax {
 		}
 
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
-		ES_Event_Recorder::record( $form_id, 'click', $post_id, $shell, $target, $variant );
+		$recorded = ES_Event_Recorder::record( $form_id, 'click', $post_id, $shell, $target, $variant );
 
 		// A/B auto-winner eval for click-primary tests (non-form assets
 		// where there's no submit to trigger from). Skip when the click
 		// target is a close / backdrop sentinel — those don't represent
 		// success and shouldn't drive an auto-declare. Throttled to
 		// once per minute per form by auto_winner_check.
-		if ( class_exists( 'ES_AB' ) && $target !== '__close__' && $target !== '__backdrop__' ) {
+		if ( $recorded && class_exists( 'ES_AB' ) && $target !== '__close__' && $target !== '__backdrop__' ) {
 			$running = ES_AB::running_test_for_form( $form_id );
 			if ( $running && isset( $running->primary_metric ) && $running->primary_metric === 'clicks' ) {
 				ES_AB::auto_winner_check( $form_id );
@@ -247,9 +247,11 @@ class ES_Ajax {
 
 		// Mark this visitor as "returning" for any future page render that
 		// has visitor_state targeting. Cheap; no-op if cookie already set.
-		ES_Display_Rules::ensure_visitor_cookie();
-
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
+		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => null ] ) === 'legacy' ) {
+			ES_Display_Rules::ensure_visitor_cookie();
+		}
+
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
 		// Shell type: tagged on the host in PHP, sent back with every event.
 		$shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
@@ -278,11 +280,12 @@ class ES_Ajax {
 	}
 
 	public function submit(): void {
-		// Submissions also count as a visit — mark the visitor as "returning"
-		// so future page renders gated on visitor_state see them correctly.
-		ES_Display_Rules::ensure_visitor_cookie();
-
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
+		// Legacy sites retain visitor targeting. Strict hosts own consent and
+		// identifiers; capture must not create a CRO cookie before authorization.
+		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'conversion', 'lead_id' => null ] ) === 'legacy' ) {
+			ES_Display_Rules::ensure_visitor_cookie();
+		}
 
 		if ( ! $form_id ) {
 			wp_send_json_error( [ 'message' => 'Missing form_id' ], 400 );
@@ -671,13 +674,13 @@ class ES_Ajax {
 		// CRM above, but it must not register as a conversion (or move an A/B
 		// winner) in reports.
 		if ( ! $is_preview ) {
-			ES_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ) );
+			$recorded = ES_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ), $lead_id );
 
 			// A/B auto-winner eval. Conversions only ever increase, so this
 			// is the right (and only necessary) trigger point. Per-form
 			// once-per-minute throttle inside auto_winner_check prevents a
 			// burst of submits from thrashing. (A/B is account-gated; absent in Lite.)
-			if ( class_exists( 'ES_AB' ) ) {
+			if ( $recorded && class_exists( 'ES_AB' ) ) {
 				ES_AB::auto_winner_check( $form_id );
 			}
 		}

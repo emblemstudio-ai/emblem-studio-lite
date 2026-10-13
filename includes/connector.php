@@ -36,7 +36,7 @@ final class Emblem_Studio_SaaS_Connector
      * connector build a site is running (SER-1128 stage 4 gates on it).
      * MUST track the `Version:` header above — bump both together.
      */
-    const VERSION = '1.3.29-beta';
+    const VERSION = '1.3.31-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     /** Stored connection written by the Connect button. */
@@ -130,6 +130,11 @@ final class Emblem_Studio_SaaS_Connector
         // WordPress's "Erase Personal Data" ran here (SER-1431). Sent at once,
         // and again on every periodic pull until Emblem Studio confirms.
         add_action('es_erasure_ready', [__CLASS__, 'push_erasures']);
+        // Real orders for the "after an order" trigger (SER-1689). The SaaS says
+        // on every FunnelKit check whether any asset here wants them, so a site
+        // that does not use the trigger records and sends nothing.
+        add_filter('es_recent_orders_wanted', [__CLASS__, 'recent_orders_wanted']);
+        add_action('es_recent_orders_ready', [__CLASS__, 'push_recent_orders']);
         // Name embed.js to the speed plugins that exclude by URL (ES_No_Delay).
         add_filter('es_no_delay_urls', [__CLASS__, 'no_delay_urls']);
     }
@@ -319,6 +324,58 @@ final class Emblem_Studio_SaaS_Connector
             if (count($rows) < 200) {
                 return;
             }
+        }
+    }
+
+    /** Option holding the SaaS's last answer to "does anything here want orders?" */
+    const RECENT_ORDERS_WANTED = 'ess_recent_orders_wanted';
+
+    /** @param mixed $wanted */
+    public static function recent_orders_wanted($wanted): bool
+    {
+        if (! self::is_connected()) {
+            return false;
+        }
+        $state = get_option(self::RECENT_ORDERS_WANTED);
+
+        return is_array($state) && ! empty($state['wanted']);
+    }
+
+    private static function set_recent_orders_wanted(bool $wanted): void
+    {
+        $state = get_option(self::RECENT_ORDERS_WANTED);
+        $was   = is_array($state) && ! empty($state['wanted']);
+        if ($was !== $wanted || ! is_array($state)) {
+            update_option(self::RECENT_ORDERS_WANTED, ['wanted' => $wanted, 'at' => time()], false);
+        }
+        if (! $wanted && class_exists('ES_Recent_Orders')) {
+            ES_Recent_Orders::clear(); // nothing here uses them; hold nothing
+        }
+    }
+
+    /**
+     * Send the orders ES_Recent_Orders queued: product names and links, the paid
+     * time, and one-way references. Never a name, an email or an order number.
+     * An entry leaves the queue only once the SaaS has taken it.
+     */
+    public static function push_recent_orders(): void
+    {
+        $cfg = self::config();
+        if (! $cfg || ! class_exists('ES_Recent_Orders')) {
+            return;
+        }
+        $pending = ES_Recent_Orders::pending();
+        if ($pending['orders'] === [] && $pending['forget'] === []) {
+            return;
+        }
+
+        $data = self::pull_post($cfg, '/v1/embed/recent-orders', $pending);
+        if (! is_array($data) || empty($data['ok'])) {
+            return; // left queued; the next tick tries again
+        }
+        ES_Recent_Orders::mark_sent(array_column($pending['orders'], 'ref'), $pending['forget']);
+        if (array_key_exists('wanted', $data)) {
+            self::set_recent_orders_wanted(! empty($data['wanted']));
         }
     }
 
@@ -1345,9 +1402,34 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
 
-        $data = self::pull_post($cfg, '/v1/embed/funnelkit/pending');
+        // SER-1747: say whether this shop already measures purchases, so a switch
+        // turned on here before connecting is kept, not reset.
+        $data = self::pull_post($cfg, '/v1/embed/funnelkit/pending', [
+            'shop_data_local' => class_exists('ES_Purchases') && get_option(ES_Purchases::ENABLED_OPTION) === '1',
+        ]);
         if (! $data) {
             return; // the SaaS is unreachable or older; try again next tick
+        }
+
+        // The owner's "Shop data" switch lives in the web app's Site settings now
+        // (SER-1747): this site's own Settings page is replaced by the web app's
+        // once connected. Applied to the same option ES_Purchases reads, so
+        // switching it on there also starts the catch-up on recent orders.
+        if (array_key_exists('shop_data', $data) && $data['shop_data'] !== null && class_exists('ES_Purchases')) {
+            $want = ! empty($data['shop_data']) ? '1' : '0';
+            if (get_option(ES_Purchases::ENABLED_OPTION) !== $want) {
+                update_option(ES_Purchases::ENABLED_OPTION, $want);
+            }
+        }
+
+        // The same answer says whether any asset here uses the order trigger.
+        // Recorded on every tick, so switching an asset on reaches this site
+        // within two minutes, and anything waiting goes up with it.
+        if (array_key_exists('orders_wanted', $data)) {
+            self::set_recent_orders_wanted(! empty($data['orders_wanted']));
+            if (! empty($data['orders_wanted'])) {
+                self::push_recent_orders();
+            }
         }
 
         if (! self::funnelkit_available()) {

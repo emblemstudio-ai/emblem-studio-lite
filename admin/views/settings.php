@@ -133,23 +133,8 @@ $logs   = ES_Logger::recent( 50 );
 
 		</table>
 
-		<?php if ( class_exists( 'ES_Commerce' ) && ES_Commerce::available() ) : ?>
-			<h2 style="margin-top:2em;"><?php esc_html_e( 'Shop', 'emblem-studio' ); ?></h2>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th><?php esc_html_e( 'Sales after an asset', 'emblem-studio' ); ?></th>
-					<td>
-						<label style="display:inline-flex; align-items:center; gap:0.5rem;">
-							<input type="checkbox" class="es-toggle-input" name="track_purchases_site" value="1" <?php checked( get_option( ES_Purchases::ENABLED_OPTION ) === '1' ); ?>>
-							<?php esc_html_e( 'Count sales that follow an asset', 'emblem-studio' ); ?>
-						</label>
-						<p class="description">
-							<?php esc_html_e( 'Off by default. When on, Emblem Studio can say how many of the people an asset brought in went on to buy. It reads your orders and never writes to them, and a customer sees nothing new. No email address leaves this site. Each asset has its own switch too, on its Stats tab.', 'emblem-studio' ); ?>
-						</p>
-					</td>
-				</tr>
-			</table>
-		<?php endif; ?>
+		<?php /* The purchase switches live in the web app (SER-1747). Only the web app shows what they
+		   measure, so here they would switch on something nobody can see. */ ?>
 
 		<h2 style="margin-top:2em;"><?php esc_html_e( 'Data &amp; uninstall', 'emblem-studio' ); ?></h2>
 		<table class="form-table" role="presentation">

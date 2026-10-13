@@ -87,12 +87,15 @@ class ES_Install {
 			ua VARCHAR(255) NULL,
 			ip VARCHAR(45) NULL,
 			visitor VARCHAR(40) NULL,
+			lead_id BIGINT(20) UNSIGNED NULL,
+			measurement_mode VARCHAR(12) NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			KEY form_event_time (form_id, event_type, created_at),
 			KEY form_type_event_time (form_id, type, event_type, created_at),
 			KEY form_variant_event_time (form_id, variant, event_type, created_at),
 			KEY form_visitor_time (form_id, visitor, created_at),
+			KEY lead_id (lead_id),
 			UNIQUE KEY saas_event_id (saas_event_id)
 		) $charset_collate;";
 
@@ -1186,6 +1189,23 @@ class ES_Install {
 			}
 			$wpdb->query( "UPDATE {$consents} c JOIN {$leads} l ON l.id = c.lead_id SET c.email = l.email WHERE c.email IS NULL AND l.email IS NOT NULL AND l.email <> ''" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			update_option( 'emblem_studio_db_version', '44' );
+		}
+
+		if ( version_compare( $current, '45', '<' ) ) {
+			global $wpdb;
+			$events = self::table( 'events' );
+			$cols = $wpdb->get_col( "SHOW COLUMNS FROM $events" );
+			if ( ! in_array( 'lead_id', $cols, true ) ) {
+				$wpdb->query( "ALTER TABLE $events ADD COLUMN lead_id BIGINT(20) UNSIGNED NULL, ADD KEY lead_id (lead_id)" );
+			}
+			if ( ! in_array( 'measurement_mode', $cols, true ) ) {
+				$wpdb->query( "ALTER TABLE $events ADD COLUMN measurement_mode VARCHAR(12) NULL" );
+			}
+			// NULL legacy associations remain unknown: no backfill by time/visitor.
+			$cols = $wpdb->get_col( "SHOW COLUMNS FROM $events" );
+			if ( in_array( 'lead_id', $cols, true ) && in_array( 'measurement_mode', $cols, true ) ) {
+				update_option( 'emblem_studio_db_version', '45' );
+			}
 		}
 	}
 

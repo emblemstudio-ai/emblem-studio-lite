@@ -1268,13 +1268,9 @@ class ES_Admin {
 		}
 		update_option( ES_Event_Recorder::OPT_EXCLUDE_IPS, array_values( array_unique( $ips ) ) );
 
-		// Purchases after a click or a sign-up (SER-1346, SER-1348). Default OFF on
-		// every site: a shop's takings are not something to start measuring on the
-		// owner's behalf. Only written where there is a shop to measure, so a site
-		// without WooCommerce cannot end up with the switch on and nothing behind it.
-		if ( class_exists( 'ES_Commerce' ) && ES_Commerce::available() ) {
-			update_option( ES_Purchases::ENABLED_OPTION, ! empty( $_POST['track_purchases_site'] ) ? '1' : '0' );
-		}
+		// The purchase switch is no longer on this page (SER-1747). It lives in the
+		// web app's Site settings and the connector applies it, so this save must
+		// never touch it: a missing checkbox would read as "off".
 
 		// Uninstall data policy. Default OFF (keep data) — checkbox arrives only
 		// when ticked. Read in uninstall.php (kept in sync there by key name).
@@ -1814,8 +1810,8 @@ class ES_Admin {
 		// otherwise let the DB default (1) win on initial create.
 		if ( $id ) {
 			$data['track_clicks'] = ! empty( $_POST['track_clicks'] ) ? 1 : 0;
-			// Same reasoning for the purchase switch, which sits beside it.
-			$data['track_purchases'] = ! empty( $_POST['track_purchases'] ) ? 1 : 0;
+			// The purchase switch is not on this screen any more (SER-1747): it is set
+			// in the web app and copied down, so it is left as it is.
 			delete_transient( 'emblem_studio_buy_assets' );
 		}
 

@@ -314,8 +314,21 @@ class ES_Leads {
 	}
 
 	public static function delete( int $id ): bool {
-		global $wpdb;
-		return (bool) $wpdb->delete( ES_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] );
+		if ( ! ES_Measurement::storage_transactional() ) {
+			// Keep ordinary legacy deletion compatibility, without pretending
+			// nontransactional storage can erase associated measurement safely.
+			global $wpdb;
+			$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT id, form_id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d', $id ) );
+			$events = ES_Measurement::events_for_lead( $id );
+			if ( ! $lead || is_wp_error( $events ) || $events !== [] || ES_Measurement::policy( [ 'form_id' => (int) $lead->form_id, 'event_type' => 'privacy', 'lead_id' => $id ] ) !== 'legacy' ) { return false; }
+			return $wpdb->delete( ES_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] ) === 1;
+		}
+		return ES_Measurement_Transaction::run( static function () use ( $id ): bool {
+			global $wpdb;
+			$lead = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $id ) );
+			if ( ! $lead || ES_Measurement::erase_for_lead( $id ) === false ) { return false; }
+			return $wpdb->delete( ES_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] ) === 1;
+		} ) === true;
 	}
 
 	/**
@@ -326,7 +339,8 @@ class ES_Leads {
 	 */
 	public static function delete_by_saas_id( int $saas_lead_id ): bool {
 		global $wpdb;
-		return (bool) $wpdb->delete( ES_Install::table( 'leads' ), [ 'saas_lead_id' => $saas_lead_id ], [ '%d' ] );
+		$id = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . ES_Install::table( 'leads' ) . ' WHERE saas_lead_id = %d', $saas_lead_id ) );
+		return $id ? self::delete( (int) $id ) : false;
 	}
 
 	/**
@@ -486,7 +500,11 @@ class ES_Leads {
 	public static function delete_by_email( string $email ): int {
 		global $wpdb;
 		$normalized = strtolower( trim( $email ) );
-		return (int) $wpdb->delete( ES_Install::table( 'leads' ), [ 'email' => $normalized ], [ '%s' ] );
+		$removed = 0;
+		foreach ( self::find_by_email( $normalized ) as $lead ) {
+			$removed += self::delete( (int) $lead->id ) ? 1 : 0;
+		}
+		return $removed;
 	}
 
 	public static function find_by_email( string $email ): array {

@@ -5,7 +5,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ES_Event_Recorder {
 
-	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null ): void {
+	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null, ?int $lead_id = null ): bool {
+		$context = [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => $lead_id ];
+		if ( ES_Measurement::policy( $context ) === 'strict' ) {
+			return ES_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id ): bool {
+				global $wpdb;
+				$personal = $decision['personal'];
+				$row = [
+					'form_id' => $form_id, 'event_type' => $event_type, 'type' => $shell,
+					'post_id' => $post_id, 'created_at' => current_time( 'mysql' ),
+					'measurement_mode' => $personal ? 'personal' : 'aggregate',
+					'lead_id' => $personal ? $lead_id : null,
+				];
+				if ( $variant !== null && in_array( strtoupper( $variant ), [ 'A', 'B' ], true ) ) {
+					$row['variant'] = strtoupper( $variant );
+				}
+				// No raw UA, posted visitor id or arbitrary click text in strict
+				// mode. An explicitly authorized host may supply minimized values.
+				if ( $personal ) {
+					foreach ( [ 'visitor' => 40, 'ua' => 255 ] as $key => $limit ) {
+						if ( isset( $decision[ $key ] ) && is_string( $decision[ $key ] ) && $decision[ $key ] !== '' ) {
+							$row[ $key ] = mb_substr( sanitize_text_field( $decision[ $key ] ), 0, $limit );
+						}
+					}
+				}
+				return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
+			} );
+		}
 		global $wpdb;
 		$row = [
 			'form_id'    => $form_id,
@@ -13,6 +39,7 @@ class ES_Event_Recorder {
 			'type'       => $shell,
 			'post_id'    => $post_id,
 			'created_at' => current_time( 'mysql' ),
+			'measurement_mode' => 'legacy',
 		];
 		// Only persist a click_target on click events and on honeypot_blocked,
 		// where it carries the matched bot label — the same column, and the same
@@ -44,7 +71,7 @@ class ES_Event_Recorder {
 		if ( $vid !== '' ) {
 			$row['visitor'] = mb_substr( $vid, 0, 40 );
 		}
-		$wpdb->insert( ES_Install::table( 'events' ), $row );
+		return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
 	}
 
 	/**
@@ -451,6 +478,10 @@ class ES_Event_Recorder {
 	 * already-anonymized IP. post_id captures which page the bot hit.
 	 */
 	public static function record_bot( int $form_id, string $shell, ?int $post_id, string $label, string $ua, string $ip ): void {
+		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'bot_filtered', 'lead_id' => null ] ) === 'strict' ) {
+			self::record( $form_id, 'bot_filtered', $post_id, $shell );
+			return;
+		}
 		global $wpdb;
 		$wpdb->insert( ES_Install::table( 'events' ), [
 			'form_id'      => $form_id,
