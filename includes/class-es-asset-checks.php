@@ -3,36 +3,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * The editor's "Checks" list (SER-1358): mistakes in an asset's HTML and CSS
- * that break it, or quietly make it worse, found before a visitor finds them.
- *
- * ONE CONTRACT, TWO IMPLEMENTATIONS. The contract is the SaaS repo's
- * docs/ASSET-CHECKS.md; the web app runs it in app/Support/AssetChecks.php.
- * Rule ids, levels, order, detection and the English message and fix text are
- * identical in both, and tests/unit/AssetChecksTest.php carries the same
- * fixtures as the web app's test. Change a rule there first, then here and in
- * the test, in the same change.
- *
- * The checks never block a save. They warn: a person may know better, and a
- * half-written asset is a normal thing to save.
- *
- * The English strings are the contract text. They are wrapped for translation
- * only so a translated admin reads naturally; without a translation loaded the
- * output is the contract text, character for character.
- *
- * Pure PHP (DOMDocument + regex), no database. Loaded in every edition, behind
- * the is_admin() gate like ES_Authoring, because only the editor uses it.
- */
 class ES_Asset_Checks {
 
-	/** <input> types that capture nothing. Same list as ES_Form_Repo::has_fields(). */
 	const NON_FIELD_INPUT_TYPES = [ 'hidden', 'submit', 'button', 'image', 'reset' ];
 
-	/** <input> types a reserved name is ignored on (they send no value of their own worth keeping). */
 	const RESERVED_SKIP_TYPES = [ 'submit', 'button', 'reset', 'image' ];
 
-	/** Names Emblem Studio's own submission uses. A field with one of these loses its answer. */
 	const RESERVED_NAMES = [
 		'action',
 		'_wpnonce',
@@ -51,11 +27,6 @@ class ES_Asset_Checks {
 		'es_preview_token',
 	];
 
-	/**
-	 * Run every check, in contract order (all errors before all warnings).
-	 *
-	 * @return list<array{id: string, level: string, message: string, fix: string}>
-	 */
 	public static function run( string $html, string $css ): array {
 		if ( trim( $html ) === '' ) {
 			return [];
@@ -70,8 +41,6 @@ class ES_Asset_Checks {
 		$submits = self::submit_controls( $xpath );
 		$items   = [];
 
-		// 1. no_root: the runtime takes the first <form> in the asset, whatever its
-		// class, so only a missing <form> breaks it.
 		$forms = $xpath->query( '//form' );
 		if ( ! $forms || 0 === $forms->length ) {
 			$items[] = self::item(
@@ -82,11 +51,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 2. no_email: no email field the runtime can find. That is more than a
-		// field named `email`: ES_Ajax also takes the usual other names and the
-		// only email-type box on the form. This used to be an error for those,
-		// although signups through them worked (SER-1430). They hear about the
-		// name in email_misnamed at the end instead, as a warning.
 		$email_field = null;
 		if ( $is_form ) {
 			$input_names = [];
@@ -118,7 +82,6 @@ class ES_Asset_Checks {
 			}
 		}
 
-		// 3. no_submit
 		if ( $is_form && ! $submits ) {
 			$items[] = self::item(
 				'no_submit',
@@ -128,9 +91,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 4. unnamed_field. A hidden checkbox that the CSS reads with :checked is
-		// an open/close switch, not a field: nobody types in it and it has
-		// nothing to send, so it needs no name (TST's account drawer).
 		$unnamed = 0;
 		foreach ( $fields as $field ) {
 			if ( trim( $field->getAttribute( 'name' ) ) === '' && ! self::is_css_switch( $field, $css ) ) {
@@ -155,7 +115,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 5. reserved_name (per name)
 		$reserved = [];
 		foreach ( $xpath->query( '//input | //select | //textarea' ) ?: [] as $el ) {
 			if ( ! $el instanceof DOMElement ) {
@@ -183,7 +142,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 6. own_overlay
 		if ( preg_match( '/position\s*:\s*fixed\b/i', $css ) ) {
 			$items[] = self::item(
 				'own_overlay',
@@ -193,7 +151,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 7. own_close (one item)
 		if ( self::has_own_close( $xpath ) ) {
 			$items[] = self::item(
 				'own_close',
@@ -203,7 +160,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 8. container_query
 		if ( preg_match( '/container-type\s*:|@container\b/i', $css ) ) {
 			$items[] = self::item(
 				'container_query',
@@ -213,8 +169,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 9 to 13, and 21. Live values (SER-1352, the SaaS repo's docs/LIVE-VALUES.md).
-		// Each rule is one item however many markers break it.
 		$live     = self::live_problems( $xpath );
 		$live_msg = [
 			'live_unknown_field'  => [
@@ -244,7 +198,6 @@ class ES_Asset_Checks {
 			}
 		}
 
-		// 14. checkbox_group_no_brackets (per name, warning)
 		$checkbox_counts = [];
 		foreach ( $xpath->query( '//input' ) ?: [] as $input ) {
 			if ( ! $input instanceof DOMElement || self::input_type( $input ) !== 'checkbox' ) {
@@ -276,8 +229,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 15. unmarked_consent (per name) — the consent log's own check, so the
-		// two can never disagree about which boxes go unrecorded.
 		foreach ( ES_Consent_Log::unmarked_required_checkboxes( $html ) as $name ) {
 			$items[] = self::item(
 				'unmarked_consent',
@@ -291,7 +242,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 16. consent_without_label (per name)
 		$unlabelled = [];
 		foreach ( $xpath->query( '//input' ) ?: [] as $input ) {
 			if ( ! $input instanceof DOMElement || ! $input->hasAttribute( 'data-esf-consent' ) ) {
@@ -320,7 +270,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 17. no_width
 		if ( self::max_width_without_width( $css ) ) {
 			$items[] = self::item(
 				'no_width',
@@ -330,7 +279,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 18. tracked_submit (one item)
 		foreach ( $submits as $submit ) {
 			if ( $submit->hasAttribute( 'data-es-track' ) ) {
 				$items[] = self::item(
@@ -343,7 +291,6 @@ class ES_Asset_Checks {
 			}
 		}
 
-		// 19. no_hidden_rule
 		$thankyou = $xpath->query( '//*[@data-esf-thankyou]' );
 		if ( $thankyou && $thankyou->length > 0 && ! preg_match( '/\[hidden\][^{]*\{[^}]*display\s*:\s*none/i', $css ) ) {
 			$items[] = self::item(
@@ -354,7 +301,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 20. stripped_code (one item)
 		if ( self::has_stripped_code( $xpath ) ) {
 			$items[] = self::item(
 				'stripped_code',
@@ -364,7 +310,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 21. live_number_in_fallback
 		if ( isset( $live['live_number_in_fallback'] ) ) {
 			$items[] = self::item(
 				'live_number_in_fallback',
@@ -374,19 +319,6 @@ class ES_Asset_Checks {
 			);
 		}
 
-		// 22. no_thankyou: a form that says nothing back.
-		//
-		// On a successful submit the runtime hides the form and reveals the element
-		// marked data-esf-thankyou. With no such element the card simply vanishes,
-		// which reads as a bug to the person who just handed over their address
-		// (SER-1419, item 13 of Catalina's test pass). The plain "custom message"
-		// option used to paper over this and is gone, because it had no design of
-		// its own and landed as black text in the corner of the page.
-		//
-		// A warning, never an error. An asset that redirects after a signup is right
-		// to have no thank-you state, and only the settings know that, while this
-		// runs on the HTML and CSS alone. The legacy markers count: the runtime
-		// still reveals them, so an asset written before the rename works.
 		if ( $is_form ) {
 			$thanks = $xpath->query( '//*[@data-esf-thankyou or @data-esf-success or @data-osf-thankyou or @data-osf-success]' );
 			if ( ! $thanks || 0 === $thanks->length ) {
@@ -399,9 +331,6 @@ class ES_Asset_Checks {
 			}
 		}
 
-		// 23. email_misnamed: the address works, under a name the rules don't use.
-		// Both apps accept it (SER-1430) and nothing is lost, but every tool,
-		// mapping and AI prompt expects `email`.
 		if ( $email_field !== null && $email_field !== 'email' ) {
 			$items[] = self::item(
 				'email_misnamed',
@@ -415,12 +344,6 @@ class ES_Asset_Checks {
 		return $items;
 	}
 
-	/**
-	 * Which live-value rules at least one marker breaks. Every condition is judged
-	 * on its own, so a marker with no product AND no fallback reports both.
-	 *
-	 * @return array<string, true>
-	 */
 	private static function live_problems( DOMXPath $xpath ): array {
 		$found = [];
 		foreach ( $xpath->query( '//*[@data-es-live]' ) ?: [] as $el ) {
@@ -456,10 +379,6 @@ class ES_Asset_Checks {
 		return $found;
 	}
 
-	/**
-	 * Parsed exactly the way ES_Consent_Log parses, so the two agree about what
-	 * a field is.
-	 */
 	private static function parse( string $html ): DOMDocument {
 		$prev = libxml_use_internal_errors( true );
 		$dom  = new DOMDocument();
@@ -470,9 +389,6 @@ class ES_Asset_Checks {
 		return $dom;
 	}
 
-	/**
-	 * @return array{id: string, level: string, message: string, fix: string}
-	 */
 	private static function item( string $id, string $level, string $message, string $fix ): array {
 		return [
 			'id'      => $id,
@@ -482,19 +398,12 @@ class ES_Asset_Checks {
 		];
 	}
 
-	/** An <input>'s type: lowercased, trimmed, `text` when absent or blank. */
 	private static function input_type( DOMElement $input ): string {
 		$type = strtolower( trim( $input->getAttribute( 'type' ) ) );
 
 		return $type === '' ? 'text' : $type;
 	}
 
-	/**
-	 * A checkbox or radio carrying the `hidden` attribute, whose id or one of
-	 * whose classes the CSS selects with :checked. `hidden` is what keeps a real
-	 * consent box out: one a visitor has to tick can't be hidden, and a styled
-	 * one that hides the native box does it with CSS, not the attribute.
-	 */
 	private static function is_css_switch( DOMElement $el, string $css ): bool {
 		if ( strtolower( $el->tagName ) !== 'input' || ! in_array( self::input_type( $el ), [ 'checkbox', 'radio' ], true ) || ! $el->hasAttribute( 'hidden' ) ) {
 			return false;
@@ -514,7 +423,6 @@ class ES_Asset_Checks {
 		return (bool) preg_match( '~(?:' . implode( '|', $selectors ) . ')(?![\w-])[^\s{},>+\~]*:checked~', $css );
 	}
 
-	/** @return list<string> */
 	private static function class_tokens( DOMElement $el ): array {
 		$tokens = preg_split( '/\s+/', trim( $el->getAttribute( 'class' ) ) );
 
@@ -523,11 +431,6 @@ class ES_Asset_Checks {
 		} ) );
 	}
 
-	/**
-	 * Every <select>, <textarea> and capturing <input>, in document order.
-	 *
-	 * @return list<DOMElement>
-	 */
 	private static function real_fields( DOMXPath $xpath ): array {
 		$out = [];
 		foreach ( $xpath->query( '//input | //select | //textarea' ) ?: [] as $el ) {
@@ -543,12 +446,6 @@ class ES_Asset_Checks {
 		return $out;
 	}
 
-	/**
-	 * A <button> whose type is absent or `submit`, or an <input> of type
-	 * `submit` or `image`, in document order.
-	 *
-	 * @return list<DOMElement>
-	 */
 	private static function submit_controls( DOMXPath $xpath ): array {
 		$out = [];
 		foreach ( $xpath->query( '//button | //input' ) ?: [] as $el ) {
@@ -604,11 +501,6 @@ class ES_Asset_Checks {
 		return null;
 	}
 
-	/**
-	 * Across every block whose selector list holds exactly `.esf-form` (a rule
-	 * inside @media counts too): at least one sets max-width, and none sets width.
-	 * $css has its comments stripped already.
-	 */
 	private static function max_width_without_width( string $css ): bool {
 		if ( ! preg_match_all( '/([^{}]+)\{([^{}]*)\}/', $css, $blocks, PREG_SET_ORDER ) ) {
 			return false;
@@ -631,7 +523,6 @@ class ES_Asset_Checks {
 		return $max_width;
 	}
 
-	/** A <script>, an on* attribute, or a javascript: URL — all removed on save. */
 	private static function has_stripped_code( DOMXPath $xpath ): bool {
 		$scripts = $xpath->query( '//script' );
 		if ( $scripts && $scripts->length > 0 ) {

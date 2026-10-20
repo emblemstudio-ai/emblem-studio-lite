@@ -20,8 +20,6 @@ class ES_Event_Recorder {
 				if ( $variant !== null && in_array( strtoupper( $variant ), [ 'A', 'B' ], true ) ) {
 					$row['variant'] = strtoupper( $variant );
 				}
-				// No raw UA, posted visitor id or arbitrary click text in strict
-				// mode. An explicitly authorized host may supply minimized values.
 				if ( $personal ) {
 					foreach ( [ 'visitor' => 40, 'ua' => 255 ] as $key => $limit ) {
 						if ( isset( $decision[ $key ] ) && is_string( $decision[ $key ] ) && $decision[ $key ] !== '' ) {
@@ -41,32 +39,19 @@ class ES_Event_Recorder {
 			'created_at' => current_time( 'mysql' ),
 			'measurement_mode' => 'legacy',
 		];
-		// Only persist a click_target on click events and on honeypot_blocked,
-		// where it carries the matched bot label — the same column, and the same
-		// labels, a filtered VIEW already uses. Every other row keeps it NULL, so
-		// it stays an unambiguous signal in queries.
 		if ( in_array( $event_type, [ 'click', 'honeypot_blocked' ], true ) && $click_target !== null && $click_target !== '' ) {
 			$row['click_target'] = mb_substr( $click_target, 0, 191 );
 		}
-		// Variant tagging — only persist 'A' / 'B'. Anything else (including
-		// bot events that never went through A/B assignment) stays NULL so
-		// per-variant rollups don't get polluted.
 		if ( $variant !== null ) {
 			$v = strtoupper( $variant );
 			if ( in_array( $v, [ 'A', 'B' ], true ) ) {
 				$row['variant'] = $v;
 			}
 		}
-		// Stamp the user-agent so visits can be split into coarse device buckets
-		// (mobile / tablet / desktop) in reports. UA only — no IP is stored on a
-		// real-visitor row (privacy stance: see anonymize_ip / the bot track).
 		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
 		if ( $ua !== '' ) {
 			$row['ua'] = mb_substr( $ua, 0, 255 );
 		}
-		// Anonymous per-visitor id (a random first-party cookie value sent by the
-		// frontend) so reports can count unique visitors + new-vs-returning. No
-		// PII, no IP. Absent => the visit rolls up as "Unknown".
 		$vid = isset( $_POST['vid'] ) ? preg_replace( '/[^a-zA-Z0-9-]/', '', (string) $_POST['vid'] ) : '';
 		if ( $vid !== '' ) {
 			$row['visitor'] = mb_substr( $vid, 0, 40 );
@@ -74,29 +59,12 @@ class ES_Event_Recorder {
 		return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
 	}
 
-	/**
-	 * Always on — there is no toggle. Known bots are always counted separately
-	 * (under `bot_filtered`) so they never pollute real visitor metrics. Kept as
-	 * a method (rather than inlining `true` at every call site) so the bot-gate
-	 * intent stays readable and a future policy change has one home.
-	 */
 	public static function filter_bots_enabled(): bool {
 		return true;
 	}
 
-	/**
-	 * Option flag — when on, the recorder resolves the real client IP from
-	 * proxy headers (CF-Connecting-IP / X-Real-IP / X-Forwarded-For) instead of
-	 * trusting REMOTE_ADDR. Needed behind Cloudflare / a reverse proxy, where
-	 * REMOTE_ADDR is the edge IP and every visitor would otherwise look the same.
-	 */
 	public const OPT_TRUST_PROXY = 'emblem_studio_trust_proxy';
 
-	/**
-	 * Default-off, so directly-exposed sites can't be spoofed via a forged
-	 * header. The legacy `EMBLEM_STUDIO_TRUST_PROXY` wp-config constant still
-	 * force-enables it for setups that prefer config over a UI toggle.
-	 */
 	public static function trust_proxy_enabled(): bool {
 		if ( defined( 'EMBLEM_STUDIO_TRUST_PROXY' ) && EMBLEM_STUDIO_TRUST_PROXY ) {
 			return true;
@@ -104,12 +72,6 @@ class ES_Event_Recorder {
 		return get_option( self::OPT_TRUST_PROXY, '0' ) === '1';
 	}
 
-	/**
-	 * Option holding IPs to drop from stats entirely — e.g. the site's own
-	 * uptime / synthetic monitors, which run headless browsers and would
-	 * otherwise inflate page-view / impression counts with a real-browser UA
-	 * the bot filter can't catch. Stored as an array of exact IP strings.
-	 */
 	public const OPT_EXCLUDE_IPS = 'emblem_studio_exclude_ips';
 
 	public static function excluded_ips(): array {
@@ -124,13 +86,6 @@ class ES_Event_Recorder {
 		return in_array( $ip, self::excluded_ips(), true );
 	}
 
-	/**
-	 * The real client IP. Behind a CDN/proxy, REMOTE_ADDR is the edge, so the
-	 * true visitor only appears in a forwarded header — honored only when
-	 * trust_proxy is on (else a directly-exposed site could be spoofed).
-	 * CF-Connecting-IP is preferred (Cloudflare overwrites it). Shared by the
-	 * AJAX rate-limiter, the stored bot IP, and the exclusion check.
-	 */
 	public static function client_ip(): string {
 		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
 		if ( self::trust_proxy_enabled() ) {
@@ -148,24 +103,16 @@ class ES_Event_Recorder {
 		return preg_replace( '/[^0-9a-f:.]/i', '', (string) $ip );
 	}
 
-	/**
-	 * Option flag — when on (default), a "browser" hit whose real IP is in a
-	 * known cloud datacenter range is treated as a bot. No real visitor browses
-	 * from an Azure/AWS/GCP/DigitalOcean VM, so this catches browser-spoofing
-	 * crawlers that rotate IPs, which the UA filter can't. Ported from Bot Tracker.
-	 */
 	public const OPT_DETECT_DATACENTER = 'emblem_studio_detect_datacenter';
 
 	public static function detect_datacenter_enabled(): bool {
 		return get_option( self::OPT_DETECT_DATACENTER, '1' ) !== '0';
 	}
 
-	/** Provider names that map to the "Datacenter" category. */
 	public static function datacenter_providers(): array {
 		return array_keys( self::datacenter_ranges() );
 	}
 
-	/** provider => [ CIDR, … ]. Specific providers before broad /8s (first match wins). */
 	public static function datacenter_ranges(): array {
 		$ranges = [
 			'DigitalOcean' => [
@@ -221,7 +168,6 @@ class ES_Event_Recorder {
 		return (array) apply_filters( 'emblem_studio_datacenter_ranges', $ranges );
 	}
 
-	/** Provider name if the IPv4 falls in a known datacenter range, else ''. */
 	public static function datacenter_provider( string $ip ): string {
 		if ( $ip === '' || strpos( $ip, ':' ) !== false ) {
 			return '';
@@ -248,22 +194,8 @@ class ES_Event_Recorder {
 		return '';
 	}
 
-	/**
-	 * Master bot catalog. Each entry is [ needle, label, category ]:
-	 *   - `needle`   — matched case-insensitively as a substring of the UA.
-	 *   - `label`    — what we persist (in click_target) and show in the
-	 *                  breakdown report. Several needles may share a label
-	 *                  so close variants group into one row.
-	 *   - `category` — groups labels in the report's foldable tree.
-	 *
-	 * ORDER MATTERS. The four generic substrings (`bot`/`crawl`/`spider`/
-	 * `headless`) sit LAST so that a self-identifying crawler like
-	 * "Googlebot" attributes to "Googlebot" rather than collapsing into the
-	 * catch-all "Generic bot". matched_bot_label() walks this list top-down.
-	 */
 	public static function bot_catalog(): array {
 		return [
-			// Automation / headless tooling.
 			[ 'PhantomJS', 'PhantomJS', 'Automation' ],
 			[ 'Selenium', 'Selenium', 'Automation' ],
 			[ 'Puppeteer', 'Puppeteer', 'Automation' ],
@@ -273,7 +205,6 @@ class ES_Event_Recorder {
 			[ 'Lighthouse', 'Lighthouse', 'Automation' ],
 			[ 'PageSpeed', 'PageSpeed', 'Automation' ],
 
-			// HTTP libraries and scripted clients.
 			[ 'curl/', 'curl', 'HTTP libraries' ],
 			[ 'wget/', 'wget', 'HTTP libraries' ],
 			[ 'HTTPie', 'HTTPie', 'HTTP libraries' ],
@@ -285,7 +216,6 @@ class ES_Event_Recorder {
 			[ 'Apache-HttpClient', 'Apache HttpClient', 'HTTP libraries' ],
 			[ 'okhttp', 'OkHttp', 'HTTP libraries' ],
 
-			// AI scrapers / LLM trainers.
 			[ 'GPTBot', 'GPTBot', 'AI scrapers' ],
 			[ 'ChatGPT-User', 'ChatGPT-User', 'AI scrapers' ],
 			[ 'OAI-SearchBot', 'OAI-SearchBot', 'AI scrapers' ],
@@ -304,7 +234,6 @@ class ES_Event_Recorder {
 			[ 'Amazonbot', 'Amazonbot', 'AI scrapers' ],
 			[ 'omgilibot', 'omgilibot', 'AI scrapers' ],
 
-			// Search engine crawlers.
 			[ 'Googlebot', 'Googlebot', 'Search engines' ],
 			[ 'Bingbot', 'Bingbot', 'Search engines' ],
 			[ 'Slurp', 'Yahoo! Slurp', 'Search engines' ],
@@ -316,7 +245,6 @@ class ES_Event_Recorder {
 			[ 'Applebot', 'Applebot', 'Search engines' ],
 			[ 'PetalBot', 'PetalBot', 'Search engines' ],
 
-			// SEO / marketing crawlers.
 			[ 'AhrefsBot', 'AhrefsBot', 'SEO & marketing' ],
 			[ 'semrush', 'SemrushBot', 'SEO & marketing' ],
 			[ 'MJ12bot', 'MJ12bot', 'SEO & marketing' ],
@@ -328,12 +256,10 @@ class ES_Event_Recorder {
 			[ 'BLEXBot', 'BLEXBot', 'SEO & marketing' ],
 			[ 'Pinterestbot', 'Pinterestbot', 'SEO & marketing' ],
 
-			// Archive / academic.
 			[ 'archive.org_bot', 'archive.org', 'Archive' ],
 			[ 'ia_archiver', 'Internet Archive', 'Archive' ],
 			[ 'Wayback', 'Wayback Machine', 'Archive' ],
 
-			// Social link previewers — they fetch pages to render unfurls.
 			[ 'facebookexternalhit', 'Facebook (link preview)', 'Social previewers' ],
 			[ 'Twitterbot', 'Twitterbot', 'Social previewers' ],
 			[ 'LinkedInBot', 'LinkedInBot', 'Social previewers' ],
@@ -343,7 +269,6 @@ class ES_Event_Recorder {
 			[ 'TelegramBot', 'TelegramBot', 'Social previewers' ],
 			[ 'SkypeUriPreview', 'Skype (link preview)', 'Social previewers' ],
 
-			// Generic signatures — MUST stay last (see method doc).
 			[ 'headless', 'Headless browser', 'Generic' ],
 			[ 'crawl', 'Generic crawler', 'Generic' ],
 			[ 'spider', 'Generic spider', 'Generic' ],
@@ -351,11 +276,6 @@ class ES_Event_Recorder {
 		];
 	}
 
-	/**
-	 * Display order for the breakdown report's category groups. Anything
-	 * the catalog doesn't classify (custom filter needles) falls under
-	 * "Other"; '(no user-agent)' rolls up under "Generic".
-	 */
 	public static function bot_category_order(): array {
 		return [
 			'Generic', 'Datacenter', 'Automation', 'HTTP libraries', 'AI scrapers',
@@ -364,16 +284,6 @@ class ES_Event_Recorder {
 		];
 	}
 
-	/**
-	 * Flat list of substring needles for the is_bot_request() gate. Derived
-	 * from the catalog and still filterable so admins can extend it:
-	 *   add_filter( 'emblem_studio_bot_user_agents', function ( $list ) {
-	 *       $list[] = 'MyCustomCrawler';
-	 *       return $list;
-	 *   } );
-	 * Custom needles aren't in the catalog, so matched_bot_label() attributes
-	 * them to their own label under the "Other" category.
-	 */
 	public static function bot_patterns(): array {
 		$patterns = array_map( static fn( $e ) => $e[0], self::bot_catalog() );
 		return (array) apply_filters( 'emblem_studio_bot_user_agents', $patterns );
@@ -382,7 +292,6 @@ class ES_Event_Recorder {
 	public static function is_bot_request(): bool {
 		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
 		if ( $ua === '' ) {
-			// Empty UA is itself a strong bot signal — almost no real browser sends none.
 			return true;
 		}
 		foreach ( self::bot_patterns() as $needle ) {
@@ -393,12 +302,6 @@ class ES_Event_Recorder {
 		return false;
 	}
 
-	/**
-	 * Which bot a UA attributes to — the label we persist for the breakdown.
-	 * Walks the catalog (specific-before-generic), then any custom filter
-	 * needles. Empty UA → '(no user-agent)'. Returns '' when nothing matches
-	 * (in which case the caller should not record a bot row).
-	 */
 	public static function matched_bot_label( ?string $ua = null ): string {
 		if ( $ua === null ) {
 			$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
@@ -411,8 +314,6 @@ class ES_Event_Recorder {
 				return $entry[1];
 			}
 		}
-		// Custom needles added via the filter aren't catalogued — attribute
-		// them to the needle itself so they still show up in the breakdown.
 		foreach ( self::bot_patterns() as $needle ) {
 			if ( $needle !== '' && stripos( $ua, $needle ) !== false ) {
 				return $needle;
@@ -421,16 +322,10 @@ class ES_Event_Recorder {
 		return '';
 	}
 
-	/**
-	 * Map a persisted bot label back to its display category. '(no
-	 * user-agent)' rolls up under "Generic"; unknown labels (custom
-	 * needles) fall under "Other".
-	 */
 	public static function category_for_label( string $label ): string {
 		if ( $label === '(no user-agent)' ) {
 			return 'Generic';
 		}
-		// Cloud-provider labels (recorded by datacenter detection) → Datacenter.
 		if ( in_array( $label, self::datacenter_providers(), true ) ) {
 			return 'Datacenter';
 		}
@@ -442,11 +337,6 @@ class ES_Event_Recorder {
 		return 'Other';
 	}
 
-	/**
-	 * GDPR-friendly IP truncation: zero the last octet of an IPv4 address
-	 * and the last 80 bits (everything past the /48) of an IPv6 address.
-	 * Returns '' for anything that isn't a valid IP.
-	 */
 	public static function anonymize_ip( string $ip ): string {
 		$ip = trim( $ip );
 		if ( $ip === '' ) {
@@ -460,7 +350,6 @@ class ES_Event_Recorder {
 		if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
 			$bin = @inet_pton( $ip );
 			if ( $bin !== false ) {
-				// Keep the first 48 bits (3 hextets / 6 bytes); zero the rest.
 				$masked = substr( $bin, 0, 6 ) . str_repeat( "\0", 10 );
 				$out    = @inet_ntop( $masked );
 				if ( $out !== false ) {
@@ -471,12 +360,6 @@ class ES_Event_Recorder {
 		return '';
 	}
 
-	/**
-	 * Record a filtered bot hit. Distinct from record() because bot rows
-	 * carry detail no real-visitor event does: the matched label (parked in
-	 * click_target — unused on bot rows otherwise), the raw UA, and an
-	 * already-anonymized IP. post_id captures which page the bot hit.
-	 */
 	public static function record_bot( int $form_id, string $shell, ?int $post_id, string $label, string $ua, string $ip ): void {
 		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'bot_filtered', 'lead_id' => null ] ) === 'strict' ) {
 			self::record( $form_id, 'bot_filtered', $post_id, $shell );

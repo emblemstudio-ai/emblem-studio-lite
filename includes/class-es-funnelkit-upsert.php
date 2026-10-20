@@ -3,7 +3,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Shared direct-contact contract for every local FunnelKit transport. */
 final class ES_FunnelKit_Upsert {
 	public static function run( array $lead ): array {
 		try {
@@ -165,27 +164,8 @@ final class ES_FunnelKit_Upsert {
 		}
 	}
 
-	/** FunnelKit field types that pick from a list of options (BWFCRM_Fields). */
-	private const CHOICE_TYPES = [ 4 /* select */, 5 /* radio */, 6 /* checkbox */ ];
+	private const CHOICE_TYPES = [ 4 , 5 , 6 ];
 
-	/**
-	 * Several answers for one FunnelKit field (a ticked checkbox group).
-	 *
-	 * A choice field (checkbox, radio, select) gets a JSON list. FunnelKit's
-	 * save_fields() decodes it and keeps every item that matches one of the
-	 * field's option labels, case-insensitive. A checkbox field stores them all;
-	 * radio and select keep the first match. JSON rather than a comma list,
-	 * because FunnelKit splits a plain string on commas and an answer can
-	 * contain one.
-	 *
-	 * Any other field (text, textarea, number) gets the answers joined with
-	 * ", ". FunnelKit silently skips an array for those types, and a JSON list
-	 * would show up in a text field as `["a","b"]`.
-	 *
-	 * Unknown type (FunnelKit's field model unavailable): JSON, as before.
-	 *
-	 * @param array<int|string, mixed> $values
-	 */
 	private static function list_value( array $values, ?int $type ): string {
 		$items = array_values( array_map( 'strval', array_filter( $values, 'is_scalar' ) ) );
 		if ( $type !== null && ! in_array( $type, self::CHOICE_TYPES, true ) ) {
@@ -194,7 +174,6 @@ final class ES_FunnelKit_Upsert {
 		return (string) ( function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items ) );
 	}
 
-	/** A FunnelKit custom field's numeric type, looked up by slug or ID. Null when unknown. */
 	private static function field_type( string $by, string $key ): ?int {
 		if ( ! class_exists( 'BWFAN_Model_Fields' ) ) {
 			return null;

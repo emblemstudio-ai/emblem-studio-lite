@@ -32,7 +32,6 @@ $f = (object) [
 	'active_until'         => isset( $form ) ? (string) ( $form->active_until ?? '' ) : '',
 ];
 
-// HTML5 datetime-local wants "YYYY-MM-DDTHH:MM" — strip seconds from MySQL DATETIME.
 $dtl_from  = $f->active_from  !== '' ? substr( str_replace( ' ', 'T', $f->active_from  ), 0, 16 ) : '';
 $dtl_until = $f->active_until !== '' ? substr( str_replace( ' ', 'T', $f->active_until ), 0, 16 ) : '';
 $dr_special_labels = [
@@ -44,10 +43,7 @@ $dr_special_labels = [
 ];
 $dr_post_types = get_post_types( [ 'public' => true ], 'objects' );
 unset( $dr_post_types['attachment'] );
-// Display-rule presets (SER-899 phase 2) — same site-wide list for every shell.
 $dr_presets = class_exists( 'ES_Preset_Repo' ) ? ES_Preset_Repo::all() : [];
-// Pre-fetch titles for any saved post/page IDs so the chip pickers can render
-// their existing selections without an extra round-trip on page load.
 $dr_lookup_titles = function ( string $post_type, array $ids ): array {
 	$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
 	if ( empty( $ids ) ) {
@@ -65,8 +61,6 @@ $dr_lookup_titles = function ( string $post_type, array $ids ): array {
 	foreach ( $posts as $p ) {
 		$out[ (int) $p->ID ] = $p->post_title !== '' ? $p->post_title : __( '(no title)', 'emblem-studio' );
 	}
-	// Preserve any IDs that no longer resolve to a real post (renamed/trashed)
-	// so the user can still see + remove them.
 	foreach ( $ids as $id ) {
 		if ( ! isset( $out[ $id ] ) ) {
 			$out[ $id ] = sprintf( __( '#%d (not found)', 'emblem-studio' ), $id );
@@ -74,8 +68,6 @@ $dr_lookup_titles = function ( string $post_type, array $ids ): array {
 	}
 	return $out;
 };
-// Same idea for taxonomy terms — categories and tags. Picker is the same
-// component; we just pre-render chips for the already-selected IDs.
 $dr_lookup_term_names = function ( string $taxonomy, array $ids ): array {
 	$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
 	if ( empty( $ids ) ) {
@@ -100,24 +92,10 @@ $dr_lookup_term_names = function ( string $taxonomy, array $ids ): array {
 	}
 	return $out;
 };
-/**
- * Full client-side payload for every display-rule preset (SER-899 phase 2) —
- * resolved post/page/category/tag TITLES included (not just ids), so the
- * per-shell picker's JS can apply a preset (fill every field, chips included)
- * and the Manage Presets modal can render its editor, with zero extra
- * round-trips. Coupling only persists on the page's normal Save (matching the
- * SaaS picker's own local-state-until-Save behavior) — this JSON is what
- * makes that possible without a server call per pick. Same payload shape
- * ES_Preset_Ajax returns, via the shared ES_Preset_Repo::to_admin_payload().
- */
 $dr_presets_json = class_exists( 'ES_Preset_Repo' )
 	? wp_json_encode( array_map( [ 'ES_Preset_Repo', 'to_admin_payload' ], $dr_presets ) )
 	: '[]';
 
-/**
- * Build a short human summary of one filter set (Show or Hide).
- * Singletons are named; pluralities are counted ("3 categories").
- */
 $dr_summarize = function ( array $filters ) use ( $dr_special_labels, $dr_post_types ): string {
 	$parts = [];
 	$specials = (array) ( $filters['specials'] ?? [] );
@@ -160,9 +138,6 @@ $dr_summarize = function ( array $filters ) use ( $dr_special_labels, $dr_post_t
 	}
 	return implode( ', ', $parts );
 };
-/**
- * Compose the closed-disclosure summary line for ONE shell's rules.
- */
 $dr_summary_html_for = function ( array $rules ) use ( $dr_summarize ): string {
 	$show_mode    = $rules['show_mode']    ?? 'all';
 	$show_summary = $dr_summarize( $rules['show_filters'] ?? [] );
@@ -171,8 +146,6 @@ $dr_summary_html_for = function ( array $rules ) use ( $dr_summarize ): string {
 		return '<span class="es-dr-summary is-default">' . esc_html__( 'default: everywhere', 'emblem-studio' ) . '</span>';
 	}
 	if ( $show_mode === 'all' ) {
-		// hide_summary is non-empty here — the all + empty-hide case
-		// already returned above.
 		return '<span class="es-dr-summary is-custom">' . esc_html__( 'everywhere, except', 'emblem-studio' ) . ' ' . esc_html( $hide_summary ) . '</span>';
 	}
 	if ( $show_mode === 'selected' && $show_summary === '' ) {
@@ -186,8 +159,6 @@ $dr_summary_html_for = function ( array $rules ) use ( $dr_summarize ): string {
 	return $html;
 };
 
-// Pre-fetch per-shell config + rules + chip titles + summary so the partial
-// renders without further DB hits.
 $shell_data = [];
 foreach ( ES_Form_Repo::auto_shells() as $shell ) {
 	$cfg   = isset( $form ) ? ES_Form_Repo::get_shell_trigger_config( $form, $shell ) : ES_Form_Repo::sanitize_auto_trigger_config( [] );
@@ -214,15 +185,10 @@ foreach ( ES_Form_Repo::auto_shells() as $shell ) {
 		],
 	];
 }
-// Carry forward legacy single-list value if the new array is empty.
 if ( empty( $f->funnelkit_lists ) && ! empty( $f->funnelkit_list_id ) ) {
 	$f->funnelkit_lists = [ (int) $f->funnelkit_list_id ];
 }
 
-// A/B testing state — populated only for existing forms. When no test
-// runs, $ab_test stays null and the Design tab renders single-version.
-// A/B is account-gated (cap 'ab'); the Lite build omits ES_AB, so default to
-// no-test there and skip every ES_AB call.
 if ( ES_Caps::has( 'ab' ) && ! $is_new ) {
 	$ab_test     = ES_AB::running_test_for_form( (int) $f->id );
 	$ab_variants = $ab_test ? ES_AB::live_variants_for_form( (int) $f->id ) : [];
@@ -233,14 +199,9 @@ if ( ES_Caps::has( 'ab' ) && ! $is_new ) {
 	$ab_archived = [];
 }
 $ab_running    = $ab_test && isset( $ab_variants['A'], $ab_variants['B'] );
-// $ab_running already implies the 'ab' cap: $ab_test is only set when it is on.
 $ab_day        = $ab_running ? ES_AB::test_day_for( $ab_test ) : 0;
 $ab_archive_ct = count( $ab_archived );
 
-// Checks list (SER-1358), from what is STORED: the form's own HTML/CSS, or
-// variant A's while a test runs (variant A is the pane showing on load; the
-// live check takes over when the tabs switch). A new, unsaved asset has
-// nothing stored, so nothing to report yet.
 $check_items = [];
 if ( class_exists( 'ES_Asset_Checks' ) && ! $is_new ) {
 	if ( $ab_running ) {
@@ -255,9 +216,6 @@ $check_groups = [
 ];
 ?>
 <div class="wrap emblem-studio-wrap">
-	<?php // Display-rule presets (SER-899 phase 2) — full client-side payload
-	// (filters + resolved titles) so the picker JS can apply one without a
-	// round-trip. See docs comment on $dr_preset_payload above. ?>
 	<script type="application/json" id="es-presets-data"><?php echo $dr_presets_json; // phpcs:ignore WordPress.Security.EscapeOutput -- wp_json_encode output, safe inside a script tag ?></script>
 	<p class="es-back-link"><a href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio' ) ); ?>"><?php esc_html_e( '← Forms & Assets', 'emblem-studio' ); ?></a></p>
 	<h1><?php echo $is_new ? esc_html__( 'Add Form', 'emblem-studio' ) : esc_html__( 'Edit Form', 'emblem-studio' ); ?></h1>
@@ -292,10 +250,6 @@ $check_groups = [
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'A/B test started. Variants A and B are seeded with the current design — switch to variant B in the Design tab to edit it.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
 	<?php if ( isset( $_GET['test_ended'] ) ) :
-		// Through ES_AB::normalize_slot for the same reason as the handler that
-		// redirects here: sanitize_key() lowercases, so comparing its output
-		// against 'A' never matched and every ended test reported "without a
-		// winner", including the ones that had one.
 		$ended = ES_AB::normalize_slot( sanitize_key( (string) wp_unslash( $_GET['test_ended'] ) ) );
 		$msg = null !== $ended
 			? sprintf( __( 'A/B test ended. Variant %s won and is now the live design. The other variant is archived.', 'emblem-studio' ), $ended )
@@ -314,9 +268,6 @@ $check_groups = [
 	<?php endif; ?>
 
 	<?php
-	// Concurrent-edit lock data + UI (existing assets only). $lock_* come
-	// from ES_Admin::render_edit(). The browser decides (using its per-tab
-	// session token) whether to claim the lock or show the take-over modal.
 	if ( ! $is_new && isset( $lock_nonce ) ) :
 		$es_lock_token = isset( $lock_holder_token ) ? (string) $lock_holder_token : '';
 		$es_lock_name  = isset( $lock_holder_name ) ? (string) $lock_holder_name : '';
@@ -365,7 +316,6 @@ $check_groups = [
 		<?php wp_nonce_field( 'es_save_form' ); ?>
 		<input type="hidden" name="action" value="es_save_form">
 		<input type="hidden" name="id" value="<?php echo (int) $f->id; ?>">
-		<?php // Per-tab session token (set by admin.js from sessionStorage) — the save guard rejects a booted session. ?>
 		<input type="hidden" name="lock_token" id="es-lock-token" value="">
 
 
@@ -373,7 +323,7 @@ $check_groups = [
 			<div class="es-form-header-bar">
 				<div class="es-form-header-left">
 					<label for="es-name" class="es-form-header-name-label"><?php esc_html_e( 'Name', 'emblem-studio' ); ?></label>
-					<?php $es_name_ph_id = $f->id ?: ES_Form_Repo::next_id(); // real id when editing; predicted next id for a new form ?>
+					<?php $es_name_ph_id = $f->id ?: ES_Form_Repo::next_id(); ?>
 					<input id="es-name" name="name" type="text" class="es-form-header-name" value="<?php echo esc_attr( $f->name ); ?>" placeholder="<?php echo esc_attr( sprintf( /* translators: %d: asset id */ __( 'Asset %d', 'emblem-studio' ), $es_name_ph_id ) ); ?>">
 				</div>
 				<div class="es-form-header-right">
@@ -400,16 +350,9 @@ $check_groups = [
 						</span>
 					<?php endif; ?>
 					<?php
-					// Effective-state chip: when this asset is Active but its schedule
-					// window says it isn't actually showing, say so right here so the
-					// green "Active" toggle isn't misleading. Derived; status untouched.
 					$eff_state = ES_Form_Repo::effective_state( $f );
-					// Show the effective-status pill for every active-status asset (the
-					// toggle already reads "Inactive" for the rest), so it's consistent.
 					if ( in_array( $eff_state, array( 'active', 'scheduled', 'expired', 'ending' ), true ) ) :
 						$hdr_fmt = get_option( 'date_format' ) . ' g:i A';
-						// Verb plus date, matching the asset list and the
-						// queued-change badge. The full date stays in the title.
 						$hdr_short = 'M j';
 						if ( 'scheduled' === $eff_state ) {
 							$hdr_label = sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $hdr_short, (string) $f->active_from ) );
@@ -595,10 +538,6 @@ $check_groups = [
 							</button>
 						<?php endif; ?>
 						<?php
-						// Declare a winner without leaving the Design tab (the full
-						// banner with per-variant numbers lives on the Stats tab).
-						// Same nonce'd es_end_test endpoint + es-ab-declare-winner
-						// confirm handler as the Stats banner.
 						$ab_design_end_url = function ( string $winner ) use ( $f ) {
 							$path = 'admin-post.php?action=es_end_test&form_id=' . (int) $f->id;
 							if ( $winner !== '' ) { $path .= '&winner=' . rawurlencode( $winner ); }
@@ -635,10 +574,6 @@ $check_groups = [
 				</div>
 
 				<?php
-				// Start-test confirmation modal — graphic + irreversible-reset
-				// warning (mirrors the SaaS popup). The "Start A/B test" button on
-				// the idle strip opens this; the confirm button submits the form
-				// with ab_action=start.
 				$ab_start_metric = ES_AB::detect_primary_metric( (string) $f->html );
 				?>
 				<div class="es-modal es-ab-start-modal" id="es-modal-ab-start" hidden>
@@ -743,7 +678,6 @@ $check_groups = [
 				</div>
 			<?php endif; ?>
 
-			<?php // Checks list (SER-1358). Warns, never blocks a save. admin.js refreshes it live from es_check_asset. ?>
 			<div class="es-checks" id="es-checks" aria-live="polite"<?php echo $check_items ? '' : ' hidden'; ?>>
 				<p class="es-checks-title"><?php esc_html_e( 'Checks', 'emblem-studio' ); ?></p>
 				<div class="es-checks-body">
@@ -783,7 +717,6 @@ $check_groups = [
 			</div>
 
 			<?php
-			// Width controls for the Design preview (mirrors the editor's).
 			$design_width_html = '<div class="es-design-width" role="group" aria-label="' . esc_attr__( 'Preview width', 'emblem-studio' ) . '">'
 				. '<button type="button" data-w="320">320</button>'
 				. '<button type="button" data-w="480">480</button>'
@@ -794,10 +727,6 @@ $check_groups = [
 				. '<span class="es-design-width-label">' . esc_html__( 'Fluid', 'emblem-studio' ) . '</span>'
 				. '</div>';
 
-			// Preview testing toggles. Default preview is a safe sandbox: no click
-			// tracking, no required enforcement, nothing sent to the CRM. These two
-			// opt-ins let you test the real experience. "Submit for real" implies
-			// "Enforce required" (you never want to push invalid leads).
 			$design_test_html = '<div class="es-design-test" role="group" aria-label="' . esc_attr__( 'Preview testing', 'emblem-studio' ) . '">'
 				. '<label class="es-design-test-opt" title="' . esc_attr__( 'Make required fields block submission, like the live form.', 'emblem-studio' ) . '"><input type="checkbox" class="es-design-validate"> ' . esc_html__( 'Enforce required', 'emblem-studio' ) . '</label>'
 				. '<label class="es-design-test-opt" title="' . esc_attr__( 'Actually create a lead and send it to your CRM.', 'emblem-studio' ) . '"><input type="checkbox" class="es-design-send"> ' . esc_html__( 'Submit for real', 'emblem-studio' ) . '</label>'
@@ -805,12 +734,6 @@ $check_groups = [
 			?>
 
 			<?php if ( $ab_running ) :
-				// When an A/B test is running, render TWO complete editor
-				// panes — one per slot — each with its own CodeMirror
-				// instance. Inactive pane is hidden via CSS. Tabbing
-				// just toggles visibility. The textareas submit directly
-				// (name="variants[A|B][html|css]") so the data path has
-				// no hidden-field intermediaries.
 				foreach ( [ 'A', 'B' ] as $slot ) :
 					$v          = $ab_variants[ $slot ];
 					$pane_class = 'es-ab-pane' . ( $slot === 'A' ? ' is-active' : '' );
@@ -824,7 +747,6 @@ $check_groups = [
 			if ( empty( $design_shells ) ) { $design_shells = [ 'inline' ]; }
 			$shell_label_map = [ 'inline' => __( 'Inline', 'emblem-studio' ), 'popup-click' => __( 'Click popup', 'emblem-studio' ), 'popup-auto' => __( 'Auto popup', 'emblem-studio' ), 'ribbon' => __( 'Ribbon', 'emblem-studio' ), 'slide-in' => __( 'Slide-in', 'emblem-studio' ) ];
 			?>
-				<?php // One preview for whichever variant the tabs have active; the editor reads/writes that variant's hidden fields. ?>
 				<div class="es-design-preview" data-preview-url="<?php echo esc_url( ES_Preview::url_for( (int) $f->id ) ); ?>" data-is-new="0" data-ab="1">
 					<div class="es-design-preview-bar">
 						<span class="es-design-preview-tag" aria-hidden="true"><?php esc_html_e( 'Preview', 'emblem-studio' ); ?></span>
@@ -846,7 +768,7 @@ $check_groups = [
 						<div class="es-design-loader"><span class="es-design-spinner" aria-hidden="true"></span></div>
 					</div>
 				</div>
-			<?php else : // Single-version asset (new or existing) — preview-first; editing happens in the takeover editor. ?>
+			<?php else : ?>
 				<?php
 				$design_shells = ES_Form_Repo::types_for( $f );
 				if ( empty( $design_shells ) ) { $design_shells = [ 'inline' ]; }
@@ -889,9 +811,6 @@ $check_groups = [
 			</p>
 
 			<?php
-			// Popup sizing options (max-width + full-screen). Shared by the click
-			// popup (Lite) AND the auto shells, so it's defined here in the view —
-			// before the gated auto-shell partial — not inside it.
 			$popup_options_html = ( function () use ( $f ) {
 				ob_start();
 				?>
@@ -918,9 +837,6 @@ $check_groups = [
 				return ob_get_clean();
 			} )();
 
-			// Auto shells (popup-auto / ribbon / slide-in) are account-gated; their
-			// selector machinery (the $shell_meta + $render_shell_selector used by
-			// the gated cards below) lives in a partial the Lite build omits.
 			if ( ES_Caps::has( 'auto_shells' ) ) {
 				include EMBLEM_STUDIO_PATH . 'admin/views/_partials/shells-auto-selector.php';
 			}
@@ -968,9 +884,6 @@ $check_groups = [
 							<?php else : $sc_popup = '[es-popup-' . (int) $f->id . ']Click here[/es-popup-' . (int) $f->id . ']'; ?>
 								<code class="es-copy" data-es-copy="<?php echo esc_attr( $sc_popup ); ?>" title="<?php esc_attr_e( 'Click to copy', 'emblem-studio' ); ?>"><?php echo esc_html( $sc_popup ); ?></code>
 							<?php endif; ?>
-							<?php // Click popup's own modal options live right here in the card
-							// (it has no triggers / page rules). Form-level fields, kept in
-							// sync with the auto popup's copies by admin.js. ?>
 							<div class="es-shell-card-options">
 								<?php echo $popup_options_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
 								<div class="es-close-theme-row es-close-theme-row--bare">
@@ -1017,10 +930,6 @@ $check_groups = [
 			</div>
 
 			<?php if ( ES_Caps::has( 'auto_shells' ) ) : ?>
-			<?php // Shared settings container — appears only when Auto popup,
-			// Ribbon, or Slide-in is selected (toggled by initShellSettings
-			// container in admin.js). Inside, each shell's panel shows itself
-			// when its own checkbox is on. (Auto-shell-only — gated.) ?>
 			<div class="es-shell-settings-wrap" id="es-shell-settings-wrap">
 				<?php
 				foreach ( $shell_meta as $shell => $meta ) {
@@ -1030,8 +939,6 @@ $check_groups = [
 			</div>
 			<?php endif; ?>
 
-			<?php // Connector drawn by initShellConnector() — visually links the
-			// selected shell card to its display-rules container below. ?>
 			<svg class="es-shell-connector" id="es-shell-connector" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
 				<path class="es-connector-path" fill="none"></path>
 				<circle class="es-connector-dot" r="4.5"></circle>
@@ -1119,10 +1026,6 @@ $check_groups = [
 				<th><label for="es-fk-tags-typer"><?php esc_html_e( 'Add tags', 'emblem-studio' ); ?></label></th>
 				<td>
 					<?php
-					// Tags this site's other assets already name, which FunnelKit
-					// does not have yet: a tag is created there on the first signup
-					// that carries it (SER-1464). Offered alongside FunnelKit's own,
-					// marked "not created yet", so the spelling stays one person's.
 					$es_fk_known   = array_map( [ 'ES_Form_Repo', 'tag_key' ], array_column( $fk_tags, 'name' ) );
 					$es_fk_pending = array_values( array_filter(
 						ES_Form_Repo::all_funnelkit_tags(),
@@ -1167,9 +1070,9 @@ $check_groups = [
 			<input type="hidden" name="field_mapping_json" value="<?php echo esc_attr( wp_json_encode( (object) $f->field_mapping ) ); ?>">
 			</div>
 			<?php endif; ?>
-			</div><!-- /.es-connect-card-body -->
+			</div>
 
-		</div><!-- /.es-connect-card (FunnelKit) -->
+		</div>
 
 		<?php if ( ES_Caps::has( 'webhooks' ) ) : ?>
 		<?php
@@ -1219,9 +1122,6 @@ $check_groups = [
 
 			<button type="button" class="button es-webhook-add">+ <?php esc_html_e( 'Add webhook', 'emblem-studio' ); ?></button>
 
-			<!-- Hidden template the JS clones when "Add webhook" is clicked.
-			     __INDEX__ is replaced with the next available index so the
-			     server reads multiple rows from $_POST['webhooks']. -->
 			<template class="es-webhook-template">
 				<div class="es-webhook-row">
 					<div class="es-webhook-row-head">
@@ -1251,7 +1151,7 @@ $check_groups = [
 					</div>
 				</div>
 			</template>
-		</div><!-- /.es-connect-card (Webhooks) -->
+		</div>
 		<?php endif; ?>
 		</section>
 
@@ -1427,9 +1327,6 @@ $check_groups = [
 					</div>
 				<?php else : ?>
 					<?php
-					// Form-vs-asset detection for the conv columns; click tracking
-					// for the click columns — matches the Forms & Assets list logic
-					// so per-shell totals here read the same way as the list page.
 					$has_form       = ES_Form_Repo::primary_metric( (string) $f->html ) === 'conversions';
 					$clicks_tracked = ! empty( $f->track_clicks );
 					$vis            = ES_Reports::asset_visitors( (int) $f->id );
@@ -1545,9 +1442,6 @@ $check_groups = [
 
 				<?php
 				$clicks = ES_Reports::clicks_for_form( (int) $f->id );
-				// Summary tallies — only over real targets, excluding the sentinel
-				// rows for close/backdrop/untagged so authors see the signal that
-				// reflects their own work.
 				$total_clicks   = 0;
 				$tagged_count   = 0;
 				$untagged_count = 0;
@@ -1565,9 +1459,6 @@ $check_groups = [
 				}
 				$named_total = $tagged_count + $untagged_count;
 				$untag_pct   = $named_total > 0 ? round( $untagged_count / $named_total * 100 ) : 0;
-				// Only show the A/B split once there is something to split. An asset
-				// that has never run a test would otherwise get two columns of zeros,
-				// and the blended table it has today is the right one for it.
 				$clicks_have_variants = false;
 				foreach ( $clicks as $r ) {
 					if ( (int) ( $r['clicks_a'] ?? 0 ) > 0 || (int) ( $r['clicks_b'] ?? 0 ) > 0 ) {
@@ -1584,7 +1475,6 @@ $check_groups = [
 					</label>
 					<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'Click tracking is for non-form assets — links and buttons that aren\'t part of a form. Those (plus the shell close button) are tracked automatically. The form itself — its submit button, fields and labels — is not tracked, because submitting and filling it in are already measured as conversions and engagement. To track a specific in-form element anyway, add a data-es-track=&quot;my-label&quot; attribute to it: that opts it in and names it in the table below. On auto-tracked elements the attribute just sets the name; without it, the visible text or element id is used.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
 				</div>
-				<?php /* SER-1747: the per-asset purchase switch is on the asset's Stats tab in the web app. */ ?>
 				<?php if ( empty( $f->track_clicks ) ) : ?>
 					<p><em><?php esc_html_e( 'Click tracking is off for this form. Turn it on above to start collecting.', 'emblem-studio' ); ?></em></p>
 				<?php elseif ( empty( $clicks ) ) : ?>
@@ -1622,8 +1512,6 @@ $check_groups = [
 								$is_close    = $target === '__close__';
 								$is_back     = $target === '__backdrop__';
 								$is_untag    = $target === '__untagged__';
-								// Close + backdrop are dismissals: they're listed here but
-								// kept OUT of the Clicks numbers on the Stats tab + Forms list.
 								$is_excluded = $is_close || $is_back;
 								$classes     = [];
 								if ( $is_untag )    { $classes[] = 'es-click-row-untagged'; }
@@ -1680,15 +1568,6 @@ $check_groups = [
 			<?php else :
 				$revisions = ES_Form_Revisions::list_for_form( (int) $f->id );
 
-				/*
-				 * Past is what was. Scheduled is what will be. Same content,
-				 * opposite direction in time, so they sit under one tab.
-				 *
-				 * The screen opens on Scheduled when anything is queued, because
-				 * a change that has not happened yet is the one you came to
-				 * check. Otherwise it opens on Past, which is what this tab has
-				 * always been (SER-1287).
-				 */
 				$scheduled     = class_exists( 'ES_Form_Scheduled_Revisions' ) ? ES_Form_Scheduled_Revisions::list_for_form( (int) $f->id ) : [];
 				$sched_queued  = array_values( array_filter( $scheduled, static fn( $s ) => ES_Form_Scheduled_Revisions::QUEUED === $s->status ) );
 				$sched_history = array_values( array_filter( $scheduled, static fn( $s ) => ES_Form_Scheduled_Revisions::QUEUED !== $s->status ) );
@@ -1730,19 +1609,6 @@ $check_groups = [
 				</p>
 
 				<?php
-				/*
-				 * NOT a <form>. This sits inside the editor's own form, and a form
-				 * inside a form does not exist in HTML: the browser drops the inner
-				 * tag and folds its fields into the editor's. The required date then
-				 * blocked every Save with no message ("An invalid form control ...
-				 * is not focusable"), and the extra `action` and `_wpnonce` would
-				 * have sent a Save to the scheduler anyway. Broken from 1.3.36
-				 * until 1.3.80, on every edition that shows this tab.
-				 *
-				 * So the fields name their form with `form=`, and the empty forms
-				 * are printed after the editor's closes (es_subforms, bottom of
-				 * this file). Same for the per-revision "Schedule this version".
-				 */
 				$es_subforms = $es_subforms ?? [];
 				?>
 				<?php if ( ! $sched_ab ) :
@@ -1763,12 +1629,6 @@ $check_groups = [
 						<?php esc_html_e( 'Name', 'emblem-studio' ); ?>
 						<input type="text" form="<?php echo esc_attr( $es_sf ); ?>" name="change_name" maxlength="191" placeholder="<?php esc_attr_e( 'Plain thank-you, no sale', 'emblem-studio' ); ?>">
 					</label>
-					<?php
-					// "Schedule revision", not "Schedule". The Settings tab on this
-					// same screen already carries a "Schedule" heading, and that one
-					// is the form's own start and end dates. The bare word here
-					// would read as the same thing.
-					?>
 					<button type="submit" form="<?php echo esc_attr( $es_sf ); ?>" class="button button-primary"><?php esc_html_e( 'Schedule revision', 'emblem-studio' ); ?></button>
 				</div>
 				<?php endif; ?>
@@ -1801,14 +1661,6 @@ $check_groups = [
 									<?php esc_html_e( 'Cannot tell whether the form has changed since this was built.', 'emblem-studio' ); ?>
 								</p>
 							<?php endif; ?>
-							<?php
-							// Before and after, side by side, the way the SaaS shows a queued
-							// change. Without them the only way to see what a change would do
-							// was to apply it. Both render through ES_Preview like the past
-							// revision previews: "now" is the saved form, "after" is the
-							// queued HTML and CSS, and pressing the button shows the thank-you
-							// state without sending anything.
-							?>
 							<div class="es-revision-previews es-sched-previews" data-preview-url="<?php echo esc_attr( ES_Preview::url_for( (int) $f->id ) ); ?>" data-change-id="<?php echo (int) $s->id; ?>" style="margin-top:.8em;">
 								<div class="es-revision-preview-col">
 									<div class="es-revision-pane-label">
@@ -1953,13 +1805,6 @@ $check_groups = [
 											<iframe name="es-rev-cur-<?php echo (int) $rev->id; ?>" class="es-revision-preview-current" data-revision-id="<?php echo (int) $rev->id; ?>" title="<?php esc_attr_e( 'Current version preview', 'emblem-studio' ); ?>" loading="lazy"></iframe>
 										</div>
 									</div>
-									<?php
-									// These previews have always been interactive: they render
-									// through ES_Preview, where frontend.js simulates the
-									// success state and does not POST unless the inspector's
-									// "Submit for real" toggle is on, which nothing here sends.
-									// It was just never said, so nobody knew to try it.
-									?>
 									<p class="description" style="margin:.4em 0 0;">
 										<?php esc_html_e( 'Press the button in either preview to see its thank-you state. Nothing is sent.', 'emblem-studio' ); ?>
 									</p>
@@ -1970,7 +1815,6 @@ $check_groups = [
 											<a href="<?php echo esc_url( $restore_as_variant_url ); ?>" class="button es-revision-restore-as-variant" title="<?php esc_attr_e( 'Start a new A/B test using this revision as variant B; the current design becomes variant A.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Restore as variant', 'emblem-studio' ); ?></a>
 										<?php endif; ?>
 										<?php if ( ! $sched_ab ) :
-											// Not a <form> either: see the note on .es-sched-new above.
 											$es_sf         = 'es-sched-rev-' . (int) $rev->id;
 											$es_subforms[] = $es_sf;
 										?>
@@ -2049,9 +1893,6 @@ $check_groups = [
 
 			<?php if ( ES_Caps::has( 'schedule_window' ) ) : ?>
 			<?php
-			// The periods list is what decides now (SER-1292). The single window
-			// below it is the older pair, kept while the SaaS mirror still speaks
-			// it. A form with any period here ignores the pair entirely.
 			include EMBLEM_STUDIO_PATH . 'admin/views/_partials/schedule-periods.php';
 			?>
 			<?php include EMBLEM_STUDIO_PATH . 'admin/views/_partials/schedule-window.php'; ?>
@@ -2159,8 +2000,6 @@ $check_groups = [
 		</section>
 	</form>
 	<?php
-	// The schedule forms, outside the editor's form (see .es-sched-new). Their
-	// fields sit up in the Revisions tab and point here with `form=`.
 	foreach ( $es_subforms ?? [] as $es_sf ) :
 		?>
 		<form id="<?php echo esc_attr( $es_sf ); ?>" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" hidden></form>

@@ -3,51 +3,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Live values: a price or a discount in an asset that stays true by itself
- * (SER-1350, SER-1351, SER-1352).
- *
- * THE CONTRACT IS THE SAAS REPO'S docs/LIVE-VALUES.md. The web app's
- * App\Services\LiveValues is this class's twin, and the two must agree with that
- * file field by field and reason by reason.
- *
- * An asset marks a spot with an element, and the element's own words are the
- * fallback:
- *
- *     <span data-es-live="coupon.discount" data-es-product="22" data-es-coupon="TIERED">a discount</span>
- *
- * This class does three jobs.
- *
- *  1. KEEPS READINGS FRESH. It measures every value the site's assets use with
- *     ES_Commerce, exactly as the store routes do, and measures again when
- *     something that could change one happens: an order uses or gives back a
- *     coupon, an order is paid, a coupon or product is saved or its stock moves,
- *     WooCommerce starts or ends a dated sale. A 15-minute timer is the safety
- *     net. Triggers are debounced into one run ten seconds later, so a burst of
- *     orders measures once, and measuring never happens inside the request that
- *     placed the order.
- *
- *  2. HANDS THEM ON. Connected to Emblem Studio, the connector supplies the watch
- *     list and sends what changed (the `es_live_values_watch_list` filter and the
- *     `es_live_values_measured` action). Standalone, the watch list comes from the
- *     site's own assets and the readings stay here.
- *
- *  3. FILLS THEM IN, for a site rendering its own assets: build_payload() carries
- *     the `live` text, and frontend.js asks admin-ajax for fresh text once per
- *     page, because a cached page can carry a number that has since moved.
- *
- * ONE RULE ABOVE THE REST: an unsafe number is never shown. Old, refused, zero,
- * out of stock or missing leaves the author's words in place.
- *
- * The pure parts (markers, keys, judging, formatting) call no WordPress function,
- * so the unit tests run them without WordPress.
- */
 class ES_Live_Values {
 
-	/** A reading older than this is not shown. */
 	const FRESH_SECONDS = 7200;
 
-	/** Most keys one run measures, so a runaway watch list cannot stall a cron request. */
 	const MAX_PER_RUN = 50;
 
 	const OPTION_VALUES = 'es_live_values';
@@ -56,7 +15,6 @@ class ES_Live_Values {
 	const HOOK_TICK     = 'es_live_values_tick';
 	const SCHEDULE      = 'es_live_values_fifteen_minutes';
 
-	/** field => kind. */
 	const FIELDS = [
 		'price.today'        => 'money',
 		'price.regular'      => 'money',
@@ -76,10 +34,7 @@ class ES_Live_Values {
 		'count'   => [],
 	];
 
-	/** ES_Commerce errors that are the shop's own answer, and so worth keeping. */
 	const SHOP_ERRORS = [ 'not_found', 'choose_variation', 'no_store', 'no_code' ];
-
-	/* ── Wiring ──────────────────────────────────────────────────────────── */
 
 	public static function init(): void {
 		add_filter( 'cron_schedules', [ __CLASS__, 'add_schedule' ] );
@@ -87,14 +42,11 @@ class ES_Live_Values {
 		add_action( self::HOOK_TICK, [ __CLASS__, 'refresh' ] );
 		add_action( self::HOOK_REFRESH, [ __CLASS__, 'refresh' ] );
 
-		// What moves a tiered coupon: an order using it, or giving it back.
 		add_action( 'woocommerce_increase_coupon_usage_count', [ __CLASS__, 'nudge' ] );
 		add_action( 'woocommerce_decrease_coupon_usage_count', [ __CLASS__, 'nudge' ] );
-		// A theme can price by seats sold, which no coupon hook sees.
 		add_action( 'woocommerce_payment_complete', [ __CLASS__, 'nudge' ] );
 		add_action( 'woocommerce_order_status_processing', [ __CLASS__, 'nudge' ] );
 		add_action( 'woocommerce_order_status_completed', [ __CLASS__, 'nudge' ] );
-		// Somebody edited a coupon or a product, or stock moved.
 		foreach ( [
 			'woocommerce_new_coupon',
 			'woocommerce_update_coupon',
@@ -108,19 +60,12 @@ class ES_Live_Values {
 		] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'nudge' ] );
 		}
-		// After WooCommerce's own wc_scheduled_sales (priority 10) has started or
-		// ended today's dated sales.
 		add_action( 'woocommerce_scheduled_sales', [ __CLASS__, 'nudge' ], 20 );
 
-		// Fresh text for a page that may have come out of a page cache.
 		add_action( 'wp_ajax_es_live_values', [ __CLASS__, 'serve_ajax' ] );
 		add_action( 'wp_ajax_nopriv_es_live_values', [ __CLASS__, 'serve_ajax' ] );
 	}
 
-	/**
-	 * @param array<string, array{interval: int, display: string}> $schedules
-	 * @return array<string, array{interval: int, display: string}>
-	 */
 	public static function add_schedule( array $schedules ): array {
 		if ( ! isset( $schedules[ self::SCHEDULE ] ) ) {
 			$schedules[ self::SCHEDULE ] = [
@@ -132,7 +77,6 @@ class ES_Live_Values {
 		return $schedules;
 	}
 
-	/** The safety-net timer, only on a site that has a shop to read. */
 	public static function ensure_tick(): void {
 		if ( ! class_exists( 'ES_Commerce' ) || ! ES_Commerce::available() ) {
 			return;
@@ -142,34 +86,21 @@ class ES_Live_Values {
 		}
 	}
 
-	/** Something changed that could move a value: measure once, ten seconds from now. */
 	public static function nudge(): void {
 		if ( ! wp_next_scheduled( self::HOOK_REFRESH ) ) {
 			wp_schedule_single_event( time() + 10, self::HOOK_REFRESH );
 		}
 	}
 
-	/* ── Measuring ───────────────────────────────────────────────────────── */
-
-	/** The cron hooks' entry point. See run(). */
 	public static function refresh(): void {
 		self::run();
 	}
 
-	/**
-	 * Measure every watched value, keep the answers, and hand on what changed.
-	 *
-	 * @return array{measured: int, changed: int}
-	 */
 	public static function run(): array {
 		if ( ! class_exists( 'ES_Commerce' ) || ! ES_Commerce::available() ) {
 			return [ 'measured' => 0, 'changed' => 0 ];
 		}
-		// One run at a time: a tick and a nudge landing together must not measure twice.
 		if ( get_transient( 'es_live_values_lock' ) ) {
-			// Something moved while a run was already measuring, and that run may have
-			// read the shop before it moved. Look again shortly rather than wait for the
-			// 15-minute timer.
 			if ( ! wp_next_scheduled( self::HOOK_REFRESH ) ) {
 				wp_schedule_single_event( time() + 30, self::HOOK_REFRESH );
 			}
@@ -193,7 +124,7 @@ class ES_Live_Values {
 					: ES_Commerce::product( (int) $w['product_id'] );
 
 				if ( ! self::is_shop_answer( $answer ) ) {
-					continue; // A measuring failure says nothing about the shop.
+					continue;
 				}
 				unset( $answer['basis'] );
 
@@ -220,20 +151,11 @@ class ES_Live_Values {
 				];
 			}
 
-			// Readings nothing uses any more go, so the option cannot grow forever.
 			$stored = array_intersect_key( $stored, $watch );
 			$sent   = array_intersect_key( $sent, $watch );
 			update_option( self::OPTION_VALUES, $stored, false );
 			update_option( self::OPTION_SENT, $sent, false );
 
-			/**
-			 * The connector sends these to Emblem Studio. A push that fails is
-			 * not retried here: the next run finds the SaaS copy unconfirmed,
-			 * and the SaaS reads the site itself after 20 minutes regardless.
-			 *
-			 * @param list<array<string, mixed>> $changed
-			 * @param list<string>               $unchanged
-			 */
 			do_action( 'es_live_values_measured', $changed, $unchanged );
 
 			return [ 'measured' => count( $changed ) + count( $unchanged ), 'changed' => count( $changed ) ];
@@ -242,15 +164,6 @@ class ES_Live_Values {
 		}
 	}
 
-	/**
-	 * Every value the site's assets use: key => { key, product_id, coupon }.
-	 *
-	 * Connected, the connector answers with Emblem Studio's list, because there
-	 * the assets live in the SaaS. Standalone, it is read from this site's assets,
-	 * their live A/B variants and their queued content changes.
-	 *
-	 * @return array<string, array{key: string, product_id: int, coupon: ?string}>
-	 */
 	public static function watch_list(): array {
 		$remote = apply_filters( 'es_live_values_watch_list', null );
 		if ( is_array( $remote ) ) {
@@ -260,7 +173,6 @@ class ES_Live_Values {
 		return self::keys_in( self::local_htmls() );
 	}
 
-	/** @return list<string> */
 	private static function local_htmls(): array {
 		global $wpdb;
 		$forms  = ES_Install::table( 'forms' );
@@ -274,10 +186,6 @@ class ES_Live_Values {
 		return array_map( 'strval', $htmls );
 	}
 
-	/**
-	 * @param list<string> $htmls
-	 * @return array<string, array{key: string, product_id: int, coupon: ?string}>
-	 */
 	public static function keys_in( array $htmls ): array {
 		$keys = [];
 		foreach ( $htmls as $html ) {
@@ -295,33 +203,22 @@ class ES_Live_Values {
 		return $keys;
 	}
 
-	/** @return array<string, array{product_id: int, coupon: ?string, answer: array<string, mixed>, as_of: int, confirmed_at: int}> */
 	public static function stored(): array {
 		$stored = get_option( self::OPTION_VALUES, [] );
 
 		return is_array( $stored ) ? $stored : [];
 	}
 
-	/** @param array<string, mixed> $answer */
 	public static function is_shop_answer( array $answer ): bool {
 		return ! empty( $answer['ok'] ) || in_array( $answer['error'] ?? '', self::SHOP_ERRORS, true );
 	}
 
-	/** @param array<string, mixed> $answer */
 	private static function hash( array $answer ): string {
 		unset( $answer['as_of'] );
 
 		return md5( (string) wp_json_encode( $answer ) );
 	}
 
-	/* ── Serving ─────────────────────────────────────────────────────────── */
-
-	/**
-	 * The `live` map for an asset's HTML from this site's own readings, or null
-	 * when the HTML has no markers at all.
-	 *
-	 * @return array<string, array<string, string>>|null
-	 */
 	public static function resolve_html( string $html ): ?array {
 		$markers = self::markers( $html );
 		if ( $markers === [] ) {
@@ -331,11 +228,6 @@ class ES_Live_Values {
 		return self::resolve( $markers, self::stored(), time() );
 	}
 
-	/**
-	 * @param list<array<string, mixed>> $markers
-	 * @param array<string, array<string, mixed>> $stored
-	 * @return array<string, array<string, string>>
-	 */
 	public static function resolve( array $markers, array $stored, int $now ): array {
 		$live = [];
 		foreach ( $markers as $m ) {
@@ -351,10 +243,6 @@ class ES_Live_Values {
 		return $live;
 	}
 
-	/**
-	 * admin-ajax: fresh text for the markers a page shows. Takes
-	 * `m` = JSON [[key, name], ...] and answers with only the safe ones.
-	 */
 	public static function serve_ajax(): void {
 		$raw   = isset( $_GET['m'] ) ? wp_unslash( (string) $_GET['m'] ) : '[]'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$pairs = json_decode( $raw, true );
@@ -382,11 +270,6 @@ class ES_Live_Values {
 		wp_send_json( [ 'ok' => true, 'live' => (object) self::resolve( $markers, self::stored(), time() ) ] );
 	}
 
-	/* ── The pure part: markers, keys, judging, writing ─────────────────── */
-
-	/**
-	 * @return list<array{field: string, format: ?string, name: string, product_id: ?int, coupon: ?string, key: ?string, fallback: string, problem: ?string}>
-	 */
 	public static function markers( string $html ): array {
 		if ( strpos( $html, 'data-es-live' ) === false ) {
 			return [];
@@ -409,7 +292,6 @@ class ES_Live_Values {
 		return $out;
 	}
 
-	/** @return array{field: string, format: ?string, name: string, product_id: ?int, coupon: ?string, key: ?string, fallback: string, problem: ?string} */
 	private static function describe( DOMElement $el ): array {
 		$field       = strtolower( trim( $el->getAttribute( 'data-es-live' ) ) );
 		$format      = strtolower( trim( $el->getAttribute( 'data-es-format' ) ) );
@@ -466,17 +348,10 @@ class ES_Live_Values {
 		return $code === '' ? null : 'c:' . $product_id . ':' . $code;
 	}
 
-	/** How WooCommerce compares codes: wc_format_coupon_code(), then lower case. */
 	public static function normalize_code( string $code ): string {
 		return mb_strtolower( trim( html_entity_decode( $code, ENT_QUOTES, 'UTF-8' ) ) );
 	}
 
-	/**
-	 * One field, from one stored reading.
-	 *
-	 * @param array<string, mixed>|null $row { answer, as_of, confirmed_at }
-	 * @return array{ok: bool, text: ?string, reason: ?string}
-	 */
 	public static function evaluate( string $field, ?string $format, ?array $row, int $now ): array {
 		if ( ! $row ) {
 			return self::no( 'not_measured' );
@@ -553,21 +428,14 @@ class ES_Live_Values {
 		return self::no( 'unknown_field' );
 	}
 
-	/** @return array{ok: bool, text: ?string, reason: ?string} */
 	private static function no( string $reason ): array {
 		return [ 'ok' => false, 'text' => null, 'reason' => $reason ];
 	}
 
-	/** @return array{ok: bool, text: ?string, reason: ?string} */
 	private static function yes( string $text ): array {
 		return [ 'ok' => true, 'text' => $text, 'reason' => null ];
 	}
 
-	/**
-	 * @param mixed                $amount
-	 * @param array<string, mixed> $currency
-	 * @return array{ok: bool, text: ?string, reason: ?string}
-	 */
 	private static function positive_money( $amount, array $currency, ?string $format, string $when_missing ): array {
 		if ( $amount === null || $amount === '' ) {
 			return self::no( $when_missing );
@@ -579,7 +447,6 @@ class ES_Live_Values {
 		return self::yes( self::money( (float) $amount, $currency, $format ) );
 	}
 
-	/** @return array{ok: bool, text: ?string, reason: ?string} */
 	private static function percent( float $percent, ?string $format ): array {
 		$whole = (int) floor( $percent + 1e-6 );
 		if ( $whole < 1 ) {
@@ -589,10 +456,6 @@ class ES_Live_Values {
 		return self::yes( $format === 'number' ? (string) $whole : $whole . '%' );
 	}
 
-	/**
-	 * @param mixed $when { local: "Y-m-d H:i", utc: ISO 8601 }
-	 * @return array{ok: bool, text: ?string, reason: ?string}
-	 */
 	private static function moment( $when, ?string $format, int $now, string $when_missing, string $when_past ): array {
 		if ( ! is_array( $when ) || empty( $when['local'] ) ) {
 			return self::no( $when_missing );
@@ -608,7 +471,6 @@ class ES_Live_Values {
 		return $text === null ? self::no( $when_missing ) : self::yes( $text );
 	}
 
-	/** @param array<string, mixed> $currency */
 	public static function money( float $amount, array $currency, ?string $format = null ): string {
 		$decimals = max( 0, (int) ( $currency['decimals'] ?? 2 ) );
 		$whole    = abs( $amount - round( $amount ) ) < 0.005;
@@ -638,7 +500,6 @@ class ES_Live_Values {
 		return $symbol . $number;
 	}
 
-	/** A shop-clock "Y-m-d H:i" as words. Exactly midnight is the end of the day before. */
 	public static function date( string $local, ?string $format = null ): ?string {
 		$at = DateTimeImmutable::createFromFormat( '!Y-m-d H:i', $local, new DateTimeZone( 'UTC' ) );
 		if ( ! $at ) {

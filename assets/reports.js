@@ -27,16 +27,12 @@
 		metrics.forEach(m => {
 			points.forEach(p => { maxY = Math.max(maxY, Number(p[m.key] || 0)); });
 		});
-		// Add 1 unit of headroom before snapping to a "nice" ceiling so the line
-		// never touches the top of the chart.
 		const niceMax = niceCeil(maxY + 1);
 
 		const xStep = (W - padL - padR) / Math.max(1, points.length - 1);
 		const yScale = (H - padT - padB) / niceMax;
 		const xs = points.map((_, i) => padL + i * xStep);
 
-		// Integer-only ticks — our metrics are always whole counts.
-		// Small ranges (≤6) show every integer; larger ones show 0, mid, max.
 		let ticks;
 		if (niceMax <= 6) {
 			ticks = [];
@@ -65,10 +61,6 @@
 			let area = 'M' + xs[0].toFixed(1) + ',' + (H - padB);
 			points.forEach((_, i) => { area += 'L' + xs[i].toFixed(1) + ',' + ys[i].toFixed(1); });
 			area += 'L' + xs[xs.length - 1].toFixed(1) + ',' + (H - padB) + 'Z';
-			// Visible dot + a larger transparent hit circle carrying the tooltip
-			// text. We drive the tooltip ourselves (data-tip) instead of an SVG
-			// <title>, because native <title> tooltips have a browser-imposed
-			// hover delay that can't be removed.
 			const dots = points.map((p, i) => {
 				const tip = `${formatDate(p.date)} — ${m.label}: ${p[m.key] || 0}`;
 				return `<circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="3" fill="${m.color}" />`
@@ -101,10 +93,6 @@
 		attachTooltip(host);
 	}
 
-	// Instant, zero-delay tooltip for the chart dots. One reused element per
-	// chart host; shown on mouseover/move over any [data-tip] node and hidden
-	// on mouseout. No setTimeout anywhere — it appears the moment the pointer
-	// lands on a node.
 	function attachTooltip(host) {
 		let tip = host.querySelector('.es-chart-tip');
 		if (!tip) {
@@ -121,7 +109,6 @@
 			const rect = host.getBoundingClientRect();
 			let x = e.clientX - rect.left + 12;
 			let y = e.clientY - rect.top - 12;
-			// Keep the tip inside the chart box.
 			x = Math.min(x, host.clientWidth - tip.offsetWidth - 4);
 			x = Math.max(4, x);
 			y = Math.max(4, y);
@@ -130,9 +117,6 @@
 			tip.classList.add('is-visible');
 		};
 		const hide = (e) => {
-			// relatedTarget is where the pointer is heading. If it's another
-			// dot, leave the tip up (it'll reposition on the next mouseover) —
-			// avoids a flicker when sliding dot-to-dot.
 			const to = e && e.relatedTarget;
 			if (to && to.closest && to.closest('[data-tip]')) return;
 			tip.classList.remove('is-visible');
@@ -158,7 +142,6 @@
 	function formatNum(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
 
 	function formatDate(iso) {
-		// Hourly bucket: 'YYYY-MM-DDTHH:00'
 		if (iso.length > 10) {
 			const d = new Date(iso);
 			return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -168,14 +151,6 @@
 	}
 })();
 
-/* ---------------------------------------------------------------------------
- * Custom date picker — progressive enhancement of .es-dp-input.
- * The native <input type="date"> is kept in the DOM (visually hidden) so the
- * surrounding form still submits from/to as Y-m-d even with JS off; on top of
- * it we render our own calendar. That lets us disable days before the first
- * day with data AND show a cursor-following "no data prior to…" tooltip over
- * exactly those days — neither of which the browser's native calendar allows.
- * ------------------------------------------------------------------------- */
 (function () {
 	'use strict';
 
@@ -200,8 +175,6 @@
 
 	Array.prototype.forEach.call(inputs, setup);
 
-	// Quick-ranges dropdown: each option's value is the target URL; selecting a
-	// preset navigates straight there.
 	var quickRange = document.getElementById('es-quick-range');
 	if (quickRange) {
 		quickRange.addEventListener('change', function () {
@@ -214,7 +187,6 @@
 		var tipText = input.getAttribute('data-tip') || '';
 		var today   = startOfDay(new Date());
 
-		// Wrap + hide the native input (still part of the form, still submitted).
 		var wrap = document.createElement('div');
 		wrap.className = 'es-dp';
 		input.parentNode.insertBefore(wrap, input);
@@ -282,7 +254,6 @@
 				+ '<div class="es-dp-grid">' + cells + '</div>'
 				+ '<div class="es-dp-foot"><button type="button" class="es-dp-today">Today</button></div>';
 
-			// The tooltip lives outside pop.innerHTML so it survives re-renders.
 			pop.appendChild(tip);
 		}
 
@@ -328,8 +299,6 @@
 			}
 		});
 
-		// Cursor-following tooltip — shown ONLY while the pointer is over a
-		// disabled (pre-first-date) day, positioned next to the cursor.
 		pop.addEventListener('mousemove', function (e) {
 			var cell = e.target.closest ? e.target.closest('.es-dp-day[data-disabled]') : null;
 			if (!cell || !tipText) { tip.classList.remove('is-visible'); return; }

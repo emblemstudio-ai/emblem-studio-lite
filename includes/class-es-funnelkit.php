@@ -3,13 +3,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * FunnelKit Automations integration.
- *
- * Two strategies, tried in order:
- *   1. Direct PHP via BWFCRM_Contact (zero-config, same WP install).
- *   2. REST API using a stored key (needs setup in FunnelKit → Settings → API).
- */
 class ES_FunnelKit {
 
 	public const OPT_API_KEY    = 'emblem_studio_fk_api_key';
@@ -32,21 +25,6 @@ class ES_FunnelKit {
 		];
 	}
 
-	/**
-	 * Push a lead to FunnelKit.
-	 *
-	 * @param array $lead {
-	 *     @type string $email
-	 *     @type string $first_name
-	 *     @type string $last_name
-	 *     @type string $phone
-	 *     @type array  $custom_fields
-	 *     @type array  $tags     Tag names; auto-created in FunnelKit if new.
-	 *     @type array  $lists    Array of list IDs. (Older $list_id still accepted.)
-	 *     @type int    $list_id  Deprecated — use $lists.
-	 * }
-	 * @return array { ok: bool, contact_id: ?int, error: ?string }
-	 */
 	public static function push( array $lead ): array {
 		if ( empty( $lead['email'] ) || ! is_email( $lead['email'] ) ) {
 			return [ 'ok' => false, 'contact_id' => null, 'error' => 'Invalid email' ];
@@ -68,8 +46,6 @@ class ES_FunnelKit {
 	}
 
 	private static function push_direct( array $lead ): array {
-		// One status/update/term policy is shared by Full, Lite's local connector,
-		// and the standalone remote bridge. Keep transport code out of this rule.
 		return ES_FunnelKit_Upsert::run( $lead );
 	}
 
@@ -117,12 +93,7 @@ class ES_FunnelKit {
 		];
 	}
 
-	/**
-	 * Return available lists for the FK list dropdown in the form edit screen.
-	 * Returns [] if FunnelKit isn't available — UI shows "none".
-	 */
 	public static function get_lists(): array {
-		// Strategy 1: BWFCRM_List class with multiple known method names.
 		if ( class_exists( 'BWFCRM_List' ) ) {
 			foreach ( [ 'get_all_lists', 'get_lists', 'get_all' ] as $m ) {
 				if ( method_exists( 'BWFCRM_List', $m ) ) {
@@ -137,7 +108,6 @@ class ES_FunnelKit {
 			}
 		}
 
-		// Strategy 2: unified bwfan_terms table (FunnelKit free uses this for lists + tags).
 		global $wpdb;
 		$terms = $wpdb->prefix . 'bwfan_terms';
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $terms ) ) === $terms ) {
@@ -147,7 +117,6 @@ class ES_FunnelKit {
 			$type_col = self::pick_col( $cols, [ 'type', 'term_type', 'taxonomy' ] );
 			if ( $id_col && $name_col ) {
 				if ( $type_col ) {
-					// FunnelKit stores lists with type=2 (numeric).
 					$rows = $wpdb->get_results( $wpdb->prepare(
 						"SELECT `$id_col` as id, `$name_col` as name FROM `$terms` WHERE `$type_col` IN (%s, %s, %s, %s, %s) ORDER BY `$name_col` ASC",
 						'2', 'list', 'lists', 'bwf-list', 'bwfan-list'
@@ -161,7 +130,6 @@ class ES_FunnelKit {
 			}
 		}
 
-		// Strategy 3: standalone lists table (older / pro layouts).
 		$candidates = [
 			$wpdb->prefix . 'bwf_lists',
 			$wpdb->prefix . 'bwfan_lists',
@@ -194,9 +162,6 @@ class ES_FunnelKit {
 		return null;
 	}
 
-	/**
-	 * Return available tags for the FK tag selector. Same shape as get_lists().
-	 */
 	public static function get_tags(): array {
 		global $wpdb;
 		$terms = $wpdb->prefix . 'bwfan_terms';
@@ -206,8 +171,6 @@ class ES_FunnelKit {
 			$name_col = self::pick_col( $cols, [ 'name', 'title' ] );
 			$type_col = self::pick_col( $cols, [ 'type', 'term_type', 'taxonomy' ] );
 			if ( $id_col && $name_col && $type_col ) {
-				// FunnelKit stores tags with type=1 (numeric), lists with type=2.
-				// Also accept string variants for safety across versions.
 				$rows = $wpdb->get_results( $wpdb->prepare(
 					"SELECT `$id_col` as id, `$name_col` as name FROM `$terms` WHERE `$type_col` IN (%s, %s, %s, %s, %s) ORDER BY `$name_col` ASC",
 					'1', 'tag', 'tags', 'bwf-tag', 'bwfan-tag'
@@ -218,33 +181,9 @@ class ES_FunnelKit {
 		return [];
 	}
 
-	/**
-	 * Return every FunnelKit field that can be a mapping target, organised
-	 * into groups for the form-edit UI.
-	 *
-	 * Result shape:
-	 *   [
-	 *     [
-	 *       'label'  => 'Contact',
-	 *       'fields' => [
-	 *         [ 'key' => 'col:email',     'label' => 'Email',        'kind' => 'email',  'required' => true ],
-	 *         [ 'key' => 'col:f_name',    'label' => 'First Name',   'kind' => 'text' ],
-	 *         ...
-	 *       ],
-	 *     ],
-	 *     [ 'label' => 'Address', 'fields' => [...] ],
-	 *     [ 'label' => '{user group name}', 'fields' => [...] ],
-	 *   ]
-	 *
-	 * 'key' uses `col:` prefix for direct DB columns on bwf_contact and `slug:`
-	 * prefix for custom-field slugs (looked up in bwf_contact_fields at write
-	 * time). 'kind' is one of: text, email, tel, number, textarea, select,
-	 * select-multi, date, datetime, time (matches the FK custom-field types).
-	 */
 	public static function get_all_fields_grouped(): array {
 		$groups = [];
 
-		// Group 1: built-in contact columns (always present).
 		$contact_group = [
 			'label'  => __( 'Contact', 'emblem-studio' ),
 			'fields' => [
@@ -257,14 +196,12 @@ class ES_FunnelKit {
 				[ 'key' => 'col:timezone',   'label' => __( 'Timezone', 'emblem-studio' ),   'kind' => 'text' ],
 			],
 		];
-		// Same shape as a custom field: none of the built-in columns picks from options.
 		$contact_group['fields'] = array_map(
 			static fn( array $field ): array => $field + [ 'options' => [] ],
 			$contact_group['fields']
 		);
 		$groups[] = $contact_group;
 
-		// Group 2..N: custom fields grouped by their bwfan_field_groups row.
 		global $wpdb;
 		$fields_tbl = $wpdb->prefix . 'bwfan_fields';
 		$groups_tbl = $wpdb->prefix . 'bwfan_field_groups';
@@ -291,11 +228,6 @@ class ES_FunnelKit {
 				'key'     => 'slug:' . (string) $r->field_slug,
 				'label'   => (string) $r->field_name,
 				'kind'    => self::field_type_to_kind( (int) $r->field_type ),
-				// A choice field (select, radio, checkbox) only stores answers
-				// that match one of these labels, case-insensitive, and drops the
-				// rest without a word. Both mappers (this plugin's, and the SaaS's
-				// via the connector's funnelkit/meta) use it to warn about that.
-				// Empty for a field that does not pick from options.
 				'options' => ES_Field_Matcher::funnelkit_options( (int) $r->field_type, (string) ( $r->field_meta ?? '' ) ),
 			];
 		}
@@ -306,11 +238,6 @@ class ES_FunnelKit {
 		return $groups;
 	}
 
-	/**
-	 * Map FunnelKit's numeric field type to our normalized "kind" string.
-	 * Type constants from BWFCRM_Fields: 1=text, 2=number, 3=textarea,
-	 * 4=select, 5=radio, 6=checkbox, 7=date, 8=datetime, 9=time.
-	 */
 	private static function field_type_to_kind( int $type ): string {
 		switch ( $type ) {
 			case 1:  return 'text';

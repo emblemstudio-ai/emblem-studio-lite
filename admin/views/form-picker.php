@@ -1,20 +1,4 @@
 <?php
-/**
- * Form picker — shown when the user clicks "Add New". Replaces the
- * old direct-to-blank flow. Layout:
- *
- *   ┌─ Blank form (big, prominent) ────────────────────────────────┐
- *   ├─ Filter chips: All / Inline / Click popup / Auto popup / …  ─┤
- *   ├─ Collection: Indie SaaS ─────────────────────────────────────┤
- *   │   [thumb] [thumb] [thumb] [thumb]                             │
- *   ├─ Collection: Therapist (future) ─────────────────────────────┤
- *   │   [thumb] [thumb] [thumb]                                    │
- *   └──────────────────────────────────────────────────────────────┘
- *
- * Each thumb is a live iframe rendering the template via
- * ES_Preview::template_thumb_url(). Click to install ONE form and
- * land on its editor.
- */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -42,7 +26,6 @@ $blank_url = admin_url( 'admin.php?page=emblem-studio-new&blank=1' );
 		<div class="notice notice-warning is-dismissible"><p><?php esc_html_e( 'That template could not be installed. The file may be missing or invalid.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
 
-	<!-- Blank form: big, prominent, top of the picker. -->
 	<a class="es-picker-blank" href="<?php echo esc_url( $blank_url ); ?>">
 		<div class="es-picker-blank-icon" aria-hidden="true">+</div>
 		<div class="es-picker-blank-body">
@@ -52,7 +35,6 @@ $blank_url = admin_url( 'admin.php?page=emblem-studio-new&blank=1' );
 		<span class="es-picker-blank-cta"><?php esc_html_e( 'Start from scratch →', 'emblem-studio' ); ?></span>
 	</a>
 
-	<!-- Shell filter chips. Client-side filter via data-shell on each card. -->
 	<div class="es-picker-filters" role="tablist" aria-label="<?php esc_attr_e( 'Filter templates by shell', 'emblem-studio' ); ?>">
 		<button type="button" class="es-picker-filter is-active" data-shell="all"><?php esc_html_e( 'All', 'emblem-studio' ); ?></button>
 		<?php foreach ( $shell_labels as $shell => $label ) : ?>

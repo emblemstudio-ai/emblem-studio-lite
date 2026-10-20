@@ -3,28 +3,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Display-rule presets (SER-899 phase 2) — a site's saved page/post/URL
- * targeting combos, mirrored two-way with the SaaS. See
- * emblem-studio-saas/docs/DISPLAY-RULE-PRESETS.md for the full design; this
- * is the WordPress-side counterpart of App\Models\DisplayRulePreset +
- * DisplayRulePresetController.
- *
- * A preset is exactly the WHERE fields (show_mode/show_filters/hide_filters)
- * — schedule and visitor targeting are never part of one. A shell "follows"
- * a preset via a `preset_id` key inside its own display_rules entry (see
- * ES_Display_Rules::sanitize()); the shell's own show_mode/show_filters/
- * hide_filters stay the fully-resolved values throughout (write-through on
- * preset save via apply_to_forms()), so rendering and mirroring need no
- * special-case handling for presets at all.
- */
 class ES_Preset_Repo {
 
 	public static function table(): string {
 		return ES_Install::table( 'display_rule_presets' );
 	}
 
-	/** @return object[] */
 	public static function all(): array {
 		global $wpdb;
 		$t = self::table();
@@ -38,10 +22,6 @@ class ES_Preset_Repo {
 		return $row ?: null;
 	}
 
-	/**
-	 * Create or update a preset. $data: name, show_mode, show_filters, hide_filters.
-	 * Returns the preset id.
-	 */
 	public static function save( array $data, ?int $id = null ): int {
 		global $wpdb;
 		$t   = self::table();
@@ -74,10 +54,6 @@ class ES_Preset_Repo {
 		$wpdb->delete( self::table(), [ 'id' => $id ] );
 	}
 
-	/**
-	 * How many shells, across every form on this site, currently follow this
-	 * preset — the "used by N shells" count in the presets admin page.
-	 */
 	public static function usage_count( int $presetId ): int {
 		$count = 0;
 		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
@@ -91,12 +67,6 @@ class ES_Preset_Repo {
 		return $count;
 	}
 
-	/**
-	 * Write a preset's current WHERE values through to every shell, on every
-	 * form on this site, still coupled to it — called after a preset is saved.
-	 * Keeps a form's display_rules fully self-contained, so nothing downstream
-	 * (rendering, mirroring) ever needs a live preset lookup.
-	 */
 	public static function apply_to_forms( int $presetId, array $where ): void {
 		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
 			$rules   = ES_Display_Rules::get_all_for_form( $form );
@@ -113,11 +83,6 @@ class ES_Preset_Repo {
 		}
 	}
 
-	/**
-	 * Un-link every shell, on every form on this site, still following a
-	 * deleted preset — keeps their last-resolved WHERE values (never blanks
-	 * them), matching a manual un-link.
-	 */
 	public static function decouple_forms_using( int $presetId ): void {
 		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
 			$rules   = ES_Display_Rules::get_all_for_form( $form );
@@ -134,10 +99,6 @@ class ES_Preset_Repo {
 		}
 	}
 
-	/**
-	 * Portable JSON-shaped array for one preset — mirrors ES_Form_Repo::to_export_array.
-	 * Stats/timestamps/id excluded; only what defines the preset travels.
-	 */
 	public static function to_export_array( object $preset ): array {
 		$decode = function ( $raw ) {
 			if ( is_string( $raw ) && $raw !== '' ) {
@@ -154,11 +115,6 @@ class ES_Preset_Repo {
 		];
 	}
 
-	/**
-	 * Post/page titles for the given ids — shared by form-edit.php (the current
-	 * shell's own rules) and the admin preset payload below, so both resolve
-	 * titles the same way. Mirrors form-edit.php's original $dr_lookup_titles.
-	 */
 	public static function lookup_post_titles( string $post_type, array $ids ): array {
 		$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
 		if ( empty( $ids ) ) {
@@ -184,7 +140,6 @@ class ES_Preset_Repo {
 		return $out;
 	}
 
-	/** Taxonomy term names for the given ids. Mirrors $dr_lookup_term_names. */
 	public static function lookup_term_names( string $taxonomy, array $ids ): array {
 		$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
 		if ( empty( $ids ) ) {
@@ -210,7 +165,6 @@ class ES_Preset_Repo {
 		return $out;
 	}
 
-	/** Resolved titles for one filter set (a show_filters or hide_filters shape). */
 	public static function titles_for_filters( array $filters ): array {
 		return [
 			'posts' => self::lookup_post_titles( 'post', (array) ( $filters['posts'] ?? [] ) ),
@@ -220,12 +174,6 @@ class ES_Preset_Repo {
 		];
 	}
 
-	/**
-	 * Full client-side payload for one preset — filters as plain arrays (not
-	 * to_export_array()'s stdClass-for-empty, which is for the SaaS mirror's
-	 * JSON shape) plus resolved titles, so the picker/modal JS can render and
-	 * edit every filter type (chips included) without an extra round-trip.
-	 */
 	public static function to_admin_payload( object $preset ): array {
 		$decode = function ( $raw ) {
 			if ( is_string( $raw ) && $raw !== '' ) {

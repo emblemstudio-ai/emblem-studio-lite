@@ -3,12 +3,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Supported server-side measurement boundary. See docs/MEASUREMENT-AUTHORIZATION.md. */
 final class ES_Measurement {
 	public const API_VERSION = 1;
 	private static bool $authorizing = false;
 
-	/** true = active caller transaction; false = proven autocommit; null = unknown. */
 	public static function transaction_active(): ?bool {
 		return ES_Measurement_Transaction::active();
 	}
@@ -20,17 +18,12 @@ final class ES_Measurement {
 	public static function policy( array $context ): string {
 		try {
 			$policy = apply_filters( 'emblem_studio_measurement_policy', 'legacy', $context );
-			// A malformed server policy must not accidentally restore legacy tracking.
 			return $policy === 'legacy' ? 'legacy' : 'strict';
 		} catch ( Throwable $error ) {
 			return 'strict';
 		}
 	}
 
-	/**
-	 * No request consent/lead/visitor value grants authority. The host supplies
-	 * its current server decision, optionally inside an atomic write callback.
-	 */
 	public static function authorized_write( array $context, callable $write ): bool {
 		if ( self::$authorizing || ! self::storage_transactional() ) {
 			return false;
@@ -44,7 +37,6 @@ final class ES_Measurement {
 			}
 			$inserted = false;
 			$writer = static function ( $decision ) use ( $context, $write, &$inserted, $scope ): bool {
-				// One insert at most, even if a buggy server adapter invokes twice.
 				if ( ! $scope->claim() ) {
 					return false;
 				}
@@ -58,8 +50,6 @@ final class ES_Measurement {
 					if ( ! is_int( $id ) || $id < 1 ) {
 						return false;
 					}
-					// Native submit passes its insert_id. No lookup by client id,
-					// email, visitor cookie, matching timestamp, or posted consent.
 					$lead = $wpdb->get_row( $wpdb->prepare(
 						'SELECT id, form_id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $id
 					) );
@@ -70,12 +60,8 @@ final class ES_Measurement {
 				$inserted = $write( $decision ) === true;
 				return $inserted;
 			};
-			// The host owns locking/commit. Returning true without calling the
-			// writer cannot fabricate a recorded conversion. Plain decision arrays
-			// are rejected because a separate read then write races withdrawal.
 			return $authority( $writer, $context ) === true && $inserted;
 		} catch ( Throwable $error ) {
-			// Measurement failures must never prevent the already saved capture.
 			return false;
 		} finally {
 			$scope->expire();
@@ -83,7 +69,6 @@ final class ES_Measurement {
 		}
 	}
 
-	/** Exact association only; the host must authorize access before calling. */
 	public static function events_for_lead( int $lead_id ) {
 		if ( $lead_id < 1 ) {
 			return [];
@@ -107,7 +92,6 @@ final class ES_Measurement {
 		return $rows;
 	}
 
-	/** Return false on SQL failure so callers preserve the capture for retry. */
 	public static function erase_for_lead( int $lead_id ) {
 		if ( $lead_id < 1 ) {
 			return 0;
@@ -121,11 +105,6 @@ final class ES_Measurement {
 		} );
 	}
 
-	/**
-	 * Legacy rows have no deterministic identity. Never claim they belong to a
-	 * person or delete them with another person's erasure. NULL includes rows
-	 * created before this API. Strict aggregate rows are explicitly minimized.
-	 */
 	public static function association_status( int $form_id ): array {
 		global $wpdb;
 		$events = ES_Install::table( 'events' );
@@ -145,7 +124,6 @@ final class ES_Measurement {
 	}
 }
 
-/** Internal single-use lifetime guard; a retained writer can never outlive its call. */
 final class ES_Measurement_Write_Scope {
 	private bool $active = true;
 	private bool $used = false;

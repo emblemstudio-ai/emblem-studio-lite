@@ -5,38 +5,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ES_Ajax {
 
-	// Per-IP × form bucket. Submissions are far more sensitive than impressions/views.
-	private const SUBMIT_WINDOW       = 60;    // seconds
-	private const SUBMIT_MAX          = 8;     // submissions / window / (ip, form)
-	private const EVENT_WINDOW        = 60;    // seconds
-	private const EVENT_MAX           = 120;   // page_view+view events / window / (ip, form)
-	private const CLICK_WINDOW        = 60;    // seconds
-	private const CLICK_MAX           = 60;    // click events / window / (ip, form, shell)
-	// Below this, a filled honeypot is trusted as a bot signal on its own. A
-	// scripted submission fills every field and posts near-instantly; a real
-	// visitor — even one whose browser autofill cross-filled the trap — takes
-	// at least this long to see the form and click submit.
+	private const SUBMIT_WINDOW       = 60;
+	private const SUBMIT_MAX          = 8;
+	private const EVENT_WINDOW        = 60;
+	private const EVENT_MAX           = 120;
+	private const CLICK_WINDOW        = 60;
+	private const CLICK_MAX           = 60;
 	private const MIN_HUMAN_SUBMIT_MS = 1200;
-	/**
-	 * An email address a message could actually be delivered to: an @, and a
-	 * domain whose final label is at least two characters, starts with a letter
-	 * and ends with a letter or digit ("com", "uk", "xn--p1ai" — but not "c",
-	 * not "123", and not a trailing hyphen).
-	 *
-	 * WordPress's is_email() already wants a dot in the domain, so this mostly
-	 * agrees with it. It is here anyway because the SaaS needs the rule spelled
-	 * out (PHP's and Laravel's own email checks both accept "name@examle", a
-	 * domain with no dot, which is legal by the RFC and undeliverable in
-	 * practice) and the two products must accept and refuse exactly the same
-	 * addresses. It also settles the one place is_email() is looser: it takes a
-	 * single-letter ending like "a@b.c".
-	 *
-	 * FOUR TWINS, KEEP THEM IN STEP: this, assets/frontend.js (EMAIL_SHAPE), and
-	 * the SaaS's App\Rules\DeliverableEmail + public/embed/embed.js.
-	 */
 	public const EMAIL_SHAPE = '/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)*\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])$/';
 
-	/** Is this an address worth keeping? See {@see self::EMAIL_SHAPE}. */
 	public static function is_deliverable_email( string $email ): bool {
 		$email = trim( $email );
 		return $email !== '' && is_email( $email ) && (bool) preg_match( self::EMAIL_SHAPE, $email );
@@ -57,16 +34,10 @@ class ES_Ajax {
 		add_action( 'wp_ajax_nopriv_es_dropoff',      [ $this, 'dropoff' ] );
 		add_action( 'wp_ajax_es_submit',              [ $this, 'submit' ] );
 		add_action( 'wp_ajax_nopriv_es_submit',       [ $this, 'submit' ] );
-		// Admin-only — used by the "Send test" button on the Connect tab.
 		add_action( 'wp_ajax_es_test_webhook',        [ $this, 'test_webhook' ] );
-		// Admin-only — render payload for the Forms list hover thumbnail.
 		add_action( 'wp_ajax_es_preview_payload',     [ $this, 'preview_payload' ] );
 	}
 
-	/**
-	 * Return a form's render payload (html + Design-System-composed css) so the
-	 * Forms list can show a live hover thumbnail. Admin-only, nonce-protected.
-	 */
 	public function preview_payload(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
@@ -79,14 +50,10 @@ class ES_Ajax {
 			wp_send_json_error( [ 'message' => 'Not found' ], 404 );
 		}
 
-		// build_payload() is the same choke point the front end uses (Design System
-		// already composed in); it returns a JSON string we decode back to fields.
 		$payload = json_decode( ( new ES_Shortcode() )->build_payload( $form ), true );
 		wp_send_json_success( [
 			'html' => (string) ( $payload['html'] ?? '' ),
 			'css'  => (string) ( $payload['css'] ?? '' ),
-			// Shadow DOM off means the asset takes the page's font; the hover card
-			// needs to know so it can hand it the same page font the previews use.
 			'shadow' => ! empty( $form->use_shadow_dom ),
 		] );
 	}
@@ -103,37 +70,14 @@ class ES_Ajax {
 		$this->record_event( 'trigger_view' );
 	}
 
-	/**
-	 * Visitor started filling in the form (first keystroke / tick / pick).
-	 * Fired once per mounted form by frontend.js. Paired with `conversion`
-	 * to derive drop-offs: engaged − converted. Goes through the same generic
-	 * path as views, so it inherits the bot filter, exclusion, per-(ip,form,
-	 * shell,variant) rate-limit bucket, and active-form check.
-	 */
 	public function engage(): void {
 		$this->record_event( 'engage' );
 	}
 
-	/**
-	 * Visitor engaged with the form but left the page without submitting — a
-	 * drop-off. Fired by frontend.js on `pagehide` (via sendBeacon). Recorded
-	 * directly as its own event rather than derived by subtracting conversions
-	 * from engagements, which is unreliable against historical data.
-	 */
 	public function dropoff(): void {
 		$this->record_event( 'dropoff' );
 	}
 
-	/**
-	 * Record a click on a tracked element inside a form. Same bot filter +
-	 * active-form check as views; separate rate-limit bucket because clicks
-	 * can be more frequent than page_view/view but less than typing.
-	 *
-	 * Target identifier comes from frontend.js — it's the author's
-	 * `data-es-track` value when set, else element id, else truncated visible
-	 * text, else a tag+class fallback. Reserved sentinel `__close__` is used
-	 * for shell close buttons.
-	 */
 	public function click(): void {
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 		if ( ! $form_id ) {
@@ -146,29 +90,18 @@ class ES_Ajax {
 			$shell = 'inline';
 		}
 
-		// Excluded IPs (own monitors / load tests) are dropped entirely — not
-		// even counted as bot_filtered. Catches browser-spoofing crawlers the
-		// UA bot filter can't.
 		if ( ES_Event_Recorder::is_excluded_ip( $this->client_ip() ) ) {
 			wp_send_json_success();
 		}
 
-		// Bot filter — same policy as page_view/view. Bot clicks roll up under
-		// bot_filtered (no click target, but tagged with which bot + page) so the
-		// admin sees suppression at work in the breakdown report.
 		if ( ES_Event_Recorder::filter_bots_enabled() && ES_Event_Recorder::is_bot_request() ) {
 			$this->record_bot_hit( $form_id, $shell );
 			wp_send_json_success();
 		}
-		// Datacenter fallback: cloud-VM "browser" the UA filter missed.
 		if ( $this->maybe_record_datacenter( $form_id, $shell ) ) {
 			wp_send_json_success();
 		}
 
-		// Per-(IP, form, shell, variant) rate-limit bucket. Including
-		// variant in the key gives each side of the test its own
-		// allowance — visitors flipping cookies don't share buckets
-		// with their previous slot.
 		$variant     = $this->ab_slot( $form_id );
 		$bucket_part = $variant ? '_v' . $variant : '';
 		if ( $this->bucket_exceeded( 'click_' . $shell . '_' . $form_id . $bucket_part, self::CLICK_WINDOW, self::CLICK_MAX ) ) {
@@ -179,14 +112,11 @@ class ES_Ajax {
 		if ( ! $form || ! ES_Form_Repo::is_currently_active( $form ) ) {
 			wp_send_json_success();
 		}
-		// Server-side respect for the per-form opt-out — defends against a
-		// page that's still serving cached JS after the toggle was flipped off.
 		if ( empty( $form->track_clicks ) ) {
 			wp_send_json_success();
 		}
 
 		$target = isset( $_POST['target'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['target'] ) ) : '';
-		// Collapse whitespace runs so visible-text labels group cleanly.
 		$target = preg_replace( '/\s+/', ' ', trim( $target ) );
 		if ( $target === '' ) {
 			$target = '__untagged__';
@@ -195,11 +125,6 @@ class ES_Ajax {
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
 		$recorded = ES_Event_Recorder::record( $form_id, 'click', $post_id, $shell, $target, $variant );
 
-		// A/B auto-winner eval for click-primary tests (non-form assets
-		// where there's no submit to trigger from). Skip when the click
-		// target is a close / backdrop sentinel — those don't represent
-		// success and shouldn't drive an auto-declare. Throttled to
-		// once per minute per form by auto_winner_check.
 		if ( $recorded && class_exists( 'ES_AB' ) && $target !== '__close__' && $target !== '__backdrop__' ) {
 			$running = ES_AB::running_test_for_form( $form_id );
 			if ( $running && isset( $running->primary_metric ) && $running->primary_metric === 'clicks' ) {
@@ -211,18 +136,10 @@ class ES_Ajax {
 	}
 
 	private function record_event( string $event_type ): void {
-		// Excluded IPs (own monitors / load tests) are dropped entirely before
-		// anything is counted — the fix for headless-browser monitors that spoof
-		// a real UA and would otherwise inflate page-view / impression stats.
 		if ( ES_Event_Recorder::is_excluded_ip( $this->client_ip() ) ) {
 			wp_send_json_success();
 		}
 
-		// Bot filter — keeps the impression metric trustworthy. When the UA
-		// looks like a known bot, count it under bot_filtered (so admins can
-		// SEE the filtering is working) and bail before recording the real
-		// event. Doesn't apply to submit() — let the honeypot + rate limit
-		// handle bots that try to actually submit forms.
 		if ( ES_Event_Recorder::filter_bots_enabled() && ES_Event_Recorder::is_bot_request() ) {
 			$bot_form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 			$bot_shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
@@ -234,8 +151,6 @@ class ES_Ajax {
 			}
 			wp_send_json_success();
 		}
-		// Datacenter fallback: a "browser" from a cloud VM is almost certainly a
-		// crawler — keep it out of the page-view / impression metrics.
 		$dc_form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 		$dc_shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
 		if ( ! in_array( $dc_shell, ES_Form_Repo::valid_types(), true ) ) {
@@ -245,15 +160,12 @@ class ES_Ajax {
 			wp_send_json_success();
 		}
 
-		// Mark this visitor as "returning" for any future page render that
-		// has visitor_state targeting. Cheap; no-op if cookie already set.
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => null ] ) === 'legacy' ) {
 			ES_Display_Rules::ensure_visitor_cookie();
 		}
 
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
-		// Shell type: tagged on the host in PHP, sent back with every event.
 		$shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
 		$valid_shells = ES_Form_Repo::valid_types();
 		if ( ! in_array( $shell, $valid_shells, true ) ) {
@@ -263,9 +175,6 @@ class ES_Ajax {
 		if ( ! $form_id ) {
 			wp_send_json_error( [ 'message' => 'Missing form_id' ], 400 );
 		}
-		// Throttle event firehose per (ip, form, shell, variant) — variant
-		// included so each side of an A/B test has its own bucket; visitors
-		// re-bucketed mid-test don't trip the previous slot's limit.
 		$variant     = $this->ab_slot( $form_id );
 		$bucket_part = $variant ? '_v' . $variant : '';
 		if ( $this->bucket_exceeded( 'ev_' . $event_type . '_' . $shell . '_' . $form_id . $bucket_part, self::EVENT_WINDOW, self::EVENT_MAX ) ) {
@@ -281,8 +190,6 @@ class ES_Ajax {
 
 	public function submit(): void {
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
-		// Legacy sites retain visitor targeting. Strict hosts own consent and
-		// identifiers; capture must not create a CRO cookie before authorization.
 		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'conversion', 'lead_id' => null ] ) === 'legacy' ) {
 			ES_Display_Rules::ensure_visitor_cookie();
 		}
@@ -291,26 +198,8 @@ class ES_Ajax {
 			wp_send_json_error( [ 'message' => 'Missing form_id' ], 400 );
 		}
 
-		// "Submit for real" from the Design-tab previewer: process the submission
-		// normally (save the lead, push to the CRM) but DON'T let it count as a
-		// conversion in reports. Capability-gated so a visitor can't spoof the
-		// flag to suppress their own conversion.
 		$is_preview = ! empty( $_POST['es_preview'] ) && current_user_can( 'edit_posts' );
 
-		// Honeypot — must be empty, UNLESS the submission also looks like a
-		// person. Browser autofill (an accepted address/profile suggestion
-		// cascading into other fields) can drop a stray value into the trap for a
-		// genuine visitor, so the trap on its own has never been proof.
-		//
-		// TIMING COMES FROM THE VISITOR'S OWN CLOCK, NOT FROM OURS.
-		// `es_el` is the gap frontend.js measures itself, both readings taken
-		// from the same device, so it cannot be thrown off by that device
-		// disagreeing with this server. That matters more than it sounds: the
-		// original version compared their `es_ts` against our own time, and a
-		// phone running seven minutes fast produced a NEGATIVE gap, failed the
-		// check, and got a real person filed as a bot. Every visitor with a fast
-		// clock, every time. `es_ts` stays as the fallback for a browser still
-		// holding the older cached script, with the skew guard covering it.
 		$trap_filled   = ! empty( $_POST['esf_hp'] );
 		$form_ready_at = isset( $_POST['es_ts'] ) ? (int) $_POST['es_ts'] : 0;
 
@@ -325,17 +214,9 @@ class ES_Ajax {
 			$elapsed_ms    = null;
 		}
 
-		// A gap below zero can only mean the two clocks disagree — nobody submits
-		// a form before it exists. It is not a bot signature either: a script
-		// gaming this would send a timestamp making itself look SLOW, which the
-		// rule already lets through. So skew is treated as unreadable timing on a
-		// real browser, not as evidence. Only possible on the `es_ts` path.
 		$clock_skew  = $timing_source === 'server' && $elapsed_ms < 0;
 		$looks_human = $elapsed_ms !== null && $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS;
 
-		// Attribution, from the same catalog and the same ranges the bot-filter
-		// paths already put on a filtered VIEW (matched_bot_label /
-		// datacenter_provider), finally carried onto submissions.
 		$ua        = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
 		$ua_bot    = ES_Event_Recorder::matched_bot_label( $ua );
 		$dc        = ES_Event_Recorder::detect_datacenter_enabled()
@@ -344,41 +225,18 @@ class ES_Ajax {
 		$bot_label = $ua_bot !== '' ? $ua_bot : $dc;
 		$named_bot = $bot_label !== '';
 
-		// A submission that carries timing at all is one that RAN OUR SCRIPT: the
-		// gap comes from injectHoneypot. Form spam posted straight at admin-ajax
-		// never runs it and arrives with no timing whatsoever, and there the trap
-		// alone is still decisive — that is the traffic the honeypot was built
-		// for, and it is untouched.
-		//
-		// Where our script DID run and the submission merely looked quick, the
-		// trap alone is not enough any more. Autofill cross-filling the trap and a
-		// fast tap are both ordinary human behaviour, and 1200ms is a guess at
-		// where one ends. So a quick submission is only a bot when something NAMES
-		// one: a crawler in the catalog, or a datacenter address. Nothing named,
-		// ordinary connection, real browser — that is a person, and filing them as
-		// spam costs a signup the site owner never learns about.
 		$ran_our_script = $timing_source !== null;
 		$hp_filled      = $trap_filled
 			&& ! $looks_human
 			&& ! $clock_skew
 			&& ( ! $ran_our_script || $named_bot );
 
-		// Keep the evidence, not just the verdict, whenever the trap comes back
-		// filled — flagged or not. Each way this check can land has a different
-		// cause: `ts_received` false means no timing arrived at all, `clock_skew`
-		// means the visitor's device disagrees with ours about the time, and a
-		// small `elapsed_ms` means different things depending on whether anything
-		// named a bot.
 		$bot_signals = null;
 		if ( $trap_filled ) {
 			$bot_signals = [
 				'hp_filled'   => true,
 				'ts_received' => $timing_source !== null,
 				'elapsed_ms'  => $elapsed_ms,
-				// Which clock produced that number. 'client' is the visitor
-				// measuring their own gap and is the one to trust; 'server' means
-				// they are on the older cached script and we had to subtract their
-				// timestamp from ours, which is the reading skew can wreck.
 				'timing'      => $timing_source,
 				'clock_skew'  => $clock_skew,
 				'ua_bot'      => $ua_bot !== '' ? $ua_bot : null,
@@ -386,27 +244,17 @@ class ES_Ajax {
 			];
 		}
 
-		// Record the trip as an event AND save a bot-flagged lead so admins
-		// can inspect what attackers send without those rows polluting the
-		// real Humans list. We skip the FunnelKit / webhook push so the CRM
-		// never sees garbage. Still return success silently so a real
-		// attacker gets no signal that the trick was detected.
 		if ( $hp_filled ) {
 			ES_Logger::info( 'Honeypot triggered', [ 'form_id' => $form_id ] );
 			$hp_shell = isset( $_POST['type'] ) ? sanitize_key( (string) $_POST['type'] ) : 'inline';
 			if ( ! in_array( $hp_shell, ES_Form_Repo::valid_types(), true ) ) {
 				$hp_shell = 'inline';
 			}
-			// The label goes in the same click_target column, with the same
-			// catalog labels, that a filtered VIEW already uses — so a blocked
-			// submission can finally be asked "which bot?" instead of only
-			// being counted. NULL when nothing matched, which is its own answer.
 			ES_Event_Recorder::record( $form_id, 'honeypot_blocked', null, $hp_shell, $bot_label !== '' ? $bot_label : null );
 			$this->save_bot_lead( $form_id, $bot_signals );
 			wp_send_json_success( [ 'mode' => 'inline_state' ] );
 		}
 
-		// Rate limit per (ip, form_id) — a single attacker can't hammer multiple forms in parallel.
 		if ( $this->bucket_exceeded( 'sub_' . $form_id, self::SUBMIT_WINDOW, self::SUBMIT_MAX ) ) {
 			ES_Logger::error( 'es_submit aborted: rate-limited', [ 'ip' => $this->client_ip(), 'form_id' => $form_id ] );
 			wp_send_json_error( [ 'message' => 'Too many submissions, please wait a moment.' ], 429 );
@@ -419,13 +267,6 @@ class ES_Ajax {
 
 		$fields = $this->collect_fields();
 
-		// Pull out any silent hints frontend.js wrote to __es_geo_* keys (so they
-		// never collide with user-named inputs). As of the ipapi.co removal the
-		// only hint left is the browser's local timezone — IP-derived country /
-		// state / city are no longer looked up here (that's a hosted-Emblem-Studio
-		// feature, Free tier onwards / connected sites). So these keys are mostly
-		// empty now; an explicit Field Mapping still fills any FK field the visitor
-		// actually types, which always wins.
 		$geo = [];
 		foreach ( $fields as $k => $v ) {
 			if ( is_string( $k ) && strpos( $k, '__es_geo_' ) === 0 ) {
@@ -434,9 +275,6 @@ class ES_Ajax {
 			}
 		}
 
-		// Field mapping: { 'col:<column>' | 'slug:<slug>' => form_input_name }.
-		// Wins over name-convention; we look up the mapped input's value in
-		// $fields and route to the right FK target.
 		$mapping = [];
 		if ( ! empty( $form->field_mapping ) ) {
 			$decoded = json_decode( (string) $form->field_mapping, true );
@@ -444,30 +282,14 @@ class ES_Ajax {
 				$mapping = $decoded;
 			}
 		}
-		// PHP strips the trailing `[]` from $_POST keys for multi-value inputs.
-		// Field-parser stores names with `[]` intact (to flag them as multi),
-		// so the lookup needs to tolerate both forms.
 		$lookup_field = function ( string $name ) use ( $fields ) {
 			return self::posted_value( $fields, $name ) ?? '';
 		};
-		// The field's HTML input kind (email/tel/...), parsed from the form's
-		// own stored HTML — a last-resort auto-detect signal when no name
-		// variant matches (e.g. a field named "contact" but type="tel").
 		$field_kinds = [];
 		foreach ( ES_Form_Parser::extract_fields( (string) $form->html ) as $f ) {
 			$field_kinds[ $f['name'] ] = $f['kind'];
 		}
 		$posted_names = array_keys( $fields );
-		/**
-		 * Resolve a FunnelKit column's value: an explicit mapping always wins;
-		 * otherwise try each name-convention variant (case-insensitive, via
-		 * ES_Field_Matcher — shared with assets/admin.js's mapper-UI hint),
-		 * then (only when $default_kind is given) any field whose HTML input
-		 * type matches — e.g. an email column will pick up a field named
-		 * "contact" if it's the only type="email" input on the form.
-		 *
-		 * @param string[] $default_names
-		 */
 		$value_for = function ( string $fk_key, array $default_names = [], string $default_kind = '' ) use ( $mapping, $lookup_field, $posted_names, $field_kinds ) {
 			$form_name = (string) ( $mapping[ $fk_key ] ?? '' );
 			if ( $form_name === '' && $default_names ) {
@@ -482,7 +304,6 @@ class ES_Ajax {
 			$val = $lookup_field( $form_name );
 			return is_array( $val ) ? implode( ', ', array_map( 'strval', $val ) ) : (string) $val;
 		};
-		// FK-routed fields: name-convention is REMOVED. Only mapping or geo.
 		$geo_value_for = function ( string $fk_key, string $geo_key ) use ( $mapping, $value_for, $geo ) {
 			if ( ! empty( $mapping[ $fk_key ] ) ) {
 				return $value_for( $fk_key );
@@ -495,21 +316,14 @@ class ES_Ajax {
 			wp_send_json_error( [ 'message' => 'Please enter a valid email address.' ], 422 );
 		}
 
-		// Server-side enforcement of mandatory consent checkboxes (defends against
-		// bypassed browser-side `required` validation).
 		$missing_consent = $this->find_missing_consent_fields( (string) $form->html, $fields );
 		if ( $missing_consent ) {
 			ES_Logger::error( 'es_submit aborted: missing consent fields', [ 'missing' => $missing_consent, 'fields_received' => array_keys( $fields ) ] );
 			wp_send_json_error( [ 'message' => __( 'Please confirm the consent checkbox before submitting.', 'emblem-studio' ) ], 422 );
 		}
 
-		// First / last name: mapping wins, then explicit form fields, then split "name".
 		$first_name = $value_for( 'col:f_name', ES_Field_Matcher::FIRST_NAME_VARIANTS );
 		$last_name  = $value_for( 'col:l_name', ES_Field_Matcher::LAST_NAME_VARIANTS );
-		// Only split the full-name field when NEITHER half resolved on its own —
-		// otherwise a form with (say) an explicit last-name field but no
-		// first-name field would have the split overwrite the already-correct
-		// last name with the tail of the split full name.
 		if ( ! $first_name && ! $last_name && empty( $mapping['col:f_name'] ) && ! empty( $fields['name'] ) && is_scalar( $fields['name'] ) ) {
 			$full       = self::normalize_name( trim( (string) $fields['name'] ) );
 			$parts      = preg_split( '/\s+/', $full, 2 );
@@ -521,14 +335,10 @@ class ES_Ajax {
 		}
 
 		$phone       = $value_for( 'col:contact_no', ES_Field_Matcher::PHONE_NAME_VARIANTS, 'tel' );
-		// FK-routed columns: only set if mapping says so, OR geo provides it.
 		$fk_country  = $geo_value_for( 'col:country',  'country' );
 		$fk_state    = $geo_value_for( 'col:state',    'state' );
 		$fk_timezone = $geo_value_for( 'col:timezone', 'timezone' );
 
-		// Slug-based custom fields. Geo provides city + postcode by default;
-		// explicit `slug:` mapping wins. Other slug fields (gender, company, dob,
-		// address-1, address-2) require explicit mapping — no name-convention.
 		$slug_values = [
 			'city'     => $geo['city']     ?? '',
 			'postcode' => $geo['postcode'] ?? '',
@@ -543,7 +353,6 @@ class ES_Ajax {
 			return $v !== '' && $v !== [];
 		} );
 
-		// Tags: form's configured tags + any esf_tag overrides from the HTML.
 		$form_tags = [];
 		if ( ! empty( $form->funnelkit_tags ) ) {
 			$decoded   = json_decode( $form->funnelkit_tags, true );
@@ -556,7 +365,6 @@ class ES_Ajax {
 		}
 		$tags = array_values( array_unique( array_merge( $form_tags, $override_tags ) ) );
 
-		// Lists: form's configured lists + any esf_list override.
 		$form_lists = [];
 		if ( ! empty( $form->funnelkit_lists ) ) {
 			$decoded    = json_decode( $form->funnelkit_lists, true );
@@ -570,20 +378,11 @@ class ES_Ajax {
 			$lists = [ (int) $_POST['esf_list'] ];
 		}
 
-		// Custom fields = anything not in the reserved set. Reserved keys are
-		// either routed to dedicated paths above or are infrastructure (nonces,
-		// form_id, etc.). FK-routed names (country, state, etc.) are no longer
-		// auto-routed — they're only handled if explicitly mapped, so we don't
-		// reserve them here; they pass through as plain custom data when not mapped.
 		$reserved      = [
 			'email', 'first_name', 'last_name', 'name', 'phone',
 			'form_id', 'esf_hp', 'es_ts', 'es_el', 'esf_tag', 'esf_list',
 			'action', '_wpnonce', '_wp_http_referer',
 		];
-		// Only keep fields that actually exist on the form (SER-872). Without this
-		// the public endpoint stored any posted field. `email`/`first_name`/etc are
-		// handled on their own paths above and stay reserved; everything else must
-		// be a real form field to be kept.
 		$allowed       = $this->allowed_field_names( $form );
 		$custom_fields = [];
 		foreach ( $fields as $k => $v ) {
@@ -591,7 +390,7 @@ class ES_Ajax {
 				continue;
 			}
 			if ( ! isset( $allowed[ $k ] ) ) {
-				continue; // not a field on this form — drop it silently
+				continue;
 			}
 			$custom_fields[ sanitize_key( $k ) ] = self::sanitize_field_value( $v );
 		}
@@ -603,21 +402,13 @@ class ES_Ajax {
 			'extra_fields' => wp_json_encode( array_merge(
 				[ 'first_name' => $first_name, 'last_name' => $last_name, 'phone' => $phone, 'tags' => $tags ],
 				$custom_fields,
-				// Local-only marker (not in the CRM payload) so a preview test
-				// lead is identifiable in the lead record.
 				$is_preview ? [ '_es_test' => 1 ] : []
 			) ),
-			// Normally NULL. Set only when the trap WAS filled and the speed
-			// check rescued the submission — worth recording, because "still
-			// being cross-filled, rescue working" and "trap gone quiet" look
-			// identical without it.
 			'bot_signals'  => $bot_signals !== null ? wp_json_encode( $bot_signals ) : null,
 			'created_at'   => current_time( 'mysql' ),
 		] );
 		$lead_id = (int) $wpdb->insert_id;
 
-		// Immutable consent evidence (SER-853) — a no-op when this form has no
-		// consent checkbox at all. See docs/CONSENT-AND-LIABILITY.md (SaaS repo).
 		ES_Consent_Log::record(
 			$form_id,
 			(string) $form->html,
@@ -627,9 +418,6 @@ class ES_Ajax {
 			$this->ab_slot( $form_id ) ?: null
 		);
 
-		// An active FunnelKit Form Feed is authoritative. Otherwise the direct
-		// destination toggle decides whether the corrected direct upsert runs.
-		// Webhooks remain independent in either case.
 		$fk_enabled = ! isset( $form->funnelkit_enabled ) || ! empty( $form->funnelkit_enabled );
 		$feed_fields = $fields;
 		$feed_fields['email'] = $email;
@@ -663,33 +451,20 @@ class ES_Ajax {
 			], [ 'id' => $lead_id ] );
 		}
 
-		// Always record the conversion locally even if FK fails (lead is saved).
 		$post_id      = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
 		$shell        = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
 		$valid_shells = ES_Form_Repo::valid_types();
 		if ( ! in_array( $shell, $valid_shells, true ) ) {
 			$shell = 'inline';
 		}
-		// Skip for preview test submits — the lead is saved and pushed to the
-		// CRM above, but it must not register as a conversion (or move an A/B
-		// winner) in reports.
 		if ( ! $is_preview ) {
 			$recorded = ES_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ), $lead_id );
 
-			// A/B auto-winner eval. Conversions only ever increase, so this
-			// is the right (and only necessary) trigger point. Per-form
-			// once-per-minute throttle inside auto_winner_check prevents a
-			// burst of submits from thrashing. (A/B is account-gated; absent in Lite.)
 			if ( $recorded && class_exists( 'ES_AB' ) ) {
 				ES_AB::auto_winner_check( $form_id );
 			}
 		}
 
-		// Per-form webhook fan-out — fires after FK so the payload can
-		// include the funnelkit_contact_id when FK succeeded. Non-blocking
-		// transport so webhook latency doesn't delay the visitor's
-		// success state. Refresh the $form object to pick up the
-		// webhooks column (find() returns a fresh row).
 		$form_for_hooks = class_exists( 'ES_Webhooks' ) ? ES_Form_Repo::find( $form_id ) : null;
 		if ( $form_for_hooks ) {
 			$webhook_payload = ES_Webhooks::build_payload(
@@ -706,37 +481,16 @@ class ES_Ajax {
 
 		wp_send_json_success( [
 			'mode'             => $form->success_mode,
-			// The plain message is retired (SER-1419): it replaced the card with an
-			// unstyled <div>, so a signup ended as black text in the corner of the
-			// page. The asset's own thank-you state is the designed answer.
 			'success_message'  => null,
 			'redirect_url'     => $form->success_mode === 'redirect' ? $form->success_redirect_url : null,
 			'funnelkit_pushed' => (bool) $push['ok'],
 		] );
 	}
 
-	/**
-	 * A/B slot ('A'/'B') the visitor is bucketed into for this form, or '' when
-	 * no test runs. A/B is account-gated, so the Lite build (no ES_AB) has no
-	 * variant — always ''.
-	 *
-	 * The cast is load-bearing: ES_AB::slot_from_cookie() is `?string` and
-	 * returns NULL for the common case — a visitor with no esf_ab_<id> cookie,
-	 * which is EVERY visitor to a form that has no running two-variant test.
-	 * Returning that null straight out of a `: string` method is a TypeError,
-	 * and this method is called unconditionally by page_view, view, click and
-	 * submit, so the fatal took the whole beacon (and the submit response) with
-	 * it. Covered by tests/unit/AjaxAbSlotTest.php.
-	 */
 	private function ab_slot( int $form_id ): string {
 		return class_exists( 'ES_AB' ) ? (string) ES_AB::slot_from_cookie( $form_id ) : '';
 	}
 
-	/**
-	 * Admin-only AJAX endpoint — synchronously POST a sample payload to
-	 * a webhook URL so the user can verify their endpoint works before
-	 * trusting it with real submissions. Returns status + body excerpt.
-	 */
 	public function test_webhook(): void {
 		if ( ! class_exists( 'ES_Webhooks' ) ) {
 			wp_send_json_error( [ 'message' => 'Webhooks are not available on this plan.' ], 403 );
@@ -774,27 +528,9 @@ class ES_Ajax {
 		wp_send_json_success( $result );
 	}
 
-	/**
-	 * The set of field names a form legitimately offers, as a lookup keyed by
-	 * name. Read from the form's own authored HTML (and, in the Full edition, its
-	 * live A/B variant HTML), via ES_Form_Parser.
-	 *
-	 * The submit endpoint is public and used to store EVERY posted field, so
-	 * anyone could POST arbitrary fields — no browser needed — and have them saved
-	 * onto the customer's lead and pushed to their CRM. A visitor can only fill a
-	 * field that exists in the rendered HTML, so the markup is a complete allowlist
-	 * by construction. Matches the SaaS App\Support\FormFields (SER-872).
-	 *
-	 * `interests[]` submits as `interests`, so the trailing `[]` is stripped to
-	 * match how the value actually arrives.
-	 *
-	 * @return array<string, true>
-	 */
 	private function allowed_field_names( object $form ): array {
 		$html = (string) ( $form->html ?? '' );
 
-		// A/B variants can add a field the parent form doesn't have. class_exists
-		// because ES_Ab is stripped from the Lite build (which has no A/B).
 		if ( class_exists( 'ES_AB' ) && ! empty( $form->id ) ) {
 			foreach ( ES_AB::live_variants_for_form( (int) $form->id ) as $variant ) {
 				$html .= "\n" . (string) ( $variant->html ?? '' );
@@ -812,20 +548,6 @@ class ES_Ajax {
 		return $allowed;
 	}
 
-	/**
-	 * Parse the form's HTML and find the names of REQUIRED checkboxes that this
-	 * submission did not tick.
-	 *
-	 * `required` is the whole test. A consent marked required is covered, and so
-	 * is a required box that is not a consent ("I have read the instructions").
-	 *
-	 * An OPTIONAL consent is not, and used to be: any input carrying
-	 * data-esf-consent blocked the submission when it was left unticked. That
-	 * refused the lead of anyone who declined "email me about the beta", which is
-	 * a real answer to a real question, not a failure to fill the form in.
-	 *
-	 * TWIN of the SaaS App\Services\ConsentLog::missingRequiredCheckboxes.
-	 */
 	private function find_missing_consent_fields( string $html, array $fields ): array {
 		if ( trim( $html ) === '' ) {
 			return [];
@@ -857,13 +579,6 @@ class ES_Ajax {
 		return $missing;
 	}
 
-	/**
-	 * The posted value for a field name as the form's HTML spells it. PHP strips
-	 * one trailing `[]` from a posted key, so `agree[]` arrives as `agree`.
-	 *
-	 * @param  array<string, mixed> $fields
-	 * @return mixed null when the field was not posted at all
-	 */
 	public static function posted_value( array $fields, string $name ) {
 		if ( array_key_exists( $name, $fields ) ) {
 			return $fields[ $name ];
@@ -877,13 +592,6 @@ class ES_Ajax {
 		return null;
 	}
 
-	/**
-	 * Whether a posted checkbox value means "ticked". A hand-built client may send
-	 * `off` or `false` for unticked. A checkbox group posts a list, and it counts
-	 * as ticked when any one of its answers does.
-	 *
-	 * @param mixed $value
-	 */
 	public static function checkbox_value_is_ticked( $value ): bool {
 		if ( is_array( $value ) ) {
 			foreach ( $value as $item ) {
@@ -898,32 +606,10 @@ class ES_Ajax {
 		}
 		return ! in_array( strtolower( (string) $value ), [ 'off', 'false' ], true );
 	}
-	/**
-	 * Lowercase + trim the email. Emails are technically case-sensitive in the
-	 * local part per RFC, but every real-world provider treats them as
-	 * case-insensitive. Normalising prevents duplicate contacts in FunnelKit
-	 * for the same person ("Alex@x.com" vs "alex@x.com").
-	 */
 	public static function normalize_email( $raw ): string {
 		return sanitize_email( strtolower( trim( (string) $raw ) ) );
 	}
 
-	/**
-	 * Normalise a name's capitalisation. Always lowercases then title-cases,
-	 * splitting on spaces, hyphens, and apostrophes. Unicode-safe.
-	 *
-	 *  - "alex"      → "Alex"
-	 *  - "ALEX"      → "Alex"
-	 *  - "AleX"      → "Alex"
-	 *  - "uranGUtan" → "Urangutan"
-	 *  - "anne-marie" → "Anne-Marie"
-	 *  - "o'brien"   → "O'Brien"
-	 *  - "von trapp" → "Von Trapp"
-	 *
-	 * Trade-off: intentionally-cased names like "McDonald" or "DiCaprio" become
-	 * "Mcdonald" / "Dicaprio". Accepted because input typos are the much more
-	 * common case on opt-in forms; admins can correct in FunnelKit when needed.
-	 */
 	public static function normalize_name( $raw ): string {
 		$s = trim( (string) $raw );
 		if ( $s === '' ) {
@@ -937,36 +623,10 @@ class ES_Ajax {
 		);
 	}
 
-	/** Most answers one multi-value field may keep (a checkbox group, a select[multiple]). */
 	public const MAX_FIELD_VALUES = 100;
 
-	/** Longest single answer kept, in characters. */
 	public const MAX_FIELD_LENGTH = 5000;
 
-	/**
-	 * Clean one submitted answer for storage and delivery.
-	 *
-	 * A checkbox group posts a LIST of answers (`interests[]`, or several ticked
-	 * boxes sharing a plain name, which frontend.js now sends as `name[]`). The
-	 * submit path used to keep scalars only, so three ticked boxes were saved on
-	 * the lead as an empty string and never reached the CSV, a webhook or
-	 * FunnelKit (SER-1370).
-	 *
-	 * A list stays a list: each scalar item is cleaned and capped, anything nested
-	 * is dropped, and at most MAX_FIELD_VALUES items survive.
-	 *
-	 * TWIN of the SaaS SubmissionController::sanitizeExtraValue, same caps.
-	 * Also used by the SaaS connector for values the SaaS forwards to FunnelKit.
-	 *
-	 * Line breaks survive. A <textarea> answer is written in paragraphs and was
-	 * arriving on the lead as one run-on line, because sanitize_text_field()
-	 * collapses every newline into a space by design (SER-1384). clean_answer()
-	 * uses sanitize_textarea_field() instead, which strips exactly the same tags
-	 * and octets but keeps the newlines.
-	 *
-	 * @param  mixed $value
-	 * @return string|array<int, string>
-	 */
 	public static function sanitize_field_value( $value ) {
 		if ( ! is_array( $value ) ) {
 			return is_scalar( $value ) ? self::clean_answer( (string) $value ) : '';
@@ -985,19 +645,6 @@ class ES_Ajax {
 		return $out;
 	}
 
-	/**
-	 * One answer, cleaned and capped, with its line breaks intact.
-	 *
-	 * sanitize_textarea_field() is sanitize_text_field()'s twin: same tag
-	 * stripping, same invalid-UTF-8 and percent-encoding removal, same trim. The
-	 * only difference is that it does not collapse newlines into spaces, which is
-	 * what flattened every <textarea> answer before SER-1384.
-	 *
-	 * Windows browsers post CRLF and the rest post LF, so the breaks are
-	 * normalised first. Otherwise the same three paragraphs are stored as
-	 * different bytes depending on who typed them, and a CSV or a FunnelKit field
-	 * shows a stray carriage return.
-	 */
 	private static function clean_answer( string $value, int $max = self::MAX_FIELD_LENGTH ): string {
 		$value = str_replace( [ "\r\n", "\r" ], "\n", $value );
 
@@ -1015,10 +662,6 @@ class ES_Ajax {
 		return $out;
 	}
 
-	/**
-	 * Sliding-window counter keyed by (ip, scope). Returns true if the limit is hit.
-	 * Counter is stored as a WP transient; auto-expires when the window closes.
-	 */
 	private function bucket_exceeded( string $scope, int $window, int $max ): bool {
 		$ip   = $this->client_ip();
 		$key  = 'esf_rl_' . md5( $scope . '|' . $ip );
@@ -1030,26 +673,8 @@ class ES_Ajax {
 		return false;
 	}
 
-	/**
-	 * Best-effort client IP. Honors common proxy headers but only if the
-	 * `EMBLEM_STUDIO_TRUST_PROXY` constant is defined — opt-in to prevent
-	 * spoofing on bare deployments where any request can fake the header.
-	 */
-	/**
-	 * Save a honeypot-tripped submission as a lead with is_bot=1 so it
-	 * shows up in the Bots tab. Captures email, name, every text-ish
-	 * field (so we can inspect what attackers fill in) and the IP. Best
-	 * effort — never throws, never blocks the response.
-	 */
-	/**
-	 * @param array<string, mixed>|null $bot_signals What the bot check saw, for
-	 *                                               the Bots tab to explain itself.
-	 */
 	private function save_bot_lead( int $form_id, ?array $bot_signals = null ): void {
 		global $wpdb;
-		// Reuse the same field collector the human path uses so we get the
-		// same raw shape; strip silent geo keys (they don't belong with
-		// captured user-visible inputs).
 		$fields = $this->collect_fields();
 		foreach ( $fields as $k => $v ) {
 			if ( is_string( $k ) && ( strpos( $k, '__es_geo_' ) === 0 || $k === 'esf_hp' || $k === 'action' || $k === 'form_id' || $k === 'post_id' || $k === 'type' ) ) {
@@ -1057,10 +682,6 @@ class ES_Ajax {
 			}
 		}
 
-		// Pull email + name with name-convention fallbacks. Mapping-aware
-		// extraction would duplicate a lot of the human-submit logic, and
-		// for bot leads we just want a best-effort label — name-convention
-		// is enough.
 		$email = isset( $fields['email'] ) && is_scalar( $fields['email'] )
 			? self::normalize_email( (string) $fields['email'] )
 			: '';
@@ -1076,13 +697,6 @@ class ES_Ajax {
 			$last  = sanitize_text_field( $parts[1] ?? '' );
 		}
 
-		// Captured text-ish inputs — but only fields that exist on the form, same
-		// rule as a real submission (SER-872). We don't warehouse arbitrary
-		// attacker-controlled fields even on a bot row: a bot could POST hundreds
-		// of junk fields to bloat the row, and it's data we were never asked to
-		// hold. The honeypot catch itself is the signal, not the payload. Matches
-		// the SaaS, which applies the same allowlist to bot leads. Length still
-		// capped per value.
 		$form     = ES_Form_Repo::find( $form_id );
 		$allowed  = $form ? $this->allowed_field_names( $form ) : [];
 		$captured = [];
@@ -1114,27 +728,14 @@ class ES_Ajax {
 		] );
 	}
 
-	/**
-	 * Record a filtered bot hit with attribution detail: which bot (from the
-	 * UA), which page (post_id), the raw UA, and an anonymized IP. Shared by
-	 * the click and view/page_view bot-filter paths so both feed the
-	 * breakdown report identically.
-	 */
 	private function record_bot_hit( int $form_id, string $shell, string $label_override = '' ): void {
 		$ua      = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
-		// label_override carries the cloud provider for datacenter-detected hits
-		// (whose UA is a browser and so wouldn't match the catalog).
 		$label   = $label_override !== '' ? $label_override : ES_Event_Recorder::matched_bot_label( $ua );
 		$ip      = ES_Event_Recorder::anonymize_ip( $this->client_ip() );
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
 		ES_Event_Recorder::record_bot( $form_id, $shell, $post_id, $label, $ua, $ip );
 	}
 
-	/**
-	 * Datacenter fallback: a "browser" whose real IP is a known cloud VM is
-	 * almost certainly a crawler. Records it as a bot_filtered hit labelled by
-	 * provider. Returns true if it handled (and the caller should stop).
-	 */
 	private function maybe_record_datacenter( int $form_id, string $shell ): bool {
 		if ( ! ES_Event_Recorder::filter_bots_enabled() || ! ES_Event_Recorder::detect_datacenter_enabled() ) {
 			return false;

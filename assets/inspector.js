@@ -1,31 +1,9 @@
-/* =====================================================================
- * Emblem Studio — Inspector (semi-builder) takeover.
- *
- * A full-screen workspace opened from the Design tab. It does NOT save
- * to the database: on open it reads the HTML + CSS out of the page's
- * CodeMirror editors; on close it writes any changes back into those
- * same editors, and the normal Save button commits them.
- *
- * Build order (see plan): this file currently implements STEP 1 only —
- * the shell: open/close, top bar, three-column frame, and the middle
- * live form (reusing the existing preview render). The tree (left) and
- * relevant-CSS (right) panels are placeholders for the next steps.
- *
- * Vanilla JS, no jQuery. Loaded in the footer on the form-edit screen.
- * ===================================================================== */
 (function () {
 	'use strict';
 
-	// v1 scope: single-version, saved, inline forms. The launch button is
-	// only rendered server-side when those hold, but we re-check the
-	// editor ids here so the module is inert if anything is missing.
 	var HTML_ID = 'es-html';
 	var CSS_ID = 'es-css';
 
-	// ── Editor bridge ─────────────────────────────────────────────
-	// Read/write the page's CodeMirror editors. WP's wp.codeEditor mounts
-	// CodeMirror either on the textarea itself (el.CodeMirror) or as the
-	// textarea's next sibling — handle both, fall back to the raw value.
 	function cmFor(id) {
 		var el = document.getElementById(id);
 		if (!el) return null;
@@ -52,72 +30,61 @@
 		if (!el) return;
 		if (el.value === value) return;
 		el.value = value;
-		// Setting .value fires nothing, and the Design tab keeps the code in these
-		// hidden fields, so the page's unsaved-changes tracker (admin.js) never
-		// heard about an edit kept with Done. Leaving then lost it with no warning
-		// (SER-1421, item 21 of Catalina's test pass). A bubbling input event is
-		// exactly what a person typing would have sent.
 		el.dispatchEvent(new Event('input', { bubbles: true }));
 	}
 
-	// ── Module state ──────────────────────────────────────────────
 	var state = {
 		open: false,
 		overlay: null,
-		iframe: null,      // the middle live-form frame
-		html: '',          // working copy, seeded from the editors on open
-		css: '',           // working copy
-		rules: [],         // parsed stylesheet rules (source order, with offsets)
-		dirty: false,      // becomes true once a later step edits the copy
+		iframe: null,
+		html: '',
+		css: '',
+		rules: [],
+		dirty: false,
 		previewUrl: '',
-		selection: null,   // last element selected in the frame { uid, label, ... }
-		lastMatches: [],   // matches for the current selection
-		pinned: [],        // user-added selectors kept visible even when not matching
-		focusSelector: null, // selector whose editor to focus after next render
-		confirming: false, // true while a confirmation is showing
-		confirmAction: null, // callback to run if the confirmation is accepted
-		cards: [],         // rendered rule cards (for the cascade/cross pass)
-		editSelector: null, // selector of the focused rule editor (sticky highlight)
-		lastCssScrollUid: null, // selection the All view last auto-scrolled to (item 9)
-		hoverSelector: null, // selector being hovered (temporary highlight)
-		htmlEditing: false, // true while the Edit-HTML panel is open
-		htmlCm: null,      // the HTML editor instance
-		pushedHistory: false, // whether we pushed a history entry on open
-		suppressPop: false, // guard so our own history.back() doesn't re-close
-		stageFluid: true,  // canvas is full-bleed (vs a framed fixed width)
-		currentShell: null, // which shell the canvas is previewing
-		cssView: 'relevant', // 'relevant' (matching rules only) | 'all' (whole sheet)
-		cssObserver: null, // IntersectionObserver lazy-mounting All-view editors
-		allCm: null,       // the single All-view editor
-		allMarks: [],      // dim + strike-through marks in the All-view editor
-		allLineClasses: [], // line numbers given the "applies" background
-		allRuler: null,    // overview-ruler element for the All-view editor
-		rulerScale: 0.95,  // ruler-tick transform: × the position (fixes depth-drift)
-		rulerOffset: -17,  // ruler-tick transform: vertical offset (px up)
-		htmlView: 'html',  // left panel: 'html' (formatted source) | 'layers' (tree)
-		treeRoots: null,   // cached layer forest from the frame
-		htmlLeftCm: null,  // the editable formatted-HTML editor
-		htmlRanges: {},    // uid -> {start,end} in the formatted HTML
-		htmlMarks: [],     // dim/highlight marks in the HTML editor
-		htmlErrBar: null,  // inline validation strip under the HTML editor
-		htmlErrMark: null, // red-fade mark on the offending markup
-		htmlCommitTimer: null, // debounce for re-mounting the asset after edits
-		checksTimer: null, // debounce for the live Checks list (SER-1358)
-		checksSeq: 0,      // drops a reply that a newer check has overtaken
-		checksKey: null,   // the html+css the Checks list currently reflects
-		checksOpen: false  // whether the Checks list is expanded
+		selection: null,
+		lastMatches: [],
+		pinned: [],
+		focusSelector: null,
+		confirming: false,
+		confirmAction: null,
+		cards: [],
+		editSelector: null,
+		lastCssScrollUid: null,
+		hoverSelector: null,
+		htmlEditing: false,
+		htmlCm: null,
+		pushedHistory: false,
+		suppressPop: false,
+		stageFluid: true,
+		currentShell: null,
+		cssView: 'relevant',
+		cssObserver: null,
+		allCm: null,
+		allMarks: [],
+		allLineClasses: [],
+		allRuler: null,
+		rulerScale: 0.95,
+		rulerOffset: -17,
+		htmlView: 'html',
+		treeRoots: null,
+		htmlLeftCm: null,
+		htmlRanges: {},
+		htmlMarks: [],
+		htmlErrBar: null,
+		htmlErrMark: null,
+		htmlCommitTimer: null,
+		checksTimer: null,
+		checksSeq: 0,
+		checksKey: null,
+		checksOpen: false
 	};
 
-	// ── Live-form render (middle column) ──────────────────────────
-	// Reuse the existing preview endpoint: POST the working HTML/CSS into
-	// a named iframe, exactly as the inline live-preview does. Later steps
-	// will swap this for an instrumented render that supports hover/select.
 	function renderStage() {
 		if (!state.previewUrl || !state.overlay) return;
 		var iframe = state.overlay.querySelector('.es-inspector-frame');
 		if (!iframe) return;
 
-		// Spinner until the frame reports ready (re-shown on every re-render).
 		var loader = state.overlay.querySelector('.es-inspector-loader');
 		if (loader) loader.hidden = false;
 
@@ -142,7 +109,7 @@
 		add('preview_css', state.css);
 		add('preview_success_mode', smode);
 		add('preview_success_message', smsg);
-		add('inspector', '1'); // request the chrome-less instrumented frame
+		add('inspector', '1');
 		if (state.currentShell) add('inspector_shell', state.currentShell);
 		document.body.appendChild(form);
 		form.submit();
@@ -151,7 +118,6 @@
 		}, 200);
 	}
 
-	// ── Build the takeover DOM ────────────────────────────────────
 	function buildOverlay() {
 		var nameEl = document.getElementById('es-name');
 		var formName = (nameEl && nameEl.value.trim()) || 'Untitled form';
@@ -171,7 +137,6 @@
 						'<span class="es-inspector-eyebrow">Editor</span>' +
 						'<span class="es-inspector-title"></span>' +
 					'</div>' +
-					// Checks list (SER-1358): a compact summary that expands.
 					'<div class="es-inspector-checks" hidden>' +
 						'<button type="button" class="es-inspector-checks-toggle" aria-expanded="false"></button>' +
 						'<div class="es-inspector-checks-panel" hidden></div>' +
@@ -240,10 +205,8 @@
 				'</div>' +
 			'</div>';
 
-		// Text content set via property (avoids HTML-escaping the form name).
 		overlay.querySelector('.es-inspector-title').textContent = formName;
 
-		// Done = apply edits back to the editors; Cancel = discard.
 		overlay.querySelector('.es-inspector-done').addEventListener('click', applyAndClose);
 		overlay.querySelector('.es-inspector-cancel').addEventListener('click', requestCancel);
 		overlay.querySelector('.es-inspector-replay').addEventListener('click', function () { postToFrame('es-inspector:replay'); });
@@ -256,10 +219,8 @@
 
 		overlay.querySelector('.es-inspector-checks-toggle').addEventListener('click', function () { setChecksOpen(!state.checksOpen); });
 
-		// Full-screen toggle — hides BOTH side panels at once.
 		overlay.querySelector('.es-inspector-fullscreen').addEventListener('click', toggleFullscreen);
 
-		// Width toolbar: preset buttons + slider.
 		var widthBtns = overlay.querySelectorAll('.es-inspector-width button');
 		for (var w = 0; w < widthBtns.length; w++) {
 			(function (btn) {
@@ -269,7 +230,6 @@
 		var slider = overlay.querySelector('.es-inspector-width-slider');
 		if (slider) slider.addEventListener('input', function () { setStageWidthFromSlider(slider.value); });
 
-		// CSS view toggle (Relevant ⇄ All).
 		var viewBtns = overlay.querySelectorAll('.es-inspector-cssview-btn');
 		for (var v = 0; v < viewBtns.length; v++) {
 			(function (btn) {
@@ -277,7 +237,6 @@
 			})(viewBtns[v]);
 		}
 
-		// Left view toggle (HTML ⇄ Layers).
 		var leftBtns = overlay.querySelectorAll('.es-inspector-leftview-btn');
 		for (var lv = 0; lv < leftBtns.length; lv++) {
 			(function (btn) {
@@ -288,13 +247,11 @@
 		return overlay;
 	}
 
-	// ── Full screen (both side panels) ────────────────────────────
 	function toggleFullscreen() {
 		var body = state.overlay && state.overlay.querySelector('.es-inspector-body');
 		if (!body) return;
 		var on = body.classList.toggle('is-fullscreen');
 		setFullscreenButton(on);
-		// Exiting re-reveals the CSS editors — refresh their layout.
 		if (!on) setTimeout(refreshAllRuleEditors, 0);
 	}
 	function setFullscreenButton(on) {
@@ -310,10 +267,6 @@
 		}
 	}
 
-	// ── Canvas width toolbar ──────────────────────────────────────
-	// Two modes: a fixed preset frames the canvas as a centered device;
-	// Fluid is full-bleed. Switching to Fluid keeps the CURRENT width (it
-	// doesn't jump) — the slider stays the source of truth.
 	function widthEls() {
 		var group = state.overlay && state.overlay.querySelector('.es-inspector-width');
 		return {
@@ -336,7 +289,6 @@
 		if (!state.overlay) return;
 		var els = widthEls();
 		if (w === 'fluid') {
-			// Keep whatever width is showing; don't jump to full width.
 			state.stageFluid = true;
 			if (els.label) els.label.textContent = 'Fluid';
 			setActiveWidthBtn('fluid');
@@ -349,7 +301,6 @@
 			setActiveWidthBtn(px);
 		}
 	}
-	// Dragging the slider sets a custom width within the current mode.
 	function setStageWidthFromSlider(value) {
 		var els = widthEls();
 		var px = parseInt(value, 10) || 0;
@@ -358,9 +309,6 @@
 		setActiveWidthBtn(state.stageFluid ? 'fluid' : null);
 	}
 
-	// Lightweight HTML sanity check: balanced tags, ignoring void elements,
-	// self-closing tags, comments, and the optional-close set (li, td, p, …).
-	// Best-effort — catches the common "forgot to close a tag" mistakes.
 	function validateHtml(html) {
 		var voids = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
 		var optional = { li: 1, dt: 1, dd: 1, p: 1, option: 1, thead: 1, tbody: 1, tfoot: 1, tr: 1, td: 1, th: 1, colgroup: 1, caption: 1 };
@@ -377,7 +325,6 @@
 				var ctag = m[4].toLowerCase();
 				if (voids[ctag]) continue;
 				if (stack.length && stack[stack.length - 1].tag === ctag) { stack.pop(); continue; }
-				// Look deeper, popping optional-close tags on the way.
 				var found = -1;
 				for (var i = stack.length - 1; i >= 0; i--) { if (stack[i].tag === ctag) { found = i; break; } }
 				if (found < 0) {
@@ -399,8 +346,6 @@
 		return { ok: true, error: null };
 	}
 
-	// Cancel intent: confirm first when there are unsaved edits, otherwise
-	// just close without writing anything back.
 	function requestCancel() {
 		if (!state.dirty) { close(false); return; }
 		openConfirm({
@@ -412,7 +357,6 @@
 	}
 	function applyAndClose() { close(true); }
 
-	// Generic confirm dialog. opts: { title, text, confirmLabel, onConfirm }.
 	function openConfirm(opts) {
 		if (!state.overlay) return;
 		var c = state.overlay.querySelector('.es-inspector-confirm');
@@ -432,25 +376,15 @@
 		state.confirmAction = null;
 	}
 
-	// ── Open / close ──────────────────────────────────────────────
 	function open() {
 		if (state.open) return;
 
-		// The preview URL lives on the Design-tab preview (data-preview-url);
-		// fall back to the legacy Preview button until it's removed.
 		var urlSrc = document.querySelector('.es-design-preview[data-preview-url]') || document.querySelector('.es-preview-btn');
 		state.previewUrl = urlSrc ? urlSrc.getAttribute('data-preview-url') : '';
 		if (!state.previewUrl) {
-			// Without a preview URL we can't render the middle stage.
-			// (Should not happen on a saved form — fail quietly.)
 			return;
 		}
 
-		// Seed the working copies from the live editors. Tidy the CSS to
-		// standard indentation/spacing on open; if that changed anything,
-		// mark dirty so Done saves the cleaned-up version (Cancel keeps the
-		// original).
-		// A/B forms: the editor targets whichever variant the tabs have active.
 		var slot = (window.EmblemStudioAB && window.EmblemStudioAB.testRunning) ? window.EmblemStudioAB.activeSlot : '';
 		state.variantSlot = slot || '';
 		state.htmlId = slot ? ('es-html-' + slot) : HTML_ID;
@@ -464,13 +398,10 @@
 
 		state.overlay = buildOverlay();
 		document.body.appendChild(state.overlay);
-		// Show which A/B variant is being edited, if any.
 		if (state.variantSlot) {
 			var eyebrow = state.overlay.querySelector('.es-inspector-eyebrow');
 			if (eyebrow) eyebrow.textContent = 'Editor · Variant ' + state.variantSlot;
 		}
-		// Width + full-screen always start at their defaults (Fluid, panels
-		// shown) — they are session-only, never restored across opens.
 		setStageWidth('fluid');
 		state.iframe = state.overlay.querySelector('.es-inspector-frame');
 		document.documentElement.classList.add('es-inspector-locked');
@@ -496,8 +427,8 @@
 		state.htmlCm = null;
 		state.suppressPop = false;
 		state.currentShell = null;
-		state.cssView = 'all'; // always open on the full stylesheet (not persisted)
-		state.htmlView = 'html'; // left panel opens on the HTML source (not persisted)
+		state.cssView = 'all';
+		state.htmlView = 'html';
 		state.treeRoots = null;
 		state.htmlLeftCm = null;
 		state.htmlRanges = {};
@@ -506,25 +437,18 @@
 		state.checksOpen = false;
 		state.open = true;
 
-		// Render both side panels now (they only need the working copies, not
-		// the frame) so they open in their default views — no flash.
 		applyCssViewUI();
 		refreshCssPanel();
 		applyHtmlViewUI();
 		refreshLeftPanel();
 		renderStage();
-		runChecks(); // straight away on open, no debounce
+		runChecks();
 	}
 
-	// close(true)  → apply: write edits back to the editors (Done).
-	// close(false) → discard: leave the editors untouched (Cancel).
-	// fromHistory  → invoked by a Back navigation; don't touch history again.
 	function close(apply, fromHistory) {
 		if (!state.open) return;
 
 		if (apply && state.dirty) {
-			// Flush the live editors so the latest (possibly un-debounced) edits
-			// are captured before writing back.
 			if (state.allCm) { try { state.css = state.allCm.getValue(); } catch (e) {} }
 			if (state.htmlLeftCm) { try { state.html = state.htmlLeftCm.getValue(); } catch (e) {} }
 			writeEditor(state.htmlId || HTML_ID, state.html);
@@ -532,7 +456,7 @@
 		}
 
 		if (state.checksTimer) { clearTimeout(state.checksTimer); state.checksTimer = null; }
-		state.checksSeq++; // a reply still in flight must not touch the removed overlay
+		state.checksSeq++;
 		state.checksOpen = false;
 		teardownCssObserver();
 		destroyAllCm();
@@ -560,14 +484,9 @@
 		state.htmlCm = null;
 		state.open = false;
 
-		// Let the page (e.g. the Design-tab preview) refresh from the editors.
 		try { document.dispatchEvent(new CustomEvent('es:editor-closed', { detail: { applied: !!apply } })); } catch (e) {}
 	}
 
-	// ── URL state ─────────────────────────────────────────────────
-	// Reflect the open inspector in the URL (?es-inspect=open) and push a
-	// history entry so the browser Back button closes the takeover instead
-	// of leaving the page.
 	var INSPECT_PARAM = 'es-inspect';
 	function urlWantsInspector() {
 		try { return new URL(window.location.href).searchParams.get(INSPECT_PARAM) === 'open'; }
@@ -577,9 +496,6 @@
 		try {
 			var url = new URL(window.location.href);
 			if (url.searchParams.get(INSPECT_PARAM) === 'open') {
-				// Already present (e.g. opened from a refreshed link) — adopt
-				// it without adding another history entry. close() will strip
-				// the param via replaceState since we didn't push.
 				state.pushedHistory = false;
 				return;
 			}
@@ -591,7 +507,6 @@
 	function restoreUrlState() {
 		try {
 			if (state.pushedHistory) {
-				// Pop our pushed entry to restore the prior URL + history.
 				state.pushedHistory = false;
 				state.suppressPop = true;
 				history.back();
@@ -605,35 +520,24 @@
 		} catch (e) {}
 	}
 	function onPopState() {
-		// Our own history.back() (from restoreUrlState) — swallow once.
 		if (state.suppressPop) { state.suppressPop = false; return; }
 		if (!state.open) return;
-		// Back with edits made in here: put the overlay's history entry back, so
-		// nothing moves, and ask the same question Cancel asks. Back used to
-		// throw the edits away without a word (SER-1421). If they say Discard,
-		// close() pops the entry again through restoreUrlState().
 		if (state.dirty) {
 			state.pushedHistory = false;
 			pushUrlState();
 			requestCancel();
 			return;
 		}
-		// Nothing to lose: close. The browser has already restored the URL, so
-		// don't touch history again.
 		state.pushedHistory = false;
 		close(false, true);
 	}
 
-	// A reload or a closed tab while the overlay holds edits. The page's own
-	// tracker cannot see them until Done writes them back (SER-1421).
 	function onBeforeUnload(e) {
 		if (!state.open || !state.dirty) return;
 		e.preventDefault();
 		e.returnValue = '';
 	}
 
-	// Enable/disable the Replay button to match whether the asset actually has
-	// an entry animation — with an explanatory tooltip when it doesn't.
 	function setReplayEnabled(on) {
 		var btn = state.overlay && state.overlay.querySelector('.es-inspector-replay');
 		if (!btn) return;
@@ -641,21 +545,16 @@
 		btn.setAttribute('data-es-tip', on ? 'Replay entry animations' : 'This asset has no animation');
 	}
 
-	// ── Messages from the live-form frame ─────────────────────────
 	function onFrameMessage(e) {
-		// Only trust the takeover's own iframe.
 		if (!state.iframe || e.source !== state.iframe.contentWindow) return;
 		var d = e.data || {};
 		if (d.type === 'es-inspector:ready') {
 			var loader = state.overlay && state.overlay.querySelector('.es-inspector-loader');
-			// One frame later, so the shell entrance starts under the veil.
 			if (loader) requestAnimationFrame(function () { loader.hidden = true; });
 			state.treeRoots = d.roots;
 			setReplayEnabled(!!d.animatable);
 			renderShellSwitcher(d.shells, d.shell);
 			applyHtmlViewUI();
-			// The HTML view doesn't depend on the frame (it's rendered on open
-			// from the working copy); only Layers needs the fresh tree.
 			if (state.htmlView === 'layers') refreshLeftPanel();
 		} else if (d.type === 'es-inspector:selected') {
 			state.selection = d;
@@ -663,19 +562,17 @@
 			if (state.htmlView === 'html') highlightHtml(d.uid, true);
 			updateCssHead(d);
 			if (state.cssView === 'all') {
-				requestCss(d.uid); // cards already built; result updates the dimming
+				requestCss(d.uid);
 			} else {
 				setRulesMessage('Finding matching CSS…');
 				requestCss(d.uid);
 			}
 		} else if (d.type === 'es-inspector:animatable') {
-			// Live CSS edit may have added/removed an animation.
 			setReplayEnabled(!!d.animatable);
 		} else if (d.type === 'es-inspector:deselected') {
-			// Clicked empty space → clear the selection everywhere.
 			state.selection = null;
 			state.lastMatches = [];
-			state.lastCssScrollUid = null; // picking it again scrolls again
+			state.lastCssScrollUid = null;
 			highlightTreeRow(null);
 			if (state.htmlView === 'html') highlightHtml(null);
 			updateCssHead(null);
@@ -683,13 +580,10 @@
 			else setRulesMessage('Select an element to see the CSS that applies to it.');
 		} else if (d.type === 'es-inspector:hovered') {
 			hoverTreeRow(d.uid);
-			// In HTML view, mirror the live hover; restore the selection's
-			// highlight when the pointer leaves an element.
 			if (state.htmlView === 'html' && state.htmlLeftCm) {
 				highlightHtml(d.uid || (state.selection ? state.selection.uid : null), false);
 			}
 		} else if (d.type === 'es-inspector:match-result') {
-			// Ignore stale results from a selection the user already moved off.
 			if (state.selection && d.uid === state.selection.uid) {
 				if (state.cssView === 'all') { state.lastMatches = d.matches || []; decorateAllView(); }
 				else renderCssRules(d.matches);
@@ -697,8 +591,6 @@
 		}
 	}
 
-	// Soft-highlight the tree row matching the element hovered in the
-	// middle (distinct from the persistent selection highlight).
 	function hoverTreeRow(uid) {
 		if (!state.overlay) return;
 		var prev = state.overlay.querySelectorAll('.es-inspector-node.is-hovered');
@@ -711,8 +603,6 @@
 		}
 	}
 
-	// Scroll the tree's own container (never the page) just enough to
-	// bring a row into view. No-op when the row is already visible.
 	function ensureRowVisible(row) {
 		var scroll = state.overlay && state.overlay.querySelector('.es-inspector-col-tree .es-inspector-col-scroll');
 		if (!scroll || !row) return;
@@ -726,7 +616,6 @@
 		}
 	}
 
-	// Send a message down into the live-form frame.
 	function postToFrame(type, payload) {
 		if (!state.iframe || !state.iframe.contentWindow) return;
 		var msg = { type: type };
@@ -734,15 +623,11 @@
 		state.iframe.contentWindow.postMessage(msg, '*');
 	}
 
-	// ── Shell switcher (middle header) ────────────────────────────
-	// Tabs for only the shells this form has enabled. Switching reloads the
-	// canvas in that shell (which resets selection — a new context).
 	function renderShellSwitcher(shells, current) {
 		var box = state.overlay && state.overlay.querySelector('.es-inspector-shells');
 		if (!box) return;
 		box.textContent = '';
 		if (current) state.currentShell = current;
-		// A single shell needs no switcher.
 		if (!shells || shells.length < 2) return;
 		for (var i = 0; i < shells.length; i++) {
 			(function (sh) {
@@ -755,14 +640,13 @@
 					if (sh.key === state.currentShell) return;
 					state.currentShell = sh.key;
 					resetCanvasSelection();
-					renderStage(); // reload the canvas in the chosen shell
+					renderStage();
 				});
 				box.appendChild(btn);
 			})(shells[i]);
 		}
 	}
 
-	// Clear the selection + CSS panel (the tree is rebuilt by the next READY).
 	function resetCanvasSelection() {
 		state.selection = null;
 		state.lastCssScrollUid = null;
@@ -772,7 +656,6 @@
 		refreshCssPanel();
 	}
 
-	// ── Left panel: HTML view ⇄ Layers view ───────────────────────
 	function setHtmlView(view) {
 		view = (view === 'layers') ? 'layers' : 'html';
 		if (view === state.htmlView) return;
@@ -811,9 +694,6 @@
 		}
 	}
 
-	// Editable, auto-formatted HTML of the asset. Selecting/hovering an
-	// element (here or in the live view) highlights its markup; typing edits
-	// the working copy and re-mounts the live asset (debounced).
 	function renderHtmlView() {
 		var scroll = leftScroll();
 		if (!scroll) return;
@@ -842,7 +722,7 @@
 			return;
 		}
 		state.htmlLeftCm = cm;
-		var htmlReady = false; // ignore the editor's own init before first paint
+		var htmlReady = false;
 		cm.on('change', function (inst, ch) {
 			if (!htmlReady || (ch && ch.origin === 'setValue')) return;
 			state.html = cm.getValue();
@@ -851,14 +731,12 @@
 		});
 
 		var wrap = cm.getWrapperElement();
-		// Click a line → select that element in the live view (and tree/CSS).
 		wrap.addEventListener('mousedown', function () {
 			setTimeout(function () {
 				var uid = htmlPickUid(cm.indexFromPos(cm.getCursor()));
 				if (uid) selectByUid(uid);
 			}, 0);
 		});
-		// Hover a line → highlight that element in the live view.
 		var lastHover = null;
 		wrap.addEventListener('mousemove', function (e) {
 			var uid = htmlPickUid(cm.indexFromPos(cm.coordsChar({ left: e.clientX, top: e.clientY }, 'window')));
@@ -882,12 +760,6 @@
 		scheduleChecks();
 	}
 
-	// ── Checks list (SER-1358) ────────────────────────────────────
-	// Asks the server (es_check_asset, via window.EmblemStudioChecks in
-	// admin.js) what is wrong with the working copy, debounced while typing.
-	// It sits in the top bar so it stays visible in every view, full screen
-	// included, and only expands when asked. It warns; Done still applies.
-	// The unclosed-tag strip under the HTML editor is separate and unchanged.
 	function scheduleChecks() {
 		if (!state.open) return;
 		if (state.checksTimer) clearTimeout(state.checksTimer);
@@ -902,7 +774,6 @@
 		if (key === state.checksKey) return;
 		var mine = ++state.checksSeq;
 		checks.request(html, css, function (items) {
-			// Closed, overtaken by a newer check, or failed: leave the list as it is.
 			if (!state.open || mine !== state.checksSeq || items === null) return;
 			state.checksKey = key;
 			renderChecks(items);
@@ -938,15 +809,11 @@
 		wrap.querySelector('.es-inspector-checks-toggle').setAttribute('aria-expanded', state.checksOpen ? 'true' : 'false');
 	}
 
-	// Push edited HTML to the live asset: re-map element ranges, re-mount the
-	// frame (which re-indexes ids), and drop the now-meaningless selection.
-	// A non-blocking validation hint shows under the editor for unbalanced tags.
 	function commitHtmlEdit() {
 		state.htmlCommitTimer = null;
 		if (!state.open) return;
 		var html = state.html;
 		state.htmlRanges = parseHtmlRanges(html);
-		// Validation: inline strip + a red-fade mark on the offending markup.
 		if (state.htmlErrMark) { try { state.htmlErrMark.clear(); } catch (e) {} state.htmlErrMark = null; }
 		var v = validateHtml(html);
 		if (state.htmlErrBar) {
@@ -964,10 +831,9 @@
 		updateCssHead(null);
 		if (state.cssView === 'all') decorateAllView();
 		else setRulesMessage('Select an element to see the CSS that applies to it.');
-		renderStage(); // re-mount the live asset with the new markup
+		renderStage();
 	}
 
-	// Innermost element whose range contains a char index (deepest wins).
 	function htmlUidAtIndex(idx) {
 		var best = null, bestLen = Infinity;
 		for (var uid in state.htmlRanges) {
@@ -978,10 +844,6 @@
 		return best;
 	}
 
-	// Which element the user meant at a char index. If the cursor sits right
-	// after an element's closing tag (same line, only whitespace between), pick
-	// THAT element — clicking past a </tag> means "this child", not the parent
-	// whose content merely continues after it.
 	function htmlPickUid(idx) {
 		var cm = state.htmlLeftCm;
 		if (cm) {
@@ -1004,8 +866,6 @@
 		state.htmlMarks = [];
 	}
 
-	// Highlight only the element's own markup — its opening and closing tags —
-	// and dim everything else (including its children). scroll=true centers.
 	function highlightHtml(uid, scroll) {
 		var cm = state.htmlLeftCm;
 		if (!cm) return;
@@ -1020,9 +880,7 @@
 			dim(0, r.start);
 			dim(r.end, total);
 			if (r.closeStart != null) {
-				sel(r.start, r.openEnd); // opening tag
-				// In the body, highlight the element's own text but dim each
-				// child element (those are selectable in their own right).
+				sel(r.start, r.openEnd);
 				var kids = [];
 				for (var k in state.htmlRanges) {
 					if (state.htmlRanges.hasOwnProperty(k) && state.htmlRanges[k].parent === uid) kids.push(state.htmlRanges[k]);
@@ -1030,14 +888,14 @@
 				kids.sort(function (a, b) { return a.start - b.start; });
 				var cur = r.openEnd;
 				for (var ki = 0; ki < kids.length; ki++) {
-					sel(cur, kids[ki].start);       // direct text before this child
-					dim(kids[ki].start, kids[ki].end); // the child element
+					sel(cur, kids[ki].start);
+					dim(kids[ki].start, kids[ki].end);
 					cur = kids[ki].end;
 				}
-				sel(cur, r.closeStart);          // trailing direct text
-				sel(r.closeStart, r.end);        // closing tag
+				sel(cur, r.closeStart);
+				sel(r.closeStart, r.end);
 			} else {
-				sel(r.start, r.end);              // void / self-closing — the whole tag
+				sel(r.start, r.end);
 			}
 		});
 		if (scroll && r) {
@@ -1048,11 +906,8 @@
 				var elemH = endBottom - startTop;
 				var target;
 				if (elemH <= h - 16) {
-					// Whole element fits — show opening AND closing, centered.
 					target = startTop - Math.max(8, (h - elemH) / 2);
 				} else {
-					// Taller than the viewport — opening near the top so as much
-					// of the element (and its closing tag) as possible is visible.
 					target = startTop - h * 0.12;
 				}
 				cm.scrollTo(null, Math.max(0, target));
@@ -1060,8 +915,6 @@
 		}
 	}
 
-	// ── Layer tree (left column) ──────────────────────────────────
-	// `roots` is a forest: every top-level element the asset mounts.
 	function renderTree(roots) {
 		var scroll = state.overlay && state.overlay.querySelector('.es-inspector-col-tree .es-inspector-col-scroll');
 		if (!scroll) return;
@@ -1091,7 +944,6 @@
 
 		var hasKids = node.children && node.children.length;
 
-		// Expand/collapse toggle (only when there are children).
 		var toggle = document.createElement('span');
 		toggle.className = 'es-inspector-node-toggle';
 		if (hasKids) {
@@ -1105,13 +957,11 @@
 		}
 		row.appendChild(toggle);
 
-		// tag in accent, id/class dimmed.
 		var tagSpan = document.createElement('span');
 		tagSpan.className = 'es-inspector-node-tag';
 		tagSpan.textContent = node.tag || 'node';
 		row.appendChild(tagSpan);
 
-		// Show the id and EVERY class so each layer is easy to tell apart.
 		if (node.id) {
 			var idSpan = document.createElement('span');
 			idSpan.className = 'es-inspector-node-id';
@@ -1125,7 +975,6 @@
 			row.appendChild(clSpan);
 		}
 
-		// Selection + hover wiring (drives the middle frame).
 		row.addEventListener('click', function () { selectByUid(node.uid); });
 		row.addEventListener('mouseenter', function () { postToFrame('es-inspector:hover-uid', { uid: node.uid }); });
 		row.addEventListener('mouseleave', function () { postToFrame('es-inspector:hover-clear'); });
@@ -1146,8 +995,6 @@
 	function selectByUid(uid) {
 		if (!uid) return;
 		postToFrame('es-inspector:select-uid', { uid: uid });
-		// The frame echoes a 'selected' message back, which updates the
-		// panels + tree highlight — so we don't duplicate that here.
 	}
 
 	function highlightTreeRow(uid) {
@@ -1158,7 +1005,6 @@
 		var row = state.overlay.querySelector('.es-inspector-node[data-uid="' + uid + '"]');
 		if (row) {
 			row.classList.add('is-selected');
-			// Make sure collapsed ancestors are opened so the row is visible.
 			var li = row.parentNode;
 			while (li && li !== state.overlay) {
 				if (li.classList && li.classList.contains('is-collapsed')) {
@@ -1172,15 +1018,10 @@
 		}
 	}
 
-	// ── CSS panel (right column) ──────────────────────────────────
-	// Two views, toggled in the header and persisted:
-	//   relevant — only the rules that target the selected element;
-	//   all      — the whole stylesheet, with non-matching rules dimmed.
-
 	function setCssView(view) {
 		view = (view === 'all') ? 'all' : 'relevant';
 		if (view === state.cssView) return;
-		state.cssView = view; // session-only; resets to All on next open
+		state.cssView = view;
 		applyCssViewUI();
 		refreshCssPanel();
 	}
@@ -1192,7 +1033,6 @@
 		}
 	}
 
-	// Ensure the CSS scroll holds a persistent head (element chip) + rules box.
 	function ensureCssScaffold() {
 		var scroll = state.overlay && state.overlay.querySelector('.es-inspector-col-css .es-inspector-col-scroll');
 		if (!scroll) return null;
@@ -1240,23 +1080,21 @@
 		box.appendChild(p);
 	}
 
-	// Render the panel from scratch for the current view + selection.
 	function refreshCssPanel() {
 		if (!state.overlay) return;
 		var colCss = state.overlay.querySelector('.es-inspector-col-css');
 		if (colCss) colCss.classList.toggle('is-allview', state.cssView === 'all');
 		updateCssHead(state.selection);
 		if (state.cssView === 'all') {
-			renderAllText(); // single editor; requests matches itself if selected
+			renderAllText();
 		} else if (state.selection) {
 			setRulesMessage('Finding matching CSS…');
-			requestCss(state.selection.uid); // → renderCssRules
+			requestCss(state.selection.uid);
 		} else {
 			setRulesMessage('Select an element to see the CSS that applies to it.');
 		}
 	}
 
-	// Ask the frame which parsed style rules match the given element.
 	function requestCss(uid) {
 		var selectors = [];
 		for (var i = 0; i < state.rules.length; i++) {
@@ -1267,8 +1105,6 @@
 		postToFrame('es-inspector:match-request', { uid: uid, selectors: selectors });
 	}
 
-	// Render the matching rules as editable cards, then any user-pinned
-	// rules that don't currently match, then the "add selector" control.
 	function renderCssRules(matches) {
 		var box = cssRulesBox();
 		if (!box) return;
@@ -1289,8 +1125,6 @@
 			any = true;
 		}
 
-		// Pinned (user-added) selectors that don't match the current
-		// element — keep them visible so a just-written rule doesn't vanish.
 		for (var p = 0; p < state.pinned.length; p++) {
 			var idx = lastRuleIndexForSelector(state.pinned[p], shownIdx);
 			if (idx < 0) continue;
@@ -1308,17 +1142,11 @@
 
 		box.appendChild(renderAddSelector());
 
-		// Cross out declarations overridden by the cascade (DevTools-style).
 		try { recrossAll(); } catch (e) { if (window.console) console.warn('Inspector: cascade pass failed', e); }
 
-		// Focus a just-added rule's editor for immediate typing.
 		focusPendingRule(box);
 	}
 
-	// All-CSS view: the whole stylesheet in ONE editor — reads like a real
-	// .css file and is far lighter than a CodeMirror per rule. Non-matching
-	// rules are dimmed and overridden declarations struck through via editor
-	// decorations (not separate DOM cards).
 	function renderAllText() {
 		var box = cssRulesBox();
 		if (!box) return;
@@ -1332,11 +1160,8 @@
 		host.className = 'es-inspector-allcss';
 		box.appendChild(host);
 
-		// Fixed-height + virtualized (NOT autoHeight) — autoHeight renders
-		// every line on every keystroke, which is what made typing lag.
 		var cm = createEditor(host, state.css, { mode: 'css', lineNumbers: false, autoHeight: false });
 		if (!cm) {
-			// Plain textarea fallback (no swatches / decorations).
 			var ta = document.createElement('textarea');
 			ta.className = 'es-inspector-rule-textarea';
 			ta.spellcheck = false;
@@ -1354,20 +1179,15 @@
 		state.allCm = cm;
 		cm._esSwatches = [];
 
-		// Overview ruler: VSCode-style markers down the right edge at every
-		// rule that targets the selected element.
 		var ruler = document.createElement('div');
 		ruler.className = 'es-inspector-allcss-ruler';
 		host.appendChild(ruler);
 		state.allRuler = ruler;
 		var reSwatch = debounced(function () { addSwatches(cm); }, 200);
-		// Heavy work (parse, live-swap, decorate) is debounced; but the working
-		// copy itself must update on EVERY change, or a quick Done after the
-		// last edit would write back a stale value.
 		var onEditHeavy = debounced(function () {
 			state.rules = parseStylesheet(state.css);
 			scheduleLiveCss();
-			if (state.selection) requestCss(state.selection.uid); // re-dim/cross
+			if (state.selection) requestCss(state.selection.uid);
 			else decorateAllView();
 		}, 200);
 		cm.on('change', function () {
@@ -1379,7 +1199,7 @@
 		wireAllHover(cm);
 		setTimeout(function () { try { cm.refresh(); addSwatches(cm); decorateAllView(); } catch (e) {} }, 0);
 
-		if (state.selection) requestCss(state.selection.uid); // → decorateAllView
+		if (state.selection) requestCss(state.selection.uid);
 	}
 
 	function destroyAllCm() {
@@ -1388,17 +1208,14 @@
 		state.allRuler = null;
 	}
 
-	// Dim non-matching rules + strike overridden declarations for the
-	// selected element, as editor decorations on the single All-view editor.
 	function decorateAllView() {
 		var cm = state.allCm;
 		if (!cm) return;
-		if (!state.selection) { clearAllDecorations(); return; } // nothing to dim
+		if (!state.selection) { clearAllDecorations(); return; }
 
 		var matched = {};
 		for (var m = 0; m < state.lastMatches.length; m++) matched[state.lastMatches[m].i] = state.lastMatches[m];
 
-		// @keyframes/@font-face referenced by the matching rules also "apply".
 		var appliedAt = appliedAtBlockIndices(matched);
 
 		function bgLines(r) {
@@ -1410,7 +1227,6 @@
 			}
 		}
 
-		// Clear + re-apply every decoration in one CodeMirror operation.
 		cm.operation(function () {
 			clearAllMarksInline(cm);
 			function dimRule(r) {
@@ -1421,9 +1237,6 @@
 				if (r.type === 'style') {
 					if (matched[i]) bgLines(r); else dimRule(r);
 				} else if (r.type === 'at-block' && /@(?:-[a-z]+-)?keyframes\b/i.test(r.selector || '')) {
-					// @keyframes follow the same apply/dim as the rules that use
-					// them: highlighted when the selected element animates with
-					// them, dimmed otherwise. (@font-face/@property stay neutral.)
 					if (appliedAt[i]) bgLines(r); else dimRule(r);
 				}
 			}
@@ -1433,20 +1246,11 @@
 		scrollAllToFirstRule(matched);
 	}
 
-	// A selector whose last step is the universal `*` (`.co *`, `*`): it matches
-	// every element, so it says nothing about the one picked.
 	function isCatchAll(part) {
 		var steps = String(part || '').trim().split(/\s*[>+~]\s*|\s+/);
 		return /^\*(?::{1,2}[\w-]+(?:\([^)]*\))?)*$/.test(steps[steps.length - 1] || '');
 	}
 
-	// Centre the All view on the element's first rule for a NEW selection, as the
-	// HTML view centres on the element (item 9 of Catalina's Lite test pass).
-	// "First" skips a catch-all like `.co *`, which matches every element, sits
-	// near the top, and so would never move the view; it also skips :hover-style
-	// and @media rules, which are not how the element looks by default. With
-	// nothing else it falls back to the first match. Once per selection, so
-	// editing or re-matching never yanks the view away. Same rule as the web app.
 	function scrollAllToFirstRule(matched) {
 		var cm = state.allCm, sel = state.selection;
 		if (!cm || !sel || !matched || state.lastCssScrollUid === sel.uid) return;
@@ -1466,21 +1270,14 @@
 		} catch (e) {}
 	}
 
-	// Place a clickable marker on the right-edge ruler for each rule that
-	// targets the selected element (position = where it sits in the file).
 	function updateRuler(matched) {
 		var ruler = state.allRuler, cm = state.allCm;
 		if (!ruler) return;
 		ruler.textContent = '';
 		if (!cm || !state.selection || !matched) return;
-		// Sit the ruler just LEFT of the editor's scrollbar (don't overlap it).
 		var scroller = cm.getScrollerElement();
 		var sbw = scroller ? (scroller.offsetWidth - scroller.clientWidth) : 0;
 		ruler.style.right = (sbw > 0 ? sbw + 2 : 2) + 'px';
-		// Position each tick by the rule's REAL pixel offset over the total scroll
-		// height (not a line-number fraction, which ignores the content's top
-		// padding and drifts the ticks upward) — so each lines up with the
-		// scrollbar position you'd land on by clicking it.
 		var totalH = cm.getScrollInfo().height || 1;
 		for (var i = 0; i < state.rules.length; i++) {
 			var r = state.rules[i];
@@ -1488,15 +1285,11 @@
 			var line = cm.posFromIndex(r.start).line;
 			var tick = document.createElement('div');
 			tick.className = 'es-inspector-ruler-tick';
-			// Calibrated position: scale × the pixel fraction (the drift grows with
-			// depth, so it needs a multiplier, not just a constant) then offset px up.
 			tick.style.top = 'calc(' + (cm.heightAtLine(line, 'local') / totalH * 100 * state.rulerScale) + '% - ' + state.rulerOffset + 'px)';
 			tick.title = r.selector;
 			(function (ln) {
 				tick.addEventListener('click', function () {
 					try {
-						// Center the rule vertically rather than just nudging it
-						// into view (which lands it near an edge).
 						var top = cm.charCoords({ line: ln, ch: 0 }, 'local').top;
 						var h = cm.getScrollInfo().clientHeight;
 						cm.scrollTo(null, Math.max(0, top - h / 2));
@@ -1507,14 +1300,13 @@
 		}
 	}
 
-	// Cascade strike-through across the matching, currently-applying rules.
 	function crossAllText(cm, matched) {
 		var entries = [];
 		for (var i = 0; i < state.rules.length; i++) {
 			var r = state.rules[i];
 			if (r.type !== 'style') continue;
 			var mm = matched[i];
-			if (!mm || mm.viaState) continue;          // only resting matches
+			if (!mm || mm.viaState) continue;
 			if (r.media && !mediaActive(r.media)) continue;
 			entries.push({
 				rule: r,
@@ -1551,9 +1343,6 @@
 		if (cm) { cm.operation(function () { clearAllMarksInline(cm); }); }
 		else { state.allMarks = []; state.allLineClasses = []; }
 	}
-	// Which @keyframes (at-block) rules the matching rules reference via their
-	// `animation` / `animation-name` — so the whole keyframes block (incl. its
-	// from/to/% steps) gets the "applies" highlight too.
 	function appliedAtBlockIndices(matched) {
 		var applied = {};
 		var names = {};
@@ -1584,8 +1373,6 @@
 		state.allLineClasses = [];
 	}
 
-	// Hovering a rule in the All-view editor outlines its elements in the
-	// live view (same as hovering a card).
 	function wireAllHover(cm) {
 		var wrap = cm.getWrapperElement();
 		var last = null;
@@ -1623,8 +1410,6 @@
 
 	function cssAttrEscape(s) { return String(s).replace(/"/g, '\\"'); }
 
-	// One editable rule card: media badge + selector header + an editor
-	// for the body with inline color swatches; edits live-update the form.
 	function ruleCard(rule, opts) {
 		opts = opts || {};
 		var block = document.createElement('div');
@@ -1650,7 +1435,6 @@
 		if (opts.viaState) sel.appendChild(tagPill('state', 'Matches via a :hover / :focus / etc. state'));
 		if (opts.notMatching) sel.appendChild(tagPill('not matching', "This rule doesn't target the selected element"));
 
-		// Delete this rule.
 		var del = document.createElement('button');
 		del.type = 'button';
 		del.className = 'es-inspector-rule-del';
@@ -1675,10 +1459,6 @@
 		editorHost.className = 'es-inspector-rule-editor';
 		block.appendChild(editorHost);
 
-		// Register the card. The heavy CodeMirror editor mounts now in the
-		// Relevant view (few cards) but lazily on scroll-into-view in the All
-		// view (could be dozens of rules) — until then it's a cheap read-only
-		// <pre>, so switching to All and scrolling stays fast.
 		var card = {
 			rule: rule, block: block, editorHost: editorHost, cm: null, mounted: false,
 			viaState: !!opts.viaState, notMatching: !!opts.notMatching, part: opts.part,
@@ -1701,18 +1481,12 @@
 
 		if (!opts.lazy) mountRuleEditor(card);
 
-		// Hovering anywhere over the rule card outlines every element its
-		// selector affects in the middle (mouseenter/leave don't bubble from
-		// children, so it stays on while you move within the card).
 		block.addEventListener('mouseenter', function () { setHoverHighlight(rule.selector); });
 		block.addEventListener('mouseleave', function () { setHoverHighlight(null); });
 
 		return block;
 	}
 
-	// A rule card that can never blank the whole panel: if anything throws
-	// while building the editor, fall back to a read-only body so the rule
-	// is at least visible.
 	function safeRuleCard(rule, opts) {
 		try {
 			return ruleCard(rule, opts);
@@ -1743,7 +1517,6 @@
 		return t;
 	}
 
-	// ── Mount the editor for a card on demand (CodeMirror, else textarea) ──
 	function mountRuleEditor(card) {
 		if (card.mounted) return;
 		card.mounted = true;
@@ -1763,16 +1536,13 @@
 				refreshSwatches();
 				scheduleRecross();
 			});
-			// While editing a rule, outline what its selector affects — and
-			// keep it on (sticky) even as the mouse moves around.
 			cm.on('focus', function () { setEditHighlight(rule.selector); });
 			cm.on('blur', function () { setEditHighlight(null); });
 			setTimeout(function () { try { cm.refresh(); addSwatches(cm); } catch (e) {} }, 0);
-			scheduleRecross(); // apply cascade strike-through once mounted
+			scheduleRecross();
 			return;
 		}
 
-		// Textarea fallback (no inline swatches / crossing, still editable).
 		var ta = document.createElement('textarea');
 		ta.className = 'es-inspector-rule-textarea';
 		ta.spellcheck = false;
@@ -1784,8 +1554,6 @@
 		ta.addEventListener('input', function () { applyBodyEdit(rule, ta.value); });
 	}
 
-	// Lazily mount editors as their cards scroll into the CSS panel viewport,
-	// so the All view doesn't spin up dozens of CodeMirrors at once.
 	function setupCssObserver() {
 		teardownCssObserver();
 		if (!window.IntersectionObserver) {
@@ -1809,9 +1577,6 @@
 		if (state.cssObserver) { try { state.cssObserver.disconnect(); } catch (e) {} state.cssObserver = null; }
 	}
 
-	// Create a CodeMirror inside `host`, returning the instance or null.
-	// Prefers wp.codeEditor (the exact mechanism the page's main editors use,
-	// so it's known to work here); falls back to the raw constructor.
 	function createEditor(host, value, opts) {
 		opts = opts || {};
 		var settings = {
@@ -1822,8 +1587,6 @@
 			gutters: [],
 			tabSize: 2,
 			indentUnit: 2,
-			// Don't re-indent on Enter / typing — just copy the previous
-			// line's indentation, so new lines match the existing ones.
 			smartIndent: false,
 			electricChars: false
 		};
@@ -1855,9 +1618,6 @@
 		return null;
 	}
 
-	// Splice an edited rule body back into the working CSS and shift the
-	// offsets of every rule after it, then live-update the form. No
-	// re-parse, so the on-screen editors keep their focus/caret.
 	function applyBodyEdit(rule, newBody) {
 		var oldLen = rule.bodyEnd - rule.bodyStart;
 		if (newBody === state.css.slice(rule.bodyStart, rule.bodyEnd)) return;
@@ -1876,11 +1636,9 @@
 		scheduleLiveCss();
 	}
 
-	// Throttle (leading + trailing), so a continuous color drag updates the
-	// form live instead of only firing once the mouse is released.
 	var _liveTimer = null, _livePending = false;
 	function scheduleLiveCss() {
-		scheduleChecks(); // every CSS edit path comes through here
+		scheduleChecks();
 		if (_liveTimer) { _livePending = true; return; }
 		postToFrame('es-inspector:update-css', { css: state.css });
 		_liveTimer = setTimeout(function () {
@@ -1889,16 +1647,10 @@
 		}, 50);
 	}
 
-	// ── Inline color swatches ─────────────────────────────────────
-	// Each color literal is wrapped in a markText whose ::before is the swatch
-	// (see .es-color-mark in inspector.css), with white-space:nowrap so the
-	// swatch can never wrap onto a different visual row than its color code.
 	function addSwatches(cm) {
 		if (!window.ESInspectorColor) return;
 		var value = cm.getValue();
 		var colors = window.ESInspectorColor.detect(value);
-		// Batch every marker into a single CodeMirror operation (one reflow
-		// instead of one per swatch) — critical for the All view.
 		cm.operation(function () {
 			for (var i = 0; i < cm._esSwatches.length; i++) { try { cm._esSwatches[i].clear(); } catch (e) {} }
 			cm._esSwatches = [];
@@ -1908,10 +1660,6 @@
 				var sw = parsed
 					? 'rgba(' + Math.round(parsed.r) + ',' + Math.round(parsed.g) + ',' + Math.round(parsed.b) + ',' + parsed.a + ')'
 					: 'transparent';
-				// Hex is a single token, so glue the swatch to the whole literal.
-				// Functional colors (rgba/hsla) are several tokens — marking the
-				// whole range would repeat the ::before on each — so glue to the
-				// first char there.
 				var markEnd = color.value.charAt(0) === '#' ? color.end : color.start + 1;
 				var marker = cm.markText(cm.posFromIndex(color.start), cm.posFromIndex(markEnd), {
 					className: 'es-color-mark',
@@ -1923,8 +1671,6 @@
 		attachSwatchClicks(cm);
 	}
 
-	// One delegated mousedown per editor: a click on the ::before swatch (the
-	// ~16px at the mark's left edge) opens the picker; clicking the code edits.
 	function attachSwatchClicks(cm) {
 		if (cm._esSwatchClick) return;
 		cm._esSwatchClick = true;
@@ -1932,7 +1678,7 @@
 			var el = e.target && e.target.closest ? e.target.closest('.es-color-mark') : null;
 			if (!el) return;
 			var rect = el.getBoundingClientRect();
-			if (e.clientX - rect.left > 16) return; // clicked the code — let it edit
+			if (e.clientX - rect.left > 16) return;
 			e.preventDefault();
 			e.stopPropagation();
 			var pos = cm.coordsChar({ left: rect.left + 2, top: rect.top + rect.height / 2 }, 'window');
@@ -1959,7 +1705,6 @@
 		});
 	}
 
-	// ── Add a new selector (appended to the end of the stylesheet) ──
 	function renderAddSelector() {
 		var wrap = document.createElement('div');
 		wrap.className = 'es-inspector-add-rule';
@@ -1984,10 +1729,6 @@
 		return wrap;
 	}
 
-	// Outline-what-a-selector-affects, with two sources: the editor you're
-	// editing (sticky) and the selector you're hovering (temporary). Hover
-	// wins while it lasts, then the edited rule's highlight returns — so the
-	// outline stays put the whole time you work in a rule.
 	function applyHighlight() {
 		var sel = state.hoverSelector || state.editSelector;
 		if (sel) postToFrame('es-inspector:highlight-selector', { selector: sel });
@@ -1997,18 +1738,13 @@
 	function setEditHighlight(sel) { state.editSelector = sel || null; applyHighlight(); }
 	function clearHighlights() { state.hoverSelector = null; state.editSelector = null; applyHighlight(); }
 
-	// Delete a rule: cut its source text out, re-parse, live-update, and
-	// re-render the panel for the current selection.
 	function handleDeleteRule(rule) {
 		var start = rule.start, end = rule.end;
-		// Swallow trailing inline whitespace + one newline so we don't leave
-		// a blank gap behind.
 		while (end < state.css.length && (state.css.charAt(end) === ' ' || state.css.charAt(end) === '\t')) end++;
 		if (state.css.charAt(end) === '\r') end++;
 		if (state.css.charAt(end) === '\n') end++;
 		state.css = state.css.slice(0, start) + state.css.slice(end);
 		state.rules = parseStylesheet(state.css);
-		// Drop pinned selectors that no longer have a rule.
 		state.pinned = state.pinned.filter(function (selname) {
 			for (var i = 0; i < state.rules.length; i++) {
 				if (state.rules[i].type === 'style' && state.rules[i].selector === selname) return true;
@@ -2017,7 +1753,7 @@
 		});
 		state.dirty = true;
 		scheduleLiveCss();
-		refreshCssPanel(); // rebuild for the current view (rules changed)
+		refreshCssPanel();
 	}
 
 	function handleAddSelector(selector) {
@@ -2028,8 +1764,6 @@
 		state.dirty = true;
 		scheduleLiveCss();
 		state.focusSelector = selector;
-		// Rebuild the panel for the current view; the new rule then shows
-		// (matched/pinned in Relevant, or in place in All) and gets focused.
 		refreshCssPanel();
 	}
 
@@ -2038,7 +1772,6 @@
 		return function () { clearTimeout(t); t = setTimeout(fn, ms); };
 	}
 
-	// ── Cascade: cross out overridden declarations (DevTools-style) ──
 	var _recrossTimer = null;
 	function scheduleRecross() {
 		clearTimeout(_recrossTimer);
@@ -2048,8 +1781,6 @@
 	function recrossAll() {
 		if (!state.cards || !state.cards.length) return;
 
-		// No element selected → no cascade context (e.g. All view before a
-		// click). Clear any strike-through and stop.
 		if (!state.selection) {
 			for (var k = 0; k < state.cards.length; k++) {
 				if (state.cards[k].cm) clearCrosses(state.cards[k]);
@@ -2057,9 +1788,6 @@
 			return;
 		}
 
-		// Participating entries: currently-applicable declarations only —
-		// resting (non-state) rules that target the element, in CodeMirror
-		// editors, whose @media (if any) currently matches.
 		var entries = [];
 		for (var i = 0; i < state.cards.length; i++) {
 			var card = state.cards[i];
@@ -2074,7 +1802,6 @@
 			});
 		}
 
-		// Winner per property across all participating declarations.
 		var winners = {};
 		for (var e = 0; e < entries.length; e++) {
 			var en = entries[e];
@@ -2085,7 +1812,6 @@
 			}
 		}
 
-		// Cross every declaration that isn't its property's winner.
 		for (var e2 = 0; e2 < entries.length; e2++) {
 			var en2 = entries[e2];
 			for (var d2 = 0; d2 < en2.decls.length; d2++) {
@@ -2097,8 +1823,6 @@
 		}
 	}
 
-	// Does declaration `a` win over `b`? Importance, then specificity, then
-	// source order (later rule wins; within a rule, later declaration wins).
 	function declBeats(a, b) {
 		var ai = a.dec.important ? 1 : 0, bi = b.dec.important ? 1 : 0;
 		if (ai !== bi) return ai > bi;
@@ -2118,19 +1842,18 @@
 		return true;
 	}
 
-	// Approximate selector specificity → [ids, classes, types].
 	function specificity(selector) {
 		var a = 0, b = 0, c = 0;
 		var s = ' ' + String(selector) + ' ';
-		s = s.replace(/::[\w-]+/g, function () { c++; return ' '; });          // pseudo-elements
-		s = s.replace(/#[\w-]+/g, function () { a++; return ' '; });           // ids
-		s = s.replace(/\.[\w-]+/g, function () { b++; return ' '; });          // classes
-		s = s.replace(/\[[^\]]*\]/g, function () { b++; return ' '; });        // attributes
-		s = s.replace(/:[\w-]+(\([^)]*\))?/g, function (m) {                   // pseudo-classes
+		s = s.replace(/::[\w-]+/g, function () { c++; return ' '; });
+		s = s.replace(/#[\w-]+/g, function () { a++; return ' '; });
+		s = s.replace(/\.[\w-]+/g, function () { b++; return ' '; });
+		s = s.replace(/\[[^\]]*\]/g, function () { b++; return ' '; });
+		s = s.replace(/:[\w-]+(\([^)]*\))?/g, function (m) {
 			if (/^:where/i.test(m)) return ' ';
 			b++; return ' ';
 		});
-		s = s.replace(/[a-zA-Z][\w-]*/g, function () { c++; return ' '; });    // type selectors
+		s = s.replace(/[a-zA-Z][\w-]*/g, function () { c++; return ' '; });
 		return [a, b, c];
 	}
 	function compareSpec(x, y) {
@@ -2138,8 +1861,6 @@
 		return 0;
 	}
 
-	// Parse a declaration block into { prop, value, important, start, end }
-	// with char offsets into the text (for CodeMirror markText).
 	function parseDeclRanges(text) {
 		var out = [], depth = 0, inStr = null, start = 0;
 		function push(end) {
@@ -2190,10 +1911,6 @@
 		card.cm._esCrossMarks = [];
 	}
 
-	// Tidy a rule body for display: one declaration per row, regardless of
-	// how the source was wrapped. Splits on real (top-level) semicolons so
-	// values containing ';' inside url()/strings stay intact. Read-only,
-	// so cosmetic only.
 	function formatBody(body) {
 		var decls = splitDeclarations(String(body));
 		var out = [];
@@ -2204,9 +1921,6 @@
 		return out.join('\n');
 	}
 
-	// Split a declaration block on semicolons that are at brace/paren depth
-	// zero and outside strings/comments. Returns the declaration texts
-	// (without their trailing ';').
 	function splitDeclarations(body) {
 		var out = [], buf = '', depth = 0, inStr = null;
 		for (var i = 0; i < body.length; i++) {
@@ -2234,11 +1948,6 @@
 		return out;
 	}
 
-	// ── CSS formatter ─────────────────────────────────────────────
-	// Re-indent a stylesheet to standard form: 2-space indentation per
-	// nesting level, one declaration per line, a blank line between
-	// top-level rules. Brace/string/comment aware so values (url(http://…),
-	// content:"}", etc.) are never mangled. Idempotent.
 	function formatCss(css) {
 		var s = String(css);
 		var out = [];
@@ -2251,7 +1960,7 @@
 			var t = line.trim();
 			line = '';
 			if (!t) return;
-			if (t.charAt(0) !== '@') { // normalize "prop:value" → "prop: value"
+			if (t.charAt(0) !== '@') {
 				var ci = t.indexOf(':');
 				if (ci > 0) t = t.slice(0, ci).trim() + ': ' + t.slice(ci + 1).trim();
 			}
@@ -2301,34 +2010,15 @@
 		return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\s+$/, '') + '\n';
 	}
 
-	// ── HTML formatter + element-range mapper ─────────────────────
 	var HTML_VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
 	var HTML_RAW = { pre: 1, textarea: 1, script: 1, style: 1 };
 
-	// Inline elements whose text must NOT be broken onto its own line.
-	//
-	// Indenting <span>20% OFF</span> into
-	//     <span>
-	//       20% OFF
-	//     </span>
-	// puts whitespace inside the span. Whitespace collapses — it does not vanish
-	// — so the span renders as " 20% OFF ", one real space at each end, and its
-	// inline box is two spaces wider than its text. Anything sized to that box
-	// (a highlight drawn with an absolutely-positioned ::before, say) overshoots
-	// the words it was meant to sit behind. Hitting Format was enough to do it.
-	//
-	// So an inline element holding nothing but text is emitted on ONE line, text
-	// collapsed but not padded. Inline elements with child tags still nest —
-	// their children are usually laid out with flex, where whitespace is ignored.
 	var HTML_INLINE_TEXT = {
 		a: 1, abbr: 1, b: 1, cite: 1, code: 1, em: 1, i: 1, kbd: 1, label: 1,
 		mark: 1, q: 1, s: 1, samp: 1, small: 1, span: 1, strong: 1, sub: 1,
 		sup: 1, time: 1, u: 1, 'var': 1
 	};
 
-	// Index just past </name> for the element opening at openGt, or -1 when it
-	// nests a same-name tag or holds any child tag (then: let the normal
-	// indenting path handle it).
 	function simpleInlineClose(s, name, openGt) {
 		var lower = s.toLowerCase();
 		var close = lower.indexOf('</' + name, openGt + 1);
@@ -2352,8 +2042,6 @@
 	}
 	function htmlTagName(tag) { var m = /^<\/?\s*([a-zA-Z][\w:-]*)/.exec(tag); return m ? m[1].toLowerCase() : ''; }
 
-	// Pretty-print a markup fragment: 2-space nesting, each tag/text on its
-	// own line. <pre>/<textarea>/<script>/<style> content is left verbatim.
 	function formatHtml(html) {
 		var s = String(html);
 		var out = [];
@@ -2384,8 +2072,6 @@
 					if (close >= 0) emit('</' + name + '>');
 					i = closeGt < 0 ? n : closeGt + 1; continue;
 				}
-				// Inline element wrapping plain text stays on one line — see
-				// HTML_INLINE_TEXT for why breaking it changes what renders.
 				if (HTML_INLINE_TEXT[name] && !selfClose && !HTML_VOID[name]) {
 					var iEnd = simpleInlineClose(s, name, gt);
 					if (iEnd > 0) {
@@ -2408,8 +2094,6 @@
 		return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\s+$/, '') + '\n';
 	}
 
-	// Map each element (document order, skipping style/script — same scheme
-	// the frame uses for uids) to its [start,end] range in the markup text.
 	function parseHtmlRanges(html) {
 		var ranges = {}, stack = [], seq = 0;
 		var re = /<!--[\s\S]*?-->|<([a-zA-Z][\w:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>|<\/([a-zA-Z][\w:-]*)\s*>/g;
@@ -2426,9 +2110,6 @@
 				seq++;
 				var uid = 'u' + seq;
 				var parentUid = stack.length ? stack[stack.length - 1].uid : null;
-				// openEnd = end of the open tag; closeStart = start of the close
-				// tag (null when there's no separate close tag); parent = the
-				// enclosing element (so we can tell direct text from child tags).
 				if (HTML_VOID[tag] || m[3] === '/') ranges[uid] = { start: start, end: end, openEnd: end, closeStart: null, parent: parentUid };
 				else stack.push({ uid: uid, tag: tag, start: start, openEnd: end, parent: parentUid });
 			} else if (m[4]) {
@@ -2440,7 +2121,7 @@
 				for (var j2 = stack.length - 1; j2 >= found; j2--) {
 					var e = stack[j2];
 					if (j2 === found) ranges[e.uid] = { start: e.start, end: m.index + m[0].length, openEnd: e.openEnd, closeStart: m.index, parent: e.parent };
-					else ranges[e.uid] = { start: e.start, end: m.index, openEnd: e.openEnd, closeStart: null, parent: e.parent }; // implicitly closed
+					else ranges[e.uid] = { start: e.start, end: m.index, openEnd: e.openEnd, closeStart: null, parent: e.parent };
 				}
 				stack.length = found;
 			}
@@ -2449,12 +2130,6 @@
 		return ranges;
 	}
 
-	// ── CSS source parser ─────────────────────────────────────────
-	// Splits a stylesheet into rules with their source offsets, so later
-	// steps can edit the exact text. Brace/▸string/▸comment aware. Returns:
-	//   { type:'style',    selector, body, media, start, end, bodyStart, bodyEnd }
-	//   { type:'at-block', selector, body, media, start, end }   // @keyframes etc.
-	//   { type:'at',       text, media, start, end }             // @import; etc.
 	function parseStylesheet(css) {
 		var rules = [];
 		try {
@@ -2480,8 +2155,6 @@
 	}
 
 	function findBlockEnd(css, start, end) {
-		// `start` points just past the opening brace; returns index of the
-		// matching closing brace (or `end`).
 		var depth = 1, i = start, inStr = null;
 		while (i < end) {
 			var c = css.charAt(i);
@@ -2510,7 +2183,6 @@
 			if (i >= end) break;
 			var ruleStart = i;
 
-			// Read the prelude up to '{' or ';' at this level.
 			var j = i, inStr = null;
 			while (j < end) {
 				var c = css.charAt(j);
@@ -2533,24 +2205,19 @@
 			var prelude = css.slice(i, j).trim();
 
 			if (css.charAt(j) === ';') {
-				// Statement at-rule, e.g. @import / @charset.
 				out.push({ type: 'at', text: css.slice(ruleStart, j + 1).trim(), media: media, start: ruleStart, end: j + 1 });
 				i = j + 1;
 				continue;
 			}
 
-			// css.charAt(j) === '{'
 			var bodyStart = j + 1;
 			var bodyEnd = findBlockEnd(css, bodyStart, end);
 			var ruleEnd = Math.min(bodyEnd + 1, end);
 			var lower = prelude.toLowerCase();
 
 			if (prelude.charAt(0) === '@' && (lower.indexOf('@media') === 0 || lower.indexOf('@supports') === 0)) {
-				// Nested rules inherit this condition for display.
 				parseBlock(css, bodyStart, bodyEnd, prelude, out);
 			} else if (prelude.charAt(0) === '@') {
-				// @keyframes / @font-face / @property — not element-matchable,
-				// but still editable (body offsets kept for the All-CSS view).
 				out.push({ type: 'at-block', selector: prelude, body: css.slice(bodyStart, bodyEnd), media: media, start: ruleStart, end: ruleEnd, bodyStart: bodyStart, bodyEnd: bodyEnd });
 			} else {
 				out.push({
@@ -2566,9 +2233,6 @@
 		}
 	}
 
-	// After the tab/window was backgrounded or the laptop went idle,
-	// CodeMirror's measurement caches go stale, which makes the first scroll
-	// stutter. Re-measure the editors when we regain focus/visibility.
 	function onVisibilityRefresh() {
 		if (document.visibilityState && document.visibilityState !== 'visible') return;
 		setTimeout(function () {
@@ -2584,23 +2248,16 @@
 		if (e.key !== 'Escape') return;
 		e.preventDefault();
 		e.stopPropagation();
-		// The discard confirmation captures Escape to back itself out, before
-		// it can close the takeover.
 		if (state.confirming) { hideConfirm(); return; }
-		// An expanded Checks list folds away first, before Escape cancels.
 		if (state.checksOpen) { setChecksOpen(false); return; }
 		requestCancel();
 	}
 
-	// ── Boot ──────────────────────────────────────────────────────
 	function init() {
 		var btn = document.getElementById('es-inspector-open');
-		if (!btn) return; // Button only rendered for in-scope forms.
+		if (!btn) return;
 		if (!document.getElementById(HTML_ID) || !document.getElementById(CSS_ID)) return;
 		btn.addEventListener('click', open);
-		// Re-open automatically when the page loads with the param present
-		// (e.g. the user refreshed while the takeover was open). Deferred so
-		// the CodeMirror editors have a chance to mount first.
 		if (urlWantsInspector()) setTimeout(open, 250);
 	}
 
