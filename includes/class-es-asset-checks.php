@@ -279,6 +279,15 @@ class ES_Asset_Checks {
 			);
 		}
 
+		if ( self::has_only_reveal( $css ) ) {
+			$items[] = self::item(
+				'has_only_reveal',
+				'warning',
+				__( 'A rule uses :has() to make something appear. iPhones before iOS 15.4 and older Firefox skip that rule, so there it never shows.', 'emblem-studio' ),
+				__( 'Show it by default and hide it with :not(:has(...)) instead. Older browsers then simply always show it.', 'emblem-studio' )
+			);
+		}
+
 		foreach ( $submits as $submit ) {
 			if ( $submit->hasAttribute( 'data-es-track' ) ) {
 				$items[] = self::item(
@@ -521,6 +530,20 @@ class ES_Asset_Checks {
 		}
 
 		return $max_width;
+	}
+
+	private static function has_only_reveal( string $css ): bool {
+		if ( ! preg_match_all( '/([^{}]+)\{([^{}]*)\}/', $css, $blocks, PREG_SET_ORDER ) ) {
+			return false;
+		}
+		foreach ( $blocks as $block ) {
+			if ( preg_match( '/(?<!:not\():has\(/i', $block[1] )
+				&& preg_match( '/(?<![-\w])display\s*:\s*(?!none\b)[a-z-]+/i', $block[2] )
+				&& ! preg_match( '/visibility\s*:\s*hidden/i', $block[2] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static function has_stripped_code( DOMXPath $xpath ): bool {
