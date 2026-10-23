@@ -46,6 +46,14 @@ class ES_Locks {
 		return $h !== '' && $h !== $token;
 	}
 
+	public static function blocks_save( int $form_id, int $user_id, string $token ): bool {
+		$row = self::row( $form_id );
+		if ( ! self::fresh( $row ) ) {
+			return false;
+		}
+		return (string) $row->locked_token !== $token || (int) $row->locked_by !== $user_id;
+	}
+
 	public static function acquire( int $form_id, int $user_id, string $token ): void {
 		global $wpdb;
 		$wpdb->update(
@@ -58,8 +66,12 @@ class ES_Locks {
 	}
 
 	public static function beat( int $form_id, int $user_id, string $token, bool $claim = false ): bool {
-		$h = self::holder_token( $form_id );
-		if ( $h === $token ) {
+		$row = self::row( $form_id );
+		$h   = self::fresh( $row ) ? (string) $row->locked_token : '';
+		if ( $h !== '' && $h === $token ) {
+			if ( (int) $row->locked_by !== get_current_user_id() ) {
+				return false;
+			}
 			self::acquire( $form_id, $user_id, $token );
 			return true;
 		}

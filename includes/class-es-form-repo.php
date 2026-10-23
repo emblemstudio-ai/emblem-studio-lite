@@ -130,6 +130,25 @@ class ES_Form_Repo {
 		self::flush_caches();
 	}
 
+	public static function safe_redirect_url( string $url ): string {
+		$url = trim( $url );
+		if ( $url === '' || preg_match( '/[\x00-\x1F\x7F]/', $url ) ) {
+			return '';
+		}
+		if ( strpos( $url, '\\' ) !== false ) {
+			return '';
+		}
+		if ( $url[0] === '/' ) {
+			return ( strlen( $url ) > 1 && $url[1] === '/' ) ? '' : $url;
+		}
+		$parts  = wp_parse_url( $url );
+		$scheme = is_array( $parts ) ? strtolower( (string) ( $parts['scheme'] ?? '' ) ) : '';
+		if ( ! in_array( $scheme, [ 'http', 'https' ], true ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		return esc_url_raw( $url, [ 'http', 'https' ] );
+	}
+
 	public static function save( array $data, ?int $id = null ): int {
 		global $wpdb;
 		$t   = self::table();
@@ -172,7 +191,7 @@ class ES_Form_Repo {
 		$success_mode = in_array( $success_mode, [ 'inline_state', 'redirect' ], true ) ? $success_mode : 'inline_state';
 
 		$row = [
-			'name'                 => $data['name'] ?? '',
+			'name'                 => sanitize_text_field( (string) ( $data['name'] ?? '' ) ),
 			'slug'                 => $data['slug'] ?? '',
 			'html'                 => ES_HTML_Sanitizer::sanitize( (string) ( $data['html'] ?? '' ) ),
 			'css'                  => ES_HTML_Sanitizer::sanitize_css( (string) ( $data['css'] ?? '' ) ),
@@ -184,8 +203,8 @@ class ES_Form_Repo {
 			'field_mapping'        => $mapping ? wp_json_encode( $mapping ) : null,
 			'form_types'           => wp_json_encode( $types ),
 			'success_mode'         => $success_mode,
-			'success_message'      => $data['success_message'] ?? null,
-			'success_redirect_url' => $data['success_redirect_url'] ?? null,
+			'success_message'      => isset( $data['success_message'] ) ? wp_kses_post( (string) $data['success_message'] ) : null,
+			'success_redirect_url' => isset( $data['success_redirect_url'] ) ? self::safe_redirect_url( (string) $data['success_redirect_url'] ) : null,
 			'updated_at'           => $now,
 		];
 
@@ -229,6 +248,10 @@ class ES_Form_Repo {
 			$row['funnelkit_enabled'] = ! empty( $data['funnelkit_enabled'] ) ? 1 : 0;
 		}
 
+		if ( array_key_exists( 'funnelkit_contact_status', $data ) ) {
+			$row['funnelkit_contact_status'] = ES_FunnelKit_Upsert::contact_status( $data['funnelkit_contact_status'] );
+		}
+
 		if ( array_key_exists( 'webhooks', $data ) && is_array( $data['webhooks'] ) && class_exists( 'ES_Webhooks' ) ) {
 			$clean = ES_Webhooks::sanitize_array( $data['webhooks'] );
 			$row['webhooks'] = $clean ? wp_json_encode( $clean ) : null;
@@ -248,16 +271,53 @@ class ES_Form_Repo {
 		}
 
 		$existing = $id ? self::find( $id ) : null;
+
+		if ( $existing ) {
+			$sent_by_column = [
+				'name'                 => [ 'name' ],
+				'slug'                 => [ 'slug' ],
+				'html'                 => [ 'html' ],
+				'css'                  => [ 'css' ],
+				'enabled'              => [ 'enabled', 'status' ],
+				'funnelkit_list_id'    => [ 'funnelkit_lists' ],
+				'funnelkit_lists'      => [ 'funnelkit_lists' ],
+				'funnelkit_tags'       => [ 'funnelkit_tags' ],
+				'field_mapping'        => [ 'field_mapping' ],
+				'form_types'           => [ 'form_types' ],
+				'success_mode'         => [ 'success_mode' ],
+				'success_message'      => [ 'success_message' ],
+				'success_redirect_url' => [ 'success_redirect_url' ],
+			];
+			foreach ( $sent_by_column as $column => $keys ) {
+				$sent = false;
+				foreach ( $keys as $key ) {
+					if ( array_key_exists( $key, $data ) ) {
+						$sent = true;
+						break;
+					}
+				}
+				if ( ! $sent ) {
+					unset( $row[ $column ] );
+				}
+			}
+		}
+
 		$resolved = (object) [
-			'enabled'      => $row['enabled'],
 			'trashed_at'   => $existing->trashed_at  ?? null,
 			'archived_at'  => $existing->archived_at ?? null,
 			'active_from'  => array_key_exists( 'active_from', $row )  ? $row['active_from']  : ( $existing->active_from  ?? null ),
 			'active_until' => array_key_exists( 'active_until', $row ) ? $row['active_until'] : ( $existing->active_until ?? null ),
 		];
+		if ( array_key_exists( 'enabled', $row ) ) {
+			$resolved->enabled = $row['enabled'];
+		} elseif ( $existing && isset( $existing->enabled ) ) {
+			$resolved->enabled = $existing->enabled;
+		} else {
+			$resolved->status = $existing->status ?? 'inactive';
+		}
 		$row['status'] = self::resolve_status( $resolved );
 
-		$name_blank = trim( (string) $row['name'] ) === '';
+		$name_blank = array_key_exists( 'name', $row ) && trim( (string) $row['name'] ) === '';
 		if ( $name_blank && $id ) {
 			$row['name'] = 'Asset ' . $id;
 		}
@@ -391,6 +451,37 @@ class ES_Form_Repo {
 		self::flush_caches();
 	}
 
+	public static function set_enabled( int $id, bool $on ): bool {
+		$form = self::find( $id );
+		if ( ! $form ) {
+			return false;
+		}
+		if ( $on && ( ! empty( $form->archived_at ) || ! empty( $form->trashed_at ) ) ) {
+			return false;
+		}
+
+		$form->enabled = $on ? 1 : 0;
+		$status        = self::resolve_status( $form );
+
+		global $wpdb;
+		$wpdb->update(
+			self::table(),
+			[
+				'enabled'    => $on ? 1 : 0,
+				'status'     => $status,
+				'updated_at' => current_time( 'mysql' ),
+			],
+			[ 'id' => $id ]
+		);
+		self::flush_caches();
+
+		if ( class_exists( 'ES_AB' ) ) {
+			$form->status = $status;
+			ES_AB::sync_pause_with_form( $form );
+		}
+		return true;
+	}
+
 	public static function set_archived_at( int $id, ?string $when ): void {
 		global $wpdb;
 		$wpdb->update(
@@ -434,6 +525,7 @@ class ES_Form_Repo {
 			'track_clicks'         => ! empty( $form->track_clicks ) ? 1 : 0,
 			'track_purchases'      => ! empty( $form->track_purchases ) ? 1 : 0,
 			'funnelkit_enabled'    => ! empty( $form->funnelkit_enabled ) ? 1 : 0,
+			'funnelkit_contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 			'webhooks'             => class_exists( 'ES_Webhooks' ) ? ES_Webhooks::for_form( $form ) : [],
 			'connections'          => class_exists( 'ES_Connections' ) ? ES_Connections::for_form( $form ) : null,
 			'active_from'          => $form->active_from  ? (string) $form->active_from  : null,
@@ -486,6 +578,7 @@ class ES_Form_Repo {
 			'track_clicks'         => array_key_exists( 'track_clicks', $data ) ? ( ! empty( $data['track_clicks'] ) ? 1 : 0 ) : 1,
 			'track_purchases'      => ! empty( $data['track_purchases'] ) ? 1 : 0,
 			'funnelkit_enabled'    => array_key_exists( 'funnelkit_enabled', $data ) ? ( ! empty( $data['funnelkit_enabled'] ) ? 1 : 0 ) : 0,
+			'funnelkit_contact_status' => ES_FunnelKit_Upsert::contact_status( $data['funnelkit_contact_status'] ?? null ),
 			'webhooks'             => $decode_array( $data['webhooks'] ?? [] ),
 			'connections'          => $decode_array( $data['connections'] ?? [] ),
 			'active_from'          => isset( $data['active_from'] )  ? self::import_datetime( (string) $data['active_from'] )  : '',
@@ -535,6 +628,7 @@ class ES_Form_Repo {
 			'funnelkit_lists'      => is_array( $lists )   ? $lists   : [],
 			'funnelkit_tags'       => is_array( $tags )    ? $tags    : [],
 			'field_mapping'        => is_array( $mapping ) ? $mapping : [],
+			'form_types'           => self::types_for( $source ),
 		];
 		if ( is_array( $auto_config ) ) {
 			$data['auto_trigger_config'] = $auto_config;
@@ -550,6 +644,7 @@ class ES_Form_Repo {
 		$data['track_clicks']     = ! empty( $source->track_clicks ) ? 1 : 0;
 		$data['track_purchases']  = ! empty( $source->track_purchases ) ? 1 : 0;
 		$data['funnelkit_enabled'] = ! empty( $source->funnelkit_enabled ) ? 1 : 0;
+		$data['funnelkit_contact_status'] = ES_FunnelKit_Upsert::contact_status( $source->funnelkit_contact_status ?? null );
 		$data['webhooks']         = class_exists( 'ES_Webhooks' ) ? ES_Webhooks::for_form( $source ) : [];
 		$data['connections']      = class_exists( 'ES_Connections' ) ? ES_Connections::for_form( $source ) : null;
 

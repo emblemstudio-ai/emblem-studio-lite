@@ -842,8 +842,12 @@
 				markSubscribed(host);
 				const d = json.data || {};
 				if (d.mode === 'redirect' && d.redirect_url) {
-					window.location.assign(d.redirect_url);
-					return;
+					let target = null;
+					try { target = new URL(String(d.redirect_url), window.location.href); } catch (e) { target = null; }
+					if (target && (target.protocol === 'http:' || target.protocol === 'https:')) {
+						window.location.assign(target.href);
+						return;
+					}
 				}
 				if (!optimistic) showInlineThankYou(shadow);
 			})

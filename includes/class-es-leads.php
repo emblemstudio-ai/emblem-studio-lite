@@ -333,6 +333,7 @@ class ES_Leads {
 				'lists'         => is_array( $lists ) ? $lists : [],
 				'tags'          => is_array( $tags ) ? $tags : [],
 				'custom_fields' => $extra,
+				'contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 			],
 			$fk_enabled
 		);

@@ -2812,6 +2812,11 @@
 	var held = false;
 	var submitting = false;
 	var beatTimer = null;
+	var retryTimer = null;
+	var bannerMode = 'takeover';
+
+	var BEAT_MS = 20000;
+	var RETRY_MS = 5000;
 
 	function post(action, cb, claimIt) {
 		var body = new URLSearchParams();
@@ -2821,9 +2826,30 @@
 		body.append('token', myToken);
 		if (claimIt) body.append('claim', '1');
 		fetch(L.ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
-			.then(function (r) { return r.json(); })
-			.then(function (j) { if (cb) cb(j); })
-			.catch(function () { if (cb) cb(null); });
+			.then(function (r) {
+				return r.text().then(function (t) {
+					var j = null;
+					try { j = JSON.parse(t); } catch (e) {}
+					var expired = (j && j.data && j.data.reason === 'nonce') || t === '-1' || t === '0' ||
+						(!j && (r.status === 403 || r.status === 400));
+					if (j && j.success) {
+						freshNonces(j.data);
+						if (cb) cb(j, '');
+					} else if (cb) {
+						cb(j, expired ? 'nonce' : 'network');
+					}
+				});
+			})
+			.catch(function () { if (cb) cb(null, 'network'); });
+	}
+
+	function freshNonces(d) {
+		if (!d) return;
+		if (d.nonce) L.nonce = d.nonce;
+		if (d.save_nonce) {
+			var f = document.querySelector('.es-form-editor input[name="_wpnonce"]');
+			if (f) f.value = d.save_nonce;
+		}
 	}
 
 	function setSaveDisabled(on) {
@@ -2832,17 +2858,28 @@
 	}
 	function startHeartbeat() {
 		if (beatTimer) clearInterval(beatTimer);
-		beatTimer = setInterval(beat, 3000);
+		beatTimer = null;
+		if (document.hidden) return;
+		beatTimer = setInterval(beat, BEAT_MS);
 	}
 	function stopHeartbeat() {
 		if (beatTimer) { clearInterval(beatTimer); beatTimer = null; }
+		if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
 	}
+	function onVisibility() {
+		if (!held && bannerMode !== 'retry') return;
+		if (document.hidden) { stopHeartbeat(); return; }
+		beat();
+		startHeartbeat();
+	}
+	document.addEventListener('visibilitychange', onVisibility);
 	function hideBanner() {
 		var b = document.getElementById('es-lock-banner');
 		if (b) b.hidden = true;
 	}
 	function claim() {
 		held = true;
+		bannerMode = 'takeover';
 		setSaveDisabled(false);
 		hideBanner();
 		var bm = document.getElementById('es-lock-boot-modal');
@@ -2851,13 +2888,35 @@
 		startHeartbeat();
 	}
 	function beat() {
-		post('es_lock_beat', function (j) {
-			if (!j || !j.success) return;
-			if (j.data && j.data.held === false) bootedBy(j.data.by, j.data.by_is_me);
+		if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+		post('es_lock_beat', function (j, failure) {
+			if (failure) { lostContact(failure); return; }
+			if (j.data && j.data.held === false) { bootedBy(j.data.by, j.data.by_is_me); return; }
+			if (!held || bannerMode === 'retry') claim();
 		});
+	}
+
+	function lostContact(failure) {
+		held = false;
+		bannerMode = 'retry';
+		setSaveDisabled(true);
+		var banner = document.getElementById('es-lock-banner');
+		if (banner) {
+			banner.querySelector('.es-lock-banner-text').textContent = failure === 'nonce'
+				? 'This page has expired, or you were logged out. Saving is paused. Copy anything you need, then reload the page.'
+				: 'Lost contact with the server, so this asset may no longer be locked to you. Saving is paused until it is back.';
+			var tb = banner.querySelector('.es-lock-takeback');
+			if (tb) { tb.textContent = 'Try again'; tb.hidden = failure === 'nonce'; }
+			banner.hidden = false;
+		}
+		if (failure !== 'nonce' && !document.hidden) {
+			if (retryTimer) clearTimeout(retryTimer);
+			retryTimer = setTimeout(beat, RETRY_MS);
+		}
 	}
 	function bootedBy(name, isMe) {
 		held = false;
+		bannerMode = 'takeover';
 		stopHeartbeat();
 		setSaveDisabled(true);
 		var msg = isMe
@@ -2867,7 +2926,7 @@
 		if (banner) {
 			banner.querySelector('.es-lock-banner-text').textContent = msg + ' — editing is paused here, your changes can no longer be saved.';
 			var tb = banner.querySelector('.es-lock-takeback');
-			if (tb) tb.textContent = 'Take editing back';
+			if (tb) { tb.textContent = 'Take editing back'; tb.hidden = false; }
 			banner.hidden = false;
 		}
 		var bootModal = document.getElementById('es-lock-boot-modal');
@@ -2879,6 +2938,7 @@
 	}
 	function enterViewOnly(name, isMe) {
 		held = false;
+		bannerMode = 'takeover';
 		stopHeartbeat();
 		setSaveDisabled(true);
 		var banner = document.getElementById('es-lock-banner');
@@ -2886,16 +2946,24 @@
 			var who = isMe ? 'You have' : (name || 'Someone') + ' has';
 			banner.querySelector('.es-lock-banner-text').textContent = 'View only — ' + who + ' this asset open for editing, so changes here cannot be saved.';
 			var tb = banner.querySelector('.es-lock-takeback');
-			if (tb) tb.textContent = 'Take over';
+			if (tb) { tb.textContent = 'Take over'; tb.hidden = false; }
 			banner.hidden = false;
 		}
 	}
 
 	var reloadBtn = document.querySelector('.es-lock-reload');
 	if (reloadBtn) reloadBtn.addEventListener('click', function () { location.reload(); });
+	function takeOver(after) {
+		post('es_lock_takeover', function (j, failure) {
+			if (failure) { lostContact(failure); return; }
+			if (after) after();
+			claim();
+		});
+	}
 	var takeBackBtn = document.querySelector('.es-lock-takeback');
 	if (takeBackBtn) takeBackBtn.addEventListener('click', function () {
-		post('es_lock_takeover', function () { claim(); });
+		if (bannerMode === 'retry') { claimOnOpen(); return; }
+		takeOver();
 	});
 	function hideBootModal() {
 		var m = document.getElementById('es-lock-boot-modal');
@@ -2904,7 +2972,7 @@
 	var bootTakeBack = document.querySelector('.es-lock-boot-takeback');
 	if (bootTakeBack) bootTakeBack.addEventListener('click', function () {
 		hideBootModal();
-		post('es_lock_takeover', function () { claim(); });
+		takeOver();
 	});
 	var bootDismiss = document.querySelector('.es-lock-boot-dismiss');
 	if (bootDismiss) bootDismiss.addEventListener('click', hideBootModal);
@@ -2931,15 +2999,16 @@
 				enterViewOnly(L.holderIsMe ? 'You' : L.holderName, L.holderIsMe);
 			});
 			modal.querySelector('.es-lock-takeover').addEventListener('click', function () {
-				post('es_lock_takeover', function () { modal.hidden = true; claim(); });
+				takeOver(function () { modal.hidden = true; });
 			});
 		}
 	} else {
 		claimOnOpen();
 	}
 	function claimOnOpen() {
-		post('es_lock_beat', function (j) {
-			if (j && j.success && j.data && j.data.held === false) bootedBy(j.data.by, j.data.by_is_me);
+		post('es_lock_beat', function (j, failure) {
+			if (failure) lostContact(failure);
+			else if (j.data && j.data.held === false) bootedBy(j.data.by, j.data.by_is_me);
 			else claim();
 		}, true);
 	}

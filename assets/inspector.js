@@ -41,6 +41,8 @@
 		css: '',
 		rules: [],
 		dirty: false,
+		htmlDirty: false,
+		cssDirty: false,
 		previewUrl: '',
 		selection: null,
 		lastMatches: [],
@@ -346,6 +348,9 @@
 		return { ok: true, error: null };
 	}
 
+	function markHtmlDirty() { state.htmlDirty = true; state.dirty = true; }
+	function markCssDirty() { state.cssDirty = true; state.dirty = true; }
+
 	function requestCancel() {
 		if (!state.dirty) { close(false); return; }
 		openConfirm({
@@ -394,7 +399,9 @@
 		var tidy = formatCss(rawCss);
 		state.css = tidy;
 		state.rules = parseStylesheet(state.css);
-		state.dirty = (tidy !== rawCss);
+		state.dirty = false;
+		state.htmlDirty = false;
+		state.cssDirty = false;
 
 		state.overlay = buildOverlay();
 		document.body.appendChild(state.overlay);
@@ -449,10 +456,14 @@
 		if (!state.open) return;
 
 		if (apply && state.dirty) {
-			if (state.allCm) { try { state.css = state.allCm.getValue(); } catch (e) {} }
-			if (state.htmlLeftCm) { try { state.html = state.htmlLeftCm.getValue(); } catch (e) {} }
-			writeEditor(state.htmlId || HTML_ID, state.html);
-			writeEditor(state.cssId || CSS_ID, state.css);
+			if (state.cssDirty) {
+				if (state.allCm) { try { state.css = state.allCm.getValue(); } catch (e) {} }
+				writeEditor(state.cssId || CSS_ID, state.css);
+			}
+			if (state.htmlDirty) {
+				if (state.htmlLeftCm) { try { state.html = state.htmlLeftCm.getValue(); } catch (e) {} }
+				writeEditor(state.htmlId || HTML_ID, state.html);
+			}
 		}
 
 		if (state.checksTimer) { clearTimeout(state.checksTimer); state.checksTimer = null; }
@@ -718,7 +729,7 @@
 			ta.value = formatted;
 			host.appendChild(ta);
 			state.html = formatted;
-			ta.addEventListener('input', function () { state.html = ta.value; state.dirty = true; scheduleHtmlCommit(); });
+			ta.addEventListener('input', function () { state.html = ta.value; markHtmlDirty(); scheduleHtmlCommit(); });
 			return;
 		}
 		state.htmlLeftCm = cm;
@@ -726,7 +737,7 @@
 		cm.on('change', function (inst, ch) {
 			if (!htmlReady || (ch && ch.origin === 'setValue')) return;
 			state.html = cm.getValue();
-			state.dirty = true;
+			markHtmlDirty();
 			scheduleHtmlCommit();
 		});
 
@@ -1169,7 +1180,7 @@
 			ta.rows = Math.min(40, Math.max(6, state.css.split('\n').length));
 			host.appendChild(ta);
 			ta.addEventListener('input', function () {
-				state.css = ta.value; state.dirty = true;
+				state.css = ta.value; markCssDirty();
 				state.rules = parseStylesheet(state.css);
 				scheduleLiveCss();
 			});
@@ -1192,7 +1203,7 @@
 		}, 200);
 		cm.on('change', function () {
 			state.css = cm.getValue();
-			state.dirty = true;
+			markCssDirty();
 			onEditHeavy();
 			reSwatch();
 		});
@@ -1619,12 +1630,21 @@
 	}
 
 	function applyBodyEdit(rule, newBody) {
+		var css = spliceRuleBody(state.css, state.rules, rule, newBody);
+		if (css === state.css) return;
+		state.css = css;
+		markCssDirty();
+		scheduleLiveCss();
+	}
+
+	function spliceRuleBody(css, rules, rule, newBody) {
 		var oldLen = rule.bodyEnd - rule.bodyStart;
-		if (newBody === state.css.slice(rule.bodyStart, rule.bodyEnd)) return;
+		if (newBody === css.slice(rule.bodyStart, rule.bodyEnd)) return css;
 		var delta = newBody.length - oldLen;
-		state.css = state.css.slice(0, rule.bodyStart) + newBody + state.css.slice(rule.bodyEnd);
-		for (var i = 0; i < state.rules.length; i++) {
-			var r = state.rules[i];
+		css = css.slice(0, rule.bodyStart) + newBody + css.slice(rule.bodyEnd);
+		rule.body = newBody;
+		for (var i = 0; i < rules.length; i++) {
+			var r = rules[i];
 			if (r === rule) { r.bodyEnd += delta; r.end += delta; continue; }
 			if (r.start > rule.start) {
 				r.start += delta; r.end += delta;
@@ -1632,8 +1652,7 @@
 				if (typeof r.bodyEnd === 'number') r.bodyEnd += delta;
 			}
 		}
-		state.dirty = true;
-		scheduleLiveCss();
+		return css;
 	}
 
 	var _liveTimer = null, _livePending = false;
@@ -1751,7 +1770,7 @@
 			}
 			return false;
 		});
-		state.dirty = true;
+		markCssDirty();
 		scheduleLiveCss();
 		refreshCssPanel();
 	}
@@ -1761,7 +1780,7 @@
 		state.css = state.css + prefix + selector + ' {\n  \n}\n';
 		state.rules = parseStylesheet(state.css);
 		if (state.pinned.indexOf(selector) === -1) state.pinned.push(selector);
-		state.dirty = true;
+		markCssDirty();
 		scheduleLiveCss();
 		state.focusSelector = selector;
 		refreshCssPanel();
@@ -2013,22 +2032,12 @@
 	var HTML_VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
 	var HTML_RAW = { pre: 1, textarea: 1, script: 1, style: 1 };
 
-	var HTML_INLINE_TEXT = {
-		a: 1, abbr: 1, b: 1, cite: 1, code: 1, em: 1, i: 1, kbd: 1, label: 1,
-		mark: 1, q: 1, s: 1, samp: 1, small: 1, span: 1, strong: 1, sub: 1,
-		sup: 1, time: 1, u: 1, 'var': 1
+	var HTML_INLINE = {
+		a: 1, abbr: 1, b: 1, bdi: 1, bdo: 1, br: 1, button: 1, cite: 1, code: 1,
+		data: 1, del: 1, dfn: 1, em: 1, i: 1, img: 1, input: 1, ins: 1, kbd: 1,
+		label: 1, mark: 1, output: 1, q: 1, s: 1, samp: 1, select: 1, small: 1,
+		span: 1, strong: 1, sub: 1, sup: 1, textarea: 1, time: 1, u: 1, 'var': 1, wbr: 1
 	};
-
-	function simpleInlineClose(s, name, openGt) {
-		var lower = s.toLowerCase();
-		var close = lower.indexOf('</' + name, openGt + 1);
-		if (close < 0) return -1;
-		var nested = lower.indexOf('<' + name, openGt + 1);
-		if (nested !== -1 && nested < close) return -1;
-		if (s.slice(openGt + 1, close).indexOf('<') !== -1) return -1;
-		var gt = s.indexOf('>', close);
-		return gt < 0 ? -1 : gt + 1;
-	}
 
 	function htmlTagEnd(s, i) {
 		var q = null;
@@ -2042,56 +2051,88 @@
 	}
 	function htmlTagName(tag) { var m = /^<\/?\s*([a-zA-Z][\w:-]*)/.exec(tag); return m ? m[1].toLowerCase() : ''; }
 
-	function formatHtml(html) {
-		var s = String(html);
-		var out = [];
-		var depth = 0, i = 0, n = s.length;
-		function ind() { var r = ''; for (var k = 0; k < depth; k++) r += '  '; return r; }
-		function emit(t) { out.push(ind() + t); }
-		while (i < n) {
-			var c = s.charAt(i);
-			if (c === '<') {
-				if (s.substr(i, 4) === '<!--') {
-					var ce = s.indexOf('-->', i + 4); ce = ce < 0 ? n : ce + 3;
-					var cl = s.slice(i, ce).split('\n');
-					for (var k = 0; k < cl.length; k++) out.push(ind() + (k === 0 ? cl[k].replace(/^\s+/, '') : ' ' + cl[k].trim()));
-					i = ce; continue;
-				}
-				var gt = htmlTagEnd(s, i);
-				if (gt < 0) { var rest = s.slice(i).trim(); if (rest) emit(rest); break; }
-				var tag = s.slice(i, gt + 1), name = htmlTagName(tag);
-				var isClose = s.charAt(i + 1) === '/', selfClose = tag.charAt(tag.length - 2) === '/';
-				if (isClose) { depth = depth > 0 ? depth - 1 : 0; emit(tag.trim()); i = gt + 1; continue; }
-				if (HTML_RAW[name] && !selfClose) {
-					var close = s.toLowerCase().indexOf('</' + name, gt + 1);
-					var contentEnd = close < 0 ? n : close, closeGt = close < 0 ? n : s.indexOf('>', close);
-					emit(tag.trim()); depth++;
-					var lines = s.slice(gt + 1, contentEnd).replace(/^\n|\s+$/g, '').split('\n');
-					for (var k2 = 0; k2 < lines.length; k2++) { if (lines[k2].trim() !== '' || lines.length === 1) out.push(ind() + lines[k2]); }
-					depth--;
-					if (close >= 0) emit('</' + name + '>');
-					i = closeGt < 0 ? n : closeGt + 1; continue;
-				}
-				if (HTML_INLINE_TEXT[name] && !selfClose && !HTML_VOID[name]) {
-					var iEnd = simpleInlineClose(s, name, gt);
-					if (iEnd > 0) {
-						var iClose = s.toLowerCase().indexOf("</" + name, gt + 1);
-						var inner = s.slice(gt + 1, iClose).replace(/\s+/g, " ").trim();
-						emit(tag.trim() + inner + "</" + name + ">");
-						i = iEnd; continue;
-					}
-				}
-				emit(tag.trim());
-				if (!HTML_VOID[name] && !selfClose) depth++;
-				i = gt + 1;
-			} else {
-				var lt = s.indexOf('<', i); if (lt < 0) lt = n;
-				var text = s.slice(i, lt).replace(/\s+/g, ' ').trim();
-				if (text) emit(text);
-				i = lt;
-			}
+	function htmlIsWs(c) { return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f'; }
+
+	function htmlNodes(s) {
+		var nodes = [], i = 0, n = s.length, gap = '';
+		function push(node) { node.gap = gap; gap = ''; nodes.push(node); }
+		function pushText(t) {
+			var a = 0, b = t.length;
+			while (a < b && htmlIsWs(t.charAt(a))) a++;
+			while (b > a && htmlIsWs(t.charAt(b - 1))) b--;
+			gap += t.slice(0, a);
+			if (b > a) { push({ kind: 'text', text: t.slice(a, b), name: '', close: false, opens: false }); }
+			gap += t.slice(b);
 		}
-		return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\s+$/, '') + '\n';
+		while (i < n) {
+			var c = s.charAt(i), next = s.charAt(i + 1);
+			var isTag = c === '<' && /[a-zA-Z\/!]/.test(next);
+			if (!isTag) {
+				var lt = s.indexOf('<', i + 1); if (lt < 0) lt = n;
+				pushText(s.slice(i, lt));
+				i = lt; continue;
+			}
+			if (s.substr(i, 4) === '<!--') {
+				var ce = s.indexOf('-->', i + 4); ce = ce < 0 ? n : ce + 3;
+				push({ kind: 'comment', text: s.slice(i, ce), name: '', close: false, opens: false });
+				i = ce; continue;
+			}
+			var gt = htmlTagEnd(s, i);
+			if (gt < 0) { pushText(s.slice(i)); break; }
+			var tag = s.slice(i, gt + 1), name = htmlTagName(tag);
+			var isClose = next === '/', selfClose = tag.charAt(tag.length - 2) === '/';
+			if (!isClose && HTML_RAW[name] && !selfClose) {
+				var close = s.toLowerCase().indexOf('</' + name, gt + 1);
+				var closeGt = close < 0 ? -1 : s.indexOf('>', close);
+				var rawEnd = closeGt < 0 ? n : closeGt + 1;
+				push({ kind: 'raw', text: s.slice(i, rawEnd), name: name, close: false, opens: false });
+				i = rawEnd; continue;
+			}
+			push({
+				kind: 'tag', text: tag, name: name, close: isClose,
+				opens: !isClose && !selfClose && next !== '!' && !HTML_VOID[name]
+			});
+			i = gt + 1;
+		}
+		return nodes;
+	}
+
+	function formatHtml(html) {
+		var nodes = htmlNodes(String(html));
+		var out = '', depth = 0;
+		function ind() { var r = ''; for (var k = 0; k < depth; k++) r += '  '; return r; }
+		function flow(node) {
+			return node.kind === 'text' || (node.kind === 'raw' && node.name === 'textarea') ||
+				(node.kind === 'tag' && !!HTML_INLINE[node.name]);
+		}
+		for (var i = 0; i < nodes.length; i++) {
+			var node = nodes[i];
+			if (node.close) depth = depth > 0 ? depth - 1 : 0;
+			var text = node.text;
+			if (node.kind === 'text') {
+				text = text.replace(/[ \t\r\f]*\n[ \t\n\r\f]*/g, function (run) {
+					return (run.split('\n').length > 2 ? '\n\n' : '\n') + ind();
+				});
+			}
+			if (i === 0) {
+				out += text;
+			} else if (node.gap === '') {
+				out += text;
+			} else {
+				var hasNl = node.gap.indexOf('\n') !== -1;
+				if (!hasNl && flow(nodes[i - 1]) && flow(node)) {
+					out += node.gap + text;
+				} else {
+					out += (node.gap.split('\n').length > 2 ? '\n\n' : '\n') + ind() + text;
+				}
+			}
+			if (node.opens) depth++;
+		}
+		return out.replace(/[ \t\n\r\f]+$/, '') + '\n';
+	}
+
+	if (typeof window !== 'undefined') {
+		window.ESInspectorFormat = { formatHtml: formatHtml, formatCss: formatCss, parseStylesheet: parseStylesheet, spliceRuleBody: spliceRuleBody };
 	}
 
 	function parseHtmlRanges(html) {

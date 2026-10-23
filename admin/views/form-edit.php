@@ -28,6 +28,7 @@ $f = (object) [
 	'track_clicks'         => isset( $form ) ? ! empty( $form->track_clicks ) : true,
 	'track_purchases'      => isset( $form ) ? ! empty( $form->track_purchases ) : false,
 	'funnelkit_enabled'    => isset( $form ) ? ! empty( $form->funnelkit_enabled ) : false,
+	'funnelkit_contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 	'active_from'          => isset( $form ) ? (string) ( $form->active_from  ?? '' ) : '',
 	'active_until'         => isset( $form ) ? (string) ( $form->active_until ?? '' ) : '',
 ];
@@ -974,6 +975,7 @@ $check_groups = [
 			<div class="es-connect-card-body">
 		<?php if ( $fk_managed ) : ?>
 			<?php if ( $fk_enabled ) : ?><input type="hidden" name="funnelkit_enabled" value="1"><?php endif; ?>
+			<input type="hidden" name="funnelkit_contact_status" value="<?php echo esc_attr( $f->funnelkit_contact_status ); ?>">
 			<?php foreach ( (array) $f->funnelkit_lists as $preserved_list_id ) : ?>
 				<input type="hidden" name="funnelkit_lists[]" value="<?php echo (int) $preserved_list_id; ?>">
 			<?php endforeach; ?>
@@ -1001,6 +1003,17 @@ $check_groups = [
 		$fk_tags  = ES_FunnelKit::get_tags();
 		?>
 		<table class="form-table" role="presentation">
+			<tr>
+				<th><?php esc_html_e( 'Add new contacts as', 'emblem-studio' ); ?></th>
+				<td>
+					<fieldset>
+						<legend class="screen-reader-text"><?php esc_html_e( 'Add new contacts as', 'emblem-studio' ); ?></legend>
+						<label><input type="radio" name="funnelkit_contact_status" value="subscribed" <?php checked( $f->funnelkit_contact_status, 'subscribed' ); ?>> <?php esc_html_e( 'Subscribed', 'emblem-studio' ); ?></label><br>
+						<label><input type="radio" name="funnelkit_contact_status" value="unsubscribed" <?php checked( $f->funnelkit_contact_status, 'unsubscribed' ); ?>> <?php esc_html_e( 'Unsubscribed', 'emblem-studio' ); ?></label>
+					</fieldset>
+					<p class="description"><?php esc_html_e( 'Existing contacts keep their status.', 'emblem-studio' ); ?></p>
+				</td>
+			</tr>
 			<tr>
 				<th><label for="es-fk-lists"><?php esc_html_e( 'Add to lists', 'emblem-studio' ); ?></label></th>
 				<td>

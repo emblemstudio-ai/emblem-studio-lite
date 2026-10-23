@@ -10,6 +10,8 @@
 
 	var CENTER_CSS = ':where(.esf-form){margin-inline:auto;}';
 
+	var STRIP_H = 26;
+
 	var cache       = {};
 	var fontsLoaded = {};
 	var current     = null;
@@ -203,10 +205,11 @@
 		var rect = anchor.getBoundingClientRect();
 
 		var card = document.createElement( 'div' );
-		card.style.cssText = 'position:fixed;z-index:99999;width:' + MAX_W + 'px;height:170px;' +
+		card.style.cssText = 'position:fixed;z-index:99999;width:' + MAX_W + 'px;height:' + ( 170 + STRIP_H ) + 'px;' +
 			'pointer-events:none;opacity:0;transition:opacity .12s ease;';
 		var offWrap = document.createElement( 'div' );
 		offWrap.style.filter = 'drop-shadow(0 12px 30px rgba(20,16,30,.20))';
+		offWrap.style.marginTop = STRIP_H + 'px';
 		var scaler = document.createElement( 'div' );
 		scaler.style.cssText = 'width:' + RENDER_W + 'px;transform:scale(' + SCALE + ');transform-origin:top left;';
 		var hostWrap = document.createElement( 'div' );
@@ -214,8 +217,17 @@
 		offWrap.appendChild( scaler );
 		card.appendChild( offWrap );
 
+		var assetName = anchor.getAttribute( 'data-es-preview-name' ) || ( anchor.textContent || '' ).trim();
+		var strip = document.createElement( 'div' );
+		strip.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:1;height:' + STRIP_H + 'px;line-height:' + STRIP_H + 'px;' +
+			'padding:0 10px;box-sizing:border-box;background:#1d2327;color:#fff;' +
+			'font:600 11.5px/' + STRIP_H + 'px system-ui,-apple-system,"Segoe UI",sans-serif;' +
+			'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+		strip.textContent = assetName;
+		card.appendChild( strip );
+
 		var note = document.createElement( 'div' );
-		note.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+		note.style.cssText = 'position:absolute;top:' + STRIP_H + 'px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;' +
 			'background:#fff;color:#94a3b8;font:13px system-ui,sans-serif;';
 		note.textContent = '…';
 		card.appendChild( note );
@@ -236,7 +248,7 @@
 			card.style.left = left + 'px';
 			card.style.top = top + 'px';
 		}
-		position( MAX_W, 170 );
+		position( MAX_W, 170 + STRIP_H );
 
 		fetchPayload( id ).then( function ( p ) {
 			if ( current !== card ) {
@@ -253,12 +265,12 @@
 				}
 				var box = contentBox( host );
 				var w  = wide ? MAX_W : Math.min( box.w || MAX_W, MAX_W );
-				var h  = Math.min( box.h || 200, window.innerHeight - 24 );
+				var h  = Math.min( box.h || 200, window.innerHeight - 24 - STRIP_H );
 				var ox = wide ? 0 : box.x;
 				card.style.width = w + 'px';
-				card.style.height = h + 'px';
+				card.style.height = ( h + STRIP_H ) + 'px';
 				offWrap.style.transform = 'translate(' + ( -ox ) + 'px,' + ( -box.y ) + 'px)';
-				position( w, h );
+				position( w, h + STRIP_H );
 			};
 			requestAnimationFrame( measure );
 			setTimeout( measure, 240 );

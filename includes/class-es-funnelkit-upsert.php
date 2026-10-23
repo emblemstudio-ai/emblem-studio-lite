@@ -4,6 +4,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class ES_FunnelKit_Upsert {
+	public static function contact_status( $value ): string {
+		return $value === 'unsubscribed' ? 'unsubscribed' : 'subscribed';
+	}
+
 	public static function run( array $lead ): array {
 		try {
 			$args = array_filter(
@@ -37,8 +41,11 @@ final class ES_FunnelKit_Upsert {
 				true
 			);
 
+			$add_unsubscribed = self::contact_status( $lead['contact_status'] ?? null ) === 'unsubscribed';
+			$needs_unsubscribe = $add_unsubscribed && ! $exists && ! $protected;
+
 			$outcome = $exists ? 'updated' : 'created';
-			$needs_resubscribe = $exists && ! $protected && in_array(
+			$needs_resubscribe = ! $add_unsubscribed && $exists && ! $protected && in_array(
 				$status,
 				[
 					self::status( 'DISPLAY_STATUS_UNSUBSCRIBED', 2 ),
@@ -74,6 +81,25 @@ final class ES_FunnelKit_Upsert {
 						'error'            => 'Contact remained unsubscribed after the resubscribe attempt',
 					];
 				}
+			}
+
+			if ( $needs_unsubscribe && $id > 0 ) {
+				if ( method_exists( $contact, 'unsubscribe' ) ) {
+					$contact->unsubscribe( false );
+				}
+				$post_status = method_exists( $contact, 'get_display_status' )
+					? (int) $contact->get_display_status()
+					: 0;
+				if ( $post_status !== self::status( 'DISPLAY_STATUS_UNSUBSCRIBED', 2 ) ) {
+					return [
+						'ok'               => false,
+						'contact_id'       => $id,
+						'outcome'          => 'failed',
+						'protected_status' => null,
+						'error'            => 'Contact was created but could not be unsubscribed',
+					];
+				}
+				$outcome = 'created_unsubscribed';
 			}
 
 			if ( ! $protected ) {

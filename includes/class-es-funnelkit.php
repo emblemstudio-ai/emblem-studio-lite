@@ -38,6 +38,10 @@ class ES_FunnelKit {
 			ES_Logger::error( 'FunnelKit direct push failed, trying REST fallback', $res );
 		}
 
+		if ( ES_FunnelKit_Upsert::contact_status( $lead['contact_status'] ?? null ) === 'unsubscribed' ) {
+			return $res ?? [ 'ok' => false, 'contact_id' => null, 'error' => 'FunnelKit is not on this site, so the contact cannot be added as unsubscribed' ];
+		}
+
 		if ( self::has_rest_credentials() ) {
 			return self::push_rest( $lead );
 		}

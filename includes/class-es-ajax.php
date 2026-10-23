@@ -188,6 +188,25 @@ class ES_Ajax {
 		wp_send_json_success();
 	}
 
+	public static function configured_terms( object $form ): array {
+		$tags = [];
+		if ( ! empty( $form->funnelkit_tags ) ) {
+			$decoded = json_decode( (string) $form->funnelkit_tags, true );
+			$tags    = is_array( $decoded ) ? array_values( array_unique( array_map( 'strval', array_filter( $decoded, 'is_scalar' ) ) ) ) : [];
+		}
+
+		$lists = [];
+		if ( ! empty( $form->funnelkit_lists ) ) {
+			$decoded = json_decode( (string) $form->funnelkit_lists, true );
+			$lists   = is_array( $decoded ) ? array_map( 'intval', $decoded ) : [];
+		}
+		if ( ! $lists && ! empty( $form->funnelkit_list_id ) ) {
+			$lists = [ (int) $form->funnelkit_list_id ];
+		}
+
+		return [ 'tags' => $tags, 'lists' => array_values( $lists ) ];
+	}
+
 	public function submit(): void {
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'conversion', 'lead_id' => null ] ) === 'legacy' ) {
@@ -353,30 +372,9 @@ class ES_Ajax {
 			return $v !== '' && $v !== [];
 		} );
 
-		$form_tags = [];
-		if ( ! empty( $form->funnelkit_tags ) ) {
-			$decoded   = json_decode( $form->funnelkit_tags, true );
-			$form_tags = is_array( $decoded ) ? $decoded : [];
-		}
-		$override_tags = [];
-		if ( isset( $_POST['esf_tag'] ) ) {
-			$raw           = is_array( $_POST['esf_tag'] ) ? $_POST['esf_tag'] : [ $_POST['esf_tag'] ];
-			$override_tags = array_values( array_filter( array_map( 'sanitize_text_field', $raw ) ) );
-		}
-		$tags = array_values( array_unique( array_merge( $form_tags, $override_tags ) ) );
-
-		$form_lists = [];
-		if ( ! empty( $form->funnelkit_lists ) ) {
-			$decoded    = json_decode( $form->funnelkit_lists, true );
-			$form_lists = is_array( $decoded ) ? array_map( 'intval', $decoded ) : [];
-		}
-		if ( ! $form_lists && ! empty( $form->funnelkit_list_id ) ) {
-			$form_lists = [ (int) $form->funnelkit_list_id ];
-		}
-		$lists = $form_lists;
-		if ( ! empty( $_POST['esf_list'] ) ) {
-			$lists = [ (int) $_POST['esf_list'] ];
-		}
+		$terms = self::configured_terms( $form );
+		$tags  = $terms['tags'];
+		$lists = $terms['lists'];
 
 		$reserved      = [
 			'email', 'first_name', 'last_name', 'name', 'phone',
@@ -439,6 +437,7 @@ class ES_Ajax {
 				'tags'          => $tags,
 				'lists'         => $lists,
 				'custom_fields' => $custom_fields,
+				'contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 			],
 			$fk_enabled
 		);
@@ -482,7 +481,7 @@ class ES_Ajax {
 		wp_send_json_success( [
 			'mode'             => $form->success_mode,
 			'success_message'  => null,
-			'redirect_url'     => $form->success_mode === 'redirect' ? $form->success_redirect_url : null,
+			'redirect_url'     => $form->success_mode === 'redirect' ? ( ES_Form_Repo::safe_redirect_url( (string) $form->success_redirect_url ) ?: null ) : null,
 			'funnelkit_pushed' => (bool) $push['ok'],
 		] );
 	}

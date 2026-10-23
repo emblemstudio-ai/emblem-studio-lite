@@ -537,7 +537,9 @@ class ES_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
 		}
-		check_ajax_referer( 'es_lock', 'nonce' );
+		if ( ! check_ajax_referer( 'es_lock', 'nonce', false ) ) {
+			wp_send_json_error( [ 'reason' => 'nonce' ], 403 );
+		}
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 		if ( ! $form_id ) {
 			wp_send_json_error( [ 'message' => 'No form id' ], 400 );
@@ -550,17 +552,24 @@ class ES_Admin {
 		list( $form_id, $me, $token ) = $this->lock_request();
 		$held = ES_Locks::beat( $form_id, $me, $token, ! empty( $_POST['claim'] ) );
 		$holder = $held ? 0 : ES_Locks::holder( $form_id );
-		wp_send_json_success( [
+		wp_send_json_success( array_merge( [
 			'held'    => $held,
 			'by'      => $held ? '' : ES_Locks::user_label( $holder ),
 			'by_is_me' => ( ! $held && $holder === $me ),
-		] );
+		], $this->lock_fresh_nonces() ) );
+	}
+
+	private function lock_fresh_nonces(): array {
+		return [
+			'nonce'      => wp_create_nonce( 'es_lock' ),
+			'save_nonce' => wp_create_nonce( 'es_save_form' ),
+		];
 	}
 
 	public function handle_lock_takeover(): void {
 		list( $form_id, $me, $token ) = $this->lock_request();
 		ES_Locks::take_over( $form_id, $me, $token );
-		wp_send_json_success();
+		wp_send_json_success( $this->lock_fresh_nonces() );
 	}
 
 	public function handle_lock_states(): void {
@@ -1300,6 +1309,9 @@ class ES_Admin {
 				$holder            = ES_Locks::holder( $id );
 				$lock_holder_name  = ES_Locks::user_label( $holder );
 				$lock_holder_is_me = ( $holder === $lock_me );
+				if ( ! $lock_holder_is_me ) {
+					$lock_holder_token = 'held-by-another-user';
+				}
 			}
 		}
 		include EMBLEM_STUDIO_PATH . 'admin/views/form-edit.php';
@@ -1314,7 +1326,7 @@ class ES_Admin {
 		$id   = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
 
 		$posted_token = isset( $_POST['lock_token'] ) ? sanitize_text_field( wp_unslash( $_POST['lock_token'] ) ) : '';
-		if ( $id && ES_Locks::is_locked_by_other_session( $id, $posted_token ) ) {
+		if ( $id && ES_Locks::blocks_save( $id, get_current_user_id(), $posted_token ) ) {
 			$who = ES_Locks::user_label( ES_Locks::holder( $id ) );
 			wp_die(
 				esc_html( sprintf(
@@ -1536,6 +1548,10 @@ class ES_Admin {
 		}
 
 		$data['funnelkit_enabled'] = ! empty( $_POST['funnelkit_enabled'] ) ? 1 : 0;
+
+		if ( isset( $_POST['funnelkit_contact_status'] ) ) {
+			$data['funnelkit_contact_status'] = ES_FunnelKit_Upsert::contact_status( sanitize_key( wp_unslash( (string) $_POST['funnelkit_contact_status'] ) ) );
+		}
 
 		if ( isset( $_POST['webhooks'] ) && is_array( $_POST['webhooks'] ) ) {
 			$raw_hooks = [];
@@ -1789,19 +1805,9 @@ class ES_Admin {
 				switch ( $action ) {
 					case 'activate':
 					case 'inactive':
-						global $wpdb;
-						if ( $action === 'activate' ) {
-							$current = ES_Form_Repo::find( $id );
-							if ( ! $current || ! empty( $current->archived_at ) || ! empty( $current->trashed_at ) ) {
-								break;
-							}
+						if ( ES_Form_Repo::set_enabled( $id, $action === 'activate' ) ) {
+							$applied++;
 						}
-						$wpdb->update(
-							ES_Form_Repo::table(),
-							[ 'status' => $action === 'activate' ? 'active' : 'inactive', 'updated_at' => current_time( 'mysql' ) ],
-							[ 'id' => $id ]
-						);
-						$applied++;
 						break;
 					case 'archive':
 						ES_Form_Repo::archive( $id );

@@ -41,6 +41,7 @@ class ES_Install {
 			track_clicks TINYINT(1) NOT NULL DEFAULT 1,
 			track_purchases TINYINT(1) NOT NULL DEFAULT 0,
 			funnelkit_enabled TINYINT(1) NOT NULL DEFAULT 0,
+			funnelkit_contact_status VARCHAR(12) NOT NULL DEFAULT 'subscribed',
 			webhooks LONGTEXT NULL,
 			connections LONGTEXT NULL,
 			lite_disabled LONGTEXT NULL,
@@ -956,6 +957,19 @@ class ES_Install {
 			$cols = $wpdb->get_col( "SHOW COLUMNS FROM $events" );
 			if ( in_array( 'lead_id', $cols, true ) && in_array( 'measurement_mode', $cols, true ) ) {
 				update_option( 'emblem_studio_db_version', '45' );
+			}
+		}
+
+		if ( version_compare( $current, '46', '<' ) ) {
+			global $wpdb;
+			$forms     = self::table( 'forms' );
+			$form_cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $forms" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! in_array( 'funnelkit_contact_status', $form_cols, true ) ) {
+				$wpdb->query( "ALTER TABLE $forms ADD COLUMN funnelkit_contact_status VARCHAR(12) NOT NULL DEFAULT 'subscribed' AFTER funnelkit_enabled" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			$form_cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $forms" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( in_array( 'funnelkit_contact_status', $form_cols, true ) ) {
+				update_option( 'emblem_studio_db_version', '46' );
 			}
 		}
 	}

@@ -6,7 +6,7 @@ if (! defined('ABSPATH')) {
 
 final class Emblem_Studio_SaaS_Connector
 {
-    const VERSION = '1.3.32-beta';
+    const VERSION = '1.3.33-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
     const OPTION = 'ess_connection';
@@ -1426,6 +1426,7 @@ final class Emblem_Studio_SaaS_Connector
                 'track_clicks'         => ! empty($a['track_clicks']),
                 'track_purchases'      => ! empty($a['track_purchases']),
                 'funnelkit_enabled'    => ! empty($a['funnelkit_enabled']),
+                'funnelkit_contact_status' => (string) ($a['funnelkit_contact_status'] ?? '') === 'unsubscribed' ? 'unsubscribed' : 'subscribed',
                 'webhooks'             => is_array($a['webhooks'] ?? null) ? $a['webhooks'] : [],
                 'connections'          => is_array($a['connections'] ?? null) ? $a['connections'] : [],
                 'active_from'          => $a['active_from'] ?? null,
@@ -1992,13 +1993,15 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         $url = $cfg['api_base'].'/v1/sites/'.$cfg['site_id']
-            .'/embed?token='.rawurlencode($cfg['site_token'])
-            .'&funnelkit='.(self::funnelkit_available() ? '1' : '0')
+            .'/embed?funnelkit='.(self::funnelkit_available() ? '1' : '0')
             .'&v='.rawurlencode(self::VERSION);
 
         $res = wp_remote_get($url, [
             'timeout' => 5,
-            'headers' => ['X-ESS-Roles' => wp_json_encode(self::roles())],
+            'headers' => [
+                'X-ESS-Token' => $cfg['site_token'],
+                'X-ESS-Roles' => wp_json_encode(self::roles()),
+            ],
         ]);
         if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
             $empty = ['data' => [], 'wp_map' => [], 'wp_keys' => []];
@@ -2376,6 +2379,7 @@ final class Emblem_Studio_SaaS_Connector
             'lists'      => array_values(array_filter(array_map('absint', (array) ($p['lists'] ?? [])))),
             'slugs'      => self::sanitize_submission_fields((array) ($p['slugs'] ?? [])),
             'custom'     => $custom,
+            'contact_status' => (string) ($p['contact_status'] ?? '') === 'unsubscribed' ? 'unsubscribed' : 'subscribed',
         ];
     }
 
@@ -2406,6 +2410,7 @@ final class Emblem_Studio_SaaS_Connector
             'tags'       => array_values(array_filter(array_map('sanitize_text_field', (array) ($p['tags'] ?? [])))),
             'lists'      => array_values(array_filter(array_map('absint', (array) ($p['lists'] ?? [])))),
             'custom'     => $custom,
+            'contact_status' => (string) ($p['contact_status'] ?? '') === 'unsubscribed' ? 'unsubscribed' : 'subscribed',
         ]);
 
         return new WP_REST_Response($result, ! empty($result['ok']) ? 200 : 500);

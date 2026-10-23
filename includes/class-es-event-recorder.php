@@ -87,20 +87,43 @@ class ES_Event_Recorder {
 	}
 
 	public static function client_ip(): string {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) $_SERVER['REMOTE_ADDR'] ) : '';
+		$ip     = filter_var( $remote, FILTER_VALIDATE_IP ) ? $remote : '0.0.0.0';
 		if ( self::trust_proxy_enabled() ) {
-			foreach ( [ 'HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR' ] as $h ) {
+			foreach ( [ 'HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP' ] as $h ) {
 				if ( empty( $_SERVER[ $h ] ) ) {
 					continue;
 				}
-				$candidate = trim( explode( ',', (string) $_SERVER[ $h ] )[0] );
+				$candidate = trim( (string) $_SERVER[ $h ] );
 				if ( filter_var( $candidate, FILTER_VALIDATE_IP ) ) {
-					$ip = $candidate;
-					break;
+					return preg_replace( '/[^0-9a-f:.]/i', '', $candidate );
+				}
+			}
+			if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+				$forwarded = self::rightmost_public_hop( (string) $_SERVER['HTTP_X_FORWARDED_FOR'], $remote );
+				if ( $forwarded !== '' ) {
+					$ip = $forwarded;
 				}
 			}
 		}
 		return preg_replace( '/[^0-9a-f:.]/i', '', (string) $ip );
+	}
+
+	public static function rightmost_public_hop( string $header, string $remote ): string {
+		$hops = array_reverse( array_map( 'trim', explode( ',', $header ) ) );
+		foreach ( $hops as $hop ) {
+			if ( $hop === '' || $hop === $remote ) {
+				continue;
+			}
+			if ( ! filter_var( $hop, FILTER_VALIDATE_IP ) ) {
+				continue;
+			}
+			if ( ! filter_var( $hop, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+				continue;
+			}
+			return $hop;
+		}
+		return '';
 	}
 
 	public const OPT_DETECT_DATACENTER = 'emblem_studio_detect_datacenter';
