@@ -370,14 +370,19 @@ try { window.parent.postMessage({ type: 'es-inspector:shell-info', shell: <?php 
 (function () {
 	var SHELL = <?php echo wp_json_encode( $shell ); ?>;
 	var noGrow = <?php echo ( $is_fullscreen || $shell === 'ribbon' ) ? 'true' : 'false'; ?>;
-	var ro = null, target = null, lastH = -1;
+	var ro = null, target = null, lastH = -1, lastInner = -1;
 	function findTarget() { return document.querySelector('.esf-inspect-shell') || document.querySelector('.esf-host[data-esf-id]'); }
 	function report() {
 		if (noGrow) { if (lastH !== 0) { lastH = 0; try { window.parent.postMessage({ type: 'es-inspector:size', shell: SHELL, height: 0 }, '*'); } catch (e) {} } return; }
 		var el = findTarget(); if (!el) return;
 		if (el !== target) { target = el; if (ro) ro.disconnect(); if (window.ResizeObserver) { ro = new ResizeObserver(report); ro.observe(el); } }
 		var h = Math.ceil(Math.max(el.getBoundingClientRect().height, el.scrollHeight || 0));
-		if (h > 0 && h !== lastH) { lastH = h; try { window.parent.postMessage({ type: 'es-inspector:size', shell: SHELL, height: h }, '*'); } catch (e) {} }
+		// Sized by the screen (100vh and the like): the asset grows by exactly as much
+		// as the frame just did, which would loop forever, since the parent adds room
+		// below whatever is reported. Content never does that, so hold the frame.
+		var inner = window.innerHeight;
+		if (lastH > 0 && lastInner > 0 && inner !== lastInner && Math.abs((h - lastH) - (inner - lastInner)) <= 2) { lastInner = inner; return; }
+		if (h > 0 && h !== lastH) { lastH = h; lastInner = inner; try { window.parent.postMessage({ type: 'es-inspector:size', shell: SHELL, height: h }, '*'); } catch (e) {} }
 	}
 	try { new MutationObserver(report).observe(document.documentElement, { childList: true, subtree: true }); } catch (e) {}
 	report();
