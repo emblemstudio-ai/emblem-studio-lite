@@ -7,7 +7,7 @@ dashboard.
 
 > **⚠ Generated build — do not edit here.**
 > This repository is a **build artifact**. Every file is generated from the full plugin by
-> `bin/build-lite.sh` in the private source repo (`serenichron/emblem-studio`): it copies the
+> `bin/build-lite.sh` in the private source repo (`emblemstudio-ai/emblem-studio`): it copies the
 > shipped plugin, strips the account-gated (Free/Paid) modules, folds in the SaaS connector, and
 > flips the edition to `lite`. Edit the source there, not here — changes made directly in this
 > repo are overwritten on the next build.
