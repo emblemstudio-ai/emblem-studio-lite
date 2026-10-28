@@ -492,4 +492,19 @@ class ES_Leads {
 		}
 		return $value;
 	}
+
+	public static function purge_bot_leads( int $days ): int {
+		global $wpdb;
+		$t       = ES_Install::table( 'leads' );
+		$cutoff  = wp_date( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * DAY_IN_SECONDS ) );
+		$deleted = 0;
+		for ( $i = 0; $i < 50; $i++ ) {
+			$n = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM $t WHERE is_bot = 1 AND created_at < %s LIMIT 5000", $cutoff ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$deleted += $n;
+			if ( $n < 5000 ) {
+				break;
+			}
+		}
+		return $deleted;
+	}
 }

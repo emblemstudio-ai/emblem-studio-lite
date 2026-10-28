@@ -24,6 +24,7 @@ $tables = [
 	"{$prefix}emblemstudio_form_revisions",
 	"{$prefix}emblemstudio_variants",
 	"{$prefix}emblemstudio_tests",
+	"{$prefix}emblemstudio_rate_limits",
 ];
 
 foreach ( $tables as $t ) {

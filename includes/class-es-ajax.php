@@ -11,6 +11,8 @@ class ES_Ajax {
 	private const EVENT_MAX           = 120;
 	private const CLICK_WINDOW        = 60;
 	private const CLICK_MAX           = 60;
+	private const BOT_WINDOW          = 60;
+	private const BOT_MAX             = 10;
 	private const MIN_HUMAN_SUBMIT_MS = 1200;
 	public const EMAIL_SHAPE = '/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)*\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])$/';
 
@@ -265,6 +267,9 @@ class ES_Ajax {
 		}
 
 		if ( $hp_filled ) {
+			if ( ! $this->bot_row_allowed( 'hp', $form_id ) ) {
+				wp_send_json_success( [ 'mode' => 'inline_state' ] );
+			}
 			ES_Logger::info( 'Honeypot triggered', [ 'form_id' => $form_id ] );
 			$hp_shell = isset( $_POST['type'] ) ? sanitize_key( (string) $_POST['type'] ) : 'inline';
 			if ( ! in_array( $hp_shell, ES_Form_Repo::valid_types(), true ) ) {
@@ -276,7 +281,9 @@ class ES_Ajax {
 		}
 
 		if ( $this->bucket_exceeded( 'sub_' . $form_id, self::SUBMIT_WINDOW, self::SUBMIT_MAX ) ) {
-			ES_Logger::error( 'es_submit aborted: rate-limited', [ 'ip' => $this->client_ip(), 'form_id' => $form_id ] );
+			if ( ! $this->bucket_exceeded( 'log_sub_' . $form_id, MINUTE_IN_SECONDS, 1 ) ) {
+				ES_Logger::error( 'es_submit aborted: rate-limited', [ 'ip' => $this->client_ip(), 'form_id' => $form_id ] );
+			}
 			wp_send_json_error( [ 'message' => 'Too many submissions, please wait a moment.' ], 429 );
 		}
 
@@ -663,14 +670,11 @@ class ES_Ajax {
 	}
 
 	private function bucket_exceeded( string $scope, int $window, int $max ): bool {
-		$ip   = $this->client_ip();
-		$key  = 'esf_rl_' . md5( $scope . '|' . $ip );
-		$hits = (int) get_transient( $key );
-		if ( $hits >= $max ) {
-			return true;
-		}
-		set_transient( $key, $hits + 1, $window );
-		return false;
+		return ES_Rate_Limit::exceeded( $scope . '|' . $this->client_ip(), $window, $max );
+	}
+
+	private function bot_row_allowed( string $kind, int $form_id ): bool {
+		return ! $this->bucket_exceeded( 'bot_' . $kind . '_' . $form_id, self::BOT_WINDOW, self::BOT_MAX );
 	}
 
 	private function save_bot_lead( int $form_id, ?array $bot_signals = null ): void {
@@ -729,6 +733,9 @@ class ES_Ajax {
 	}
 
 	private function record_bot_hit( int $form_id, string $shell, string $label_override = '' ): void {
+		if ( ! $this->bot_row_allowed( 'hit', $form_id ) ) {
+			return;
+		}
 		$ua      = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
 		$label   = $label_override !== '' ? $label_override : ES_Event_Recorder::matched_bot_label( $ua );
 		$ip      = ES_Event_Recorder::anonymize_ip( $this->client_ip() );

@@ -104,24 +104,80 @@ class ES_Event_Recorder {
 	public static function client_ip(): string {
 		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) $_SERVER['REMOTE_ADDR'] ) : '';
 		$ip     = filter_var( $remote, FILTER_VALIDATE_IP ) ? $remote : '0.0.0.0';
-		if ( self::trust_proxy_enabled() ) {
-			foreach ( [ 'HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP' ] as $h ) {
-				if ( empty( $_SERVER[ $h ] ) ) {
-					continue;
-				}
-				$candidate = trim( (string) $_SERVER[ $h ] );
-				if ( filter_var( $candidate, FILTER_VALIDATE_IP ) ) {
-					return preg_replace( '/[^0-9a-f:.]/i', '', $candidate );
-				}
+		if ( ! self::trust_proxy_enabled() ) {
+			return preg_replace( '/[^0-9a-f:.]/i', '', (string) $ip );
+		}
+
+		$forwarded = ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] )
+			? self::rightmost_public_hop( (string) $_SERVER['HTTP_X_FORWARDED_FOR'], $remote )
+			: '';
+		$peer_is_local = $ip !== '0.0.0.0' && ! self::is_public_ip( $ip );
+
+		$via_cloudflare = self::is_cloudflare_ip( $ip )
+			|| ( $peer_is_local && $forwarded !== '' && self::is_cloudflare_ip( $forwarded ) );
+		if ( $via_cloudflare && ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) {
+			$candidate = trim( (string) $_SERVER['HTTP_CF_CONNECTING_IP'] );
+			if ( filter_var( $candidate, FILTER_VALIDATE_IP ) ) {
+				return preg_replace( '/[^0-9a-f:.]/i', '', $candidate );
 			}
-			if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-				$forwarded = self::rightmost_public_hop( (string) $_SERVER['HTTP_X_FORWARDED_FOR'], $remote );
-				if ( $forwarded !== '' ) {
-					$ip = $forwarded;
-				}
+		}
+
+		if ( $forwarded !== '' ) {
+			return preg_replace( '/[^0-9a-f:.]/i', '', $forwarded );
+		}
+
+		if ( $peer_is_local && ! empty( $_SERVER['HTTP_X_REAL_IP'] ) ) {
+			$candidate = trim( (string) $_SERVER['HTTP_X_REAL_IP'] );
+			if ( filter_var( $candidate, FILTER_VALIDATE_IP ) ) {
+				return preg_replace( '/[^0-9a-f:.]/i', '', $candidate );
 			}
 		}
 		return preg_replace( '/[^0-9a-f:.]/i', '', (string) $ip );
+	}
+
+	private static function is_public_ip( string $ip ): bool {
+		return (bool) filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	}
+
+	public static function cloudflare_ranges(): array {
+		$ranges = [
+			'173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+			'141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+			'197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+			'104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+			'2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32',
+			'2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
+		];
+		return (array) apply_filters( 'emblem_studio_cloudflare_ranges', $ranges );
+	}
+
+	public static function is_cloudflare_ip( string $ip ): bool {
+		foreach ( self::cloudflare_ranges() as $cidr ) {
+			if ( self::ip_in_cidr( $ip, (string) $cidr ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static function ip_in_cidr( string $ip, string $cidr ): bool {
+		$parts = explode( '/', $cidr, 2 );
+		$addr  = @inet_pton( $ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$net   = @inet_pton( $parts[0] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( $addr === false || $net === false || strlen( $addr ) !== strlen( $net ) ) {
+			return false;
+		}
+		$bits = isset( $parts[1] ) ? (int) $parts[1] : strlen( $addr ) * 8;
+		$full = intdiv( $bits, 8 );
+		if ( strncmp( $addr, $net, $full ) !== 0 ) {
+			return false;
+		}
+		$rest = $bits % 8;
+		if ( $rest === 0 ) {
+			return true;
+		}
+		$mask = ( 0xFF << ( 8 - $rest ) ) & 0xFF;
+		return ( ord( $addr[ $full ] ) & $mask ) === ( ord( $net[ $full ] ) & $mask );
 	}
 
 	public static function rightmost_public_hop( string $header, string $remote ): string {
@@ -414,5 +470,23 @@ class ES_Event_Recorder {
 			'ip'           => $ip !== '' ? mb_substr( $ip, 0, 45 ) : null,
 			'created_at'   => current_time( 'mysql' ),
 		] );
+	}
+
+	public static function purge_bot_events( int $days ): int {
+		global $wpdb;
+		$t        = ES_Install::table( 'events' );
+		$cutoff   = wp_date( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * DAY_IN_SECONDS ) );
+		$form_ids = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT form_id FROM $t" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$deleted  = 0;
+		foreach ( $form_ids as $form_id ) {
+			for ( $i = 0; $i < 20; $i++ ) {
+				$n = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM $t WHERE form_id = %d AND event_type IN ('bot_filtered', 'honeypot_blocked') AND created_at < %s LIMIT 5000", $form_id, $cutoff ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$deleted += $n;
+				if ( $n < 5000 ) {
+					break;
+				}
+			}
+		}
+		return $deleted;
 	}
 }

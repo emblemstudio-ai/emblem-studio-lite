@@ -71,6 +71,14 @@ class ES_Plugin {
 	public function run_daily_purge(): void {
 		$days = (int) apply_filters( 'emblem_studio_log_retention_days', 30 );
 		ES_Logger::purge_old( $days );
+
+		$bot_days = (int) apply_filters( 'emblem_studio_bot_retention_days', 90 );
+		if ( $bot_days > 0 ) {
+			ES_Event_Recorder::purge_bot_events( $bot_days );
+			ES_Leads::purge_bot_leads( $bot_days );
+		}
+
+		ES_Rate_Limit::purge_stale();
 	}
 
 	public function run_status_reconcile(): void {

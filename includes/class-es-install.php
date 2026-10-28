@@ -251,6 +251,7 @@ class ES_Install {
 		dbDelta( $consent_texts );
 		dbDelta( $lead_consents );
 		dbDelta( $purchases );
+		self::create_rate_limits_table();
 
 		update_option( 'emblem_studio_db_version', EMBLEM_STUDIO_DB_VERSION );
 	}
@@ -987,6 +988,32 @@ class ES_Install {
 				update_option( 'emblem_studio_db_version', '47' );
 			}
 		}
+
+		if ( version_compare( $current, '48', '<' ) ) {
+			global $wpdb;
+			self::create_rate_limits_table();
+			$t = ES_Rate_Limit::table();
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t ) {
+				foreach ( [ '_transient_esf_rl_', '_transient_timeout_esf_rl_' ] as $prefix ) {
+					$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $prefix ) . '%' ) );
+				}
+				update_option( 'emblem_studio_db_version', '48' );
+			}
+		}
+	}
+
+	private static function create_rate_limits_table(): void {
+		global $wpdb;
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		$table = ES_Rate_Limit::table();
+		$charset_collate = $wpdb->get_charset_collate();
+		dbDelta( "CREATE TABLE {$table} (
+			bucket CHAR(32) NOT NULL,
+			window_start INT(10) UNSIGNED NOT NULL,
+			hits INT(10) UNSIGNED NOT NULL DEFAULT 0,
+			PRIMARY KEY  (bucket),
+			KEY window_start (window_start)
+		) $charset_collate;" );
 	}
 
 	private static function create_purchases_table(): void {
