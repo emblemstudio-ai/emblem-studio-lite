@@ -184,7 +184,8 @@ class ES_Ajax {
 		if ( ! $form || ! ES_Form_Repo::is_currently_active( $form ) ) {
 			wp_send_json_success();
 		}
-		ES_Event_Recorder::record( $form_id, $event_type, $post_id, $shell, null, $variant );
+		$step = $event_type === 'dropoff' && isset( $_POST['step'] ) ? wp_unslash( (string) $_POST['step'] ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		ES_Event_Recorder::record( $form_id, $event_type, $post_id, $shell, null, $variant, null, $step );
 		wp_send_json_success();
 	}
 

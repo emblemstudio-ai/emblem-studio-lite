@@ -427,7 +427,20 @@
 
 	const engagedHosts = new Set();
 
-	function sendEvent(host, action) {
+	function esVisibleStep(root) {
+		if (!root || typeof root.querySelectorAll !== 'function') return '';
+		const marked = root.querySelectorAll('[data-es-step]');
+		let label = '';
+		for (let i = 0; i < marked.length; i++) {
+			const el = marked[i];
+			if (!el.getClientRects || el.getClientRects().length === 0) continue;
+			const v = String(el.getAttribute('data-es-step') || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+			if (v) label = v;
+		}
+		return label.slice(0, 64).trim();
+	}
+
+	function sendEvent(host, action, step) {
 		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
@@ -439,6 +452,7 @@
 			body.append('post_id', postId);
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
+			if (step) body.append('step', step);
 			if (navigator.sendBeacon) {
 				const blob = new Blob([body.toString()], { type: 'application/x-www-form-urlencoded' });
 				navigator.sendBeacon(ajax, blob);
@@ -452,7 +466,7 @@
 		engagedHosts.forEach(host => {
 			if (host._osSubmitted || host._osDropoffFired) return;
 			host._osDropoffFired = true;
-			sendEvent(host, 'es_dropoff');
+			sendEvent(host, 'es_dropoff', esVisibleStep(host.shadowRoot || host) || host._esStep || '');
 		});
 	}
 
@@ -580,6 +594,14 @@
 		}
 		form.addEventListener('input', onFirstInput, true);
 		form.addEventListener('change', onFirstInput, true);
+		function rememberStep() {
+			setTimeout(function () {
+				const s = esVisibleStep(host.shadowRoot || host);
+				if (s) host._esStep = s;
+			}, 0);
+		}
+		form.addEventListener('click', rememberStep, true);
+		form.addEventListener('change', rememberStep, true);
 	}
 
 	function observeViewport(host) {

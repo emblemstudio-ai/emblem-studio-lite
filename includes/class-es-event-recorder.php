@@ -5,10 +5,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ES_Event_Recorder {
 
-	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null, ?int $lead_id = null ): bool {
+	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null, ?int $lead_id = null, ?string $step = null ): bool {
+		$step    = $event_type === 'dropoff' ? self::clean_step( $step ) : '';
 		$context = [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => $lead_id ];
 		if ( ES_Measurement::policy( $context ) === 'strict' ) {
-			return ES_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id ): bool {
+			return ES_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id, $step ): bool {
 				global $wpdb;
 				$personal = $decision['personal'];
 				$row = [
@@ -19,6 +20,9 @@ class ES_Event_Recorder {
 				];
 				if ( $variant !== null && in_array( strtoupper( $variant ), [ 'A', 'B' ], true ) ) {
 					$row['variant'] = strtoupper( $variant );
+				}
+				if ( $step !== '' ) {
+					$row['step'] = $step;
 				}
 				if ( $personal ) {
 					foreach ( [ 'visitor' => 40, 'ua' => 255 ] as $key => $limit ) {
@@ -56,7 +60,18 @@ class ES_Event_Recorder {
 		if ( $vid !== '' ) {
 			$row['visitor'] = mb_substr( $vid, 0, 40 );
 		}
+		if ( $step !== '' ) {
+			$row['step'] = $step;
+		}
 		return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
+	}
+
+	public static function clean_step( ?string $step ): string {
+		if ( $step === null ) {
+			return '';
+		}
+		$clean = (string) preg_replace( '/[\x00-\x1F\x7F]+/u', ' ', $step );
+		return trim( mb_substr( trim( $clean ), 0, 64 ) );
 	}
 
 	public static function filter_bots_enabled(): bool {

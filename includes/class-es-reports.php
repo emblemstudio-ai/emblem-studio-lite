@@ -279,6 +279,88 @@ class ES_Reports {
 		return $out;
 	}
 
+	public static function dropoff_steps( object $form, ?string $shell = null, ?string $from = null, ?string $to = null ): array {
+		global $wpdb;
+		$events = ES_Install::table( 'events' );
+
+		$where  = "WHERE form_id = %d AND event_type = 'dropoff'";
+		$params = [ (int) $form->id ];
+		if ( $shell ) {
+			$where   .= ' AND type = %s';
+			$params[] = $shell;
+		}
+		if ( $from ) {
+			$where   .= ' AND created_at >= %s';
+			$params[] = self::pad_dt( $from, 'start' );
+		}
+		if ( $to ) {
+			$where   .= ' AND created_at <= %s';
+			$params[] = self::pad_dt( $to, 'end' );
+		}
+
+		$rows = (array) $wpdb->get_results( $wpdb->prepare(
+			"SELECT
+				step,
+				COUNT(*) AS n,
+				COALESCE(SUM(CASE WHEN variant = 'A' THEN 1 ELSE 0 END), 0) AS n_a,
+				COALESCE(SUM(CASE WHEN variant = 'B' THEN 1 ELSE 0 END), 0) AS n_b
+			FROM $events
+			$where
+			GROUP BY step",
+			$params
+		) );
+
+		$total    = 0;
+		$unmarked = 0;
+		foreach ( $rows as $r ) {
+			$total += (int) $r->n;
+			if ( $r->step === null || $r->step === '' ) {
+				$unmarked += (int) $r->n;
+			}
+		}
+
+		$html     = (string) ( $form->html ?? '' );
+		$variants = ES_Install::table( 'variants' );
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT html FROM $variants WHERE form_id = %d ORDER BY slot", (int) $form->id ) ) as $vh ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$html .= "\n" . (string) $vh;
+		}
+		$order = array_flip( self::step_markers( $html ) );
+
+		$steps = [];
+		foreach ( $rows as $r ) {
+			if ( $r->step === null || $r->step === '' ) {
+				continue;
+			}
+			$steps[] = [
+				'step'       => (string) $r->step,
+				'dropoffs'   => (int) $r->n,
+				'share'      => $total > 0 ? round( (int) $r->n / $total * 100, 2 ) : 0.0,
+				'dropoffs_a' => (int) $r->n_a,
+				'dropoffs_b' => (int) $r->n_b,
+			];
+		}
+		usort( $steps, static function ( array $a, array $b ) use ( $order ): int {
+			$ia = $order[ $a['step'] ] ?? PHP_INT_MAX;
+			$ib = $order[ $b['step'] ] ?? PHP_INT_MAX;
+			return ( $ia <=> $ib ) ?: ( ( $b['dropoffs'] <=> $a['dropoffs'] ) ?: strcmp( $a['step'], $b['step'] ) );
+		} );
+
+		return [ 'total' => $total, 'unmarked' => $unmarked, 'steps' => $steps ];
+	}
+
+	public static function step_markers( string $html ): array {
+		preg_match_all( '/\sdata-es-step\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', $html, $m, PREG_SET_ORDER );
+		$labels = [];
+		foreach ( $m as $hit ) {
+			$raw   = html_entity_decode( $hit[1] !== '' ? $hit[1] : ( $hit[2] ?? '' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$label = ES_Event_Recorder::clean_step( $raw );
+			if ( $label !== '' && ! in_array( $label, $labels, true ) ) {
+				$labels[] = $label;
+			}
+		}
+		return $labels;
+	}
+
 	public static function reset_stats( ?int $form_id = null, ?string $shell = null ): int {
 		global $wpdb;
 		$events = ES_Install::table( 'events' );

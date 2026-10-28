@@ -1479,7 +1479,77 @@ $check_groups = [
 						break;
 					}
 				}
+				$dropoff_steps = ES_Reports::dropoff_steps( $f );
+				$step_variants = false;
+				foreach ( $dropoff_steps['steps'] as $r ) {
+					if ( $r['dropoffs_a'] > 0 || $r['dropoffs_b'] > 0 ) {
+						$step_variants = true;
+						break;
+					}
+				}
 				?>
+				<?php if ( ! empty( $dropoff_steps['steps'] ) ) :
+					$top_step = $dropoff_steps['steps'][0];
+					foreach ( $dropoff_steps['steps'] as $r ) {
+						if ( $r['dropoffs'] > $top_step['dropoffs'] ) {
+							$top_step = $r;
+						}
+					}
+					$unmarked_share = $dropoff_steps['total'] > 0 ? round( $dropoff_steps['unmarked'] / $dropoff_steps['total'] * 100, 2 ) : 0;
+					?>
+					<h3 class="es-stats-section-heading"><?php esc_html_e( 'Where people left', 'emblem-studio' ); ?></h3>
+					<p class="es-clicks-summary">
+						<?php esc_html_e( 'The step most people left on was', 'emblem-studio' ); ?>
+						<strong><?php echo esc_html( $top_step['step'] ); ?></strong>:
+						<strong><?php echo esc_html( number_format_i18n( $top_step['dropoffs'] ) ); ?></strong>
+						<?php
+						/* translators: %s: total number of drop-offs */
+						echo esc_html( sprintf( _n( 'of %s drop-off.', 'of %s drop-offs.', $dropoff_steps['total'], 'emblem-studio' ), number_format_i18n( $dropoff_steps['total'] ) ) );
+						?>
+					</p>
+					<table class="es-stats-table">
+						<thead>
+							<tr>
+								<th><?php esc_html_e( 'Step', 'emblem-studio' ); ?></th>
+								<th class="num"><?php esc_html_e( 'Left here', 'emblem-studio' ); ?></th>
+								<th class="num"><?php esc_html_e( 'Share of drop-offs', 'emblem-studio' ); ?></th>
+								<?php if ( $step_variants ) : ?>
+									<th class="num" title="<?php esc_attr_e( 'Drop-offs while the visitor was seeing variant A.', 'emblem-studio' ); ?>"><?php esc_html_e( 'A', 'emblem-studio' ); ?></th>
+									<th class="num" title="<?php esc_attr_e( 'Drop-offs while the visitor was seeing variant B.', 'emblem-studio' ); ?>"><?php esc_html_e( 'B', 'emblem-studio' ); ?></th>
+								<?php endif; ?>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $dropoff_steps['steps'] as $r ) : ?>
+								<tr>
+									<td><?php echo esc_html( $r['step'] ); ?></td>
+									<td class="num"><?php echo esc_html( number_format_i18n( $r['dropoffs'] ) ); ?></td>
+									<td class="num"><?php echo esc_html( (string) $r['share'] ); ?>%</td>
+									<?php if ( $step_variants ) : ?>
+										<td class="num"><?php echo esc_html( number_format_i18n( $r['dropoffs_a'] ) ); ?></td>
+										<td class="num"><?php echo esc_html( number_format_i18n( $r['dropoffs_b'] ) ); ?></td>
+									<?php endif; ?>
+								</tr>
+							<?php endforeach; ?>
+							<?php if ( $dropoff_steps['unmarked'] > 0 ) : ?>
+								<tr class="es-click-row-untagged">
+									<td><?php esc_html_e( 'No step recorded', 'emblem-studio' ); ?></td>
+									<td class="num"><?php echo esc_html( number_format_i18n( $dropoff_steps['unmarked'] ) ); ?></td>
+									<td class="num"><?php echo esc_html( (string) $unmarked_share ); ?>%</td>
+									<?php if ( $step_variants ) : ?>
+										<td></td><td></td>
+									<?php endif; ?>
+								</tr>
+							<?php endif; ?>
+						</tbody>
+					</table>
+					<p class="description">
+						<?php esc_html_e( 'A drop-off is someone who started filling it in and left without sending. The step is the one on screen when they left, named by the data-es-step markers in the asset.', 'emblem-studio' ); ?>
+						<?php if ( $dropoff_steps['unmarked'] > 0 ) : ?>
+							<?php esc_html_e( '"No step recorded" counts drop-offs from before the markers were added, or on a screen without one.', 'emblem-studio' ); ?>
+						<?php endif; ?>
+					</p>
+				<?php endif; ?>
 				<h3 class="es-stats-section-heading"><?php esc_html_e( 'Clicks', 'emblem-studio' ); ?></h3>
 				<div class="es-clicks-toggle-row">
 					<label class="es-clicks-toggle">

@@ -76,9 +76,11 @@ class ES_Install {
 			visitor VARCHAR(40) NULL,
 			lead_id BIGINT(20) UNSIGNED NULL,
 			measurement_mode VARCHAR(12) NULL,
+			step VARCHAR(64) NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			KEY form_event_time (form_id, event_type, created_at),
+			KEY form_event_step (form_id, event_type, step),
 			KEY form_type_event_time (form_id, type, event_type, created_at),
 			KEY form_variant_event_time (form_id, variant, event_type, created_at),
 			KEY form_visitor_time (form_id, visitor, created_at),
@@ -970,6 +972,19 @@ class ES_Install {
 			$form_cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $forms" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( in_array( 'funnelkit_contact_status', $form_cols, true ) ) {
 				update_option( 'emblem_studio_db_version', '46' );
+			}
+		}
+
+		if ( version_compare( $current, '47', '<' ) ) {
+			global $wpdb;
+			$events = self::table( 'events' );
+			$cols   = (array) $wpdb->get_col( "SHOW COLUMNS FROM $events" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! in_array( 'step', $cols, true ) ) {
+				$wpdb->query( "ALTER TABLE $events ADD COLUMN step VARCHAR(64) NULL, ADD KEY form_event_step (form_id, event_type, step)" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			$cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $events" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( in_array( 'step', $cols, true ) ) {
+				update_option( 'emblem_studio_db_version', '47' );
 			}
 		}
 	}
