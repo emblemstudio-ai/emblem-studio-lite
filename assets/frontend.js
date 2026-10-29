@@ -479,6 +479,7 @@
 
 	let _esAnalyticsConsent = true;
 	let _esPendingVisitorWrite = null;
+	let _esVid = null;
 	function esWriteVisitorCookie(value) {
 		if (_esAnalyticsConsent) {
 			try { document.cookie = 'esf_visitor=' + value + '; max-age=2592000; path=/; samesite=lax'; } catch (e) { }
@@ -491,6 +492,7 @@
 		if (_esAnalyticsConsent && _esPendingVisitorWrite) {
 			esWriteVisitorCookie(_esPendingVisitorWrite);
 			_esPendingVisitorWrite = null;
+			_esVid = null;
 		}
 	}
 	window.EmblemStudio = window.EmblemStudio || {};
@@ -508,15 +510,15 @@
 		});
 	})();
 
-	let _esVid = null;
 	function esVisitorId() {
-		if (_esVid) return _esVid;
+		if (_esVid !== null) return _esVid;
 		let v = readCookie('esf_visitor');
 		if (!v || v.length < 16) {
 			v = (window.crypto && crypto.randomUUID)
 				? crypto.randomUUID()
 				: (Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
 			esWriteVisitorCookie(v);
+			if (readCookie('esf_visitor') !== v) v = '';
 		}
 		_esVid = v;
 		return v;

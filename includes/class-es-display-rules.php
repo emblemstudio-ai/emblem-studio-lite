@@ -374,23 +374,16 @@ class ES_Display_Rules {
 	}
 
 	public static function ensure_visitor_cookie(): void {
-		if ( ! self::any_form_uses_visitor_state() ) {
+		if ( ( $_COOKIE[ self::VISITOR_COOKIE ] ?? '' ) !== '1' || headers_sent() ) {
 			return;
 		}
-		if ( ! empty( $_COOKIE[ self::VISITOR_COOKIE ] ) ) {
-			return;
-		}
-		if ( headers_sent() ) {
-			return;
-		}
-		setcookie( self::VISITOR_COOKIE, '1', [
-			'expires'  => time() + 30 * DAY_IN_SECONDS,
+		setcookie( self::VISITOR_COOKIE, '', [
+			'expires'  => time() - YEAR_IN_SECONDS,
 			'path'     => '/',
 			'secure'   => is_ssl(),
 			'httponly' => true,
 			'samesite' => 'Lax',
 		] );
-		$_COOKIE[ self::VISITOR_COOKIE ] = '1';
 	}
 
 	private const VISITOR_STATE_USED_TRANSIENT = 'emblem_studio_uses_visitor_cookie';

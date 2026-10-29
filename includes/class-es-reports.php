@@ -182,6 +182,9 @@ class ES_Reports {
 				SUM(CASE WHEN event_type = 'click' AND click_target IN ('__close__','__backdrop__') THEN 1 ELSE 0 END) AS dismissals,
 				COUNT(DISTINCT CASE WHEN event_type = 'view' AND visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS unique_visitors,
 				COUNT(DISTINCT CASE WHEN event_type = 'conversion' AND visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS unique_conversions,
+				COUNT(DISTINCT CASE WHEN event_type = 'click' AND (click_target IS NULL OR click_target NOT IN ('__close__','__backdrop__')) AND visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS unique_clickers,
+				COUNT(DISTINCT CASE WHEN event_type = 'dropoff' AND visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS unique_droppers,
+				SUM(CASE WHEN event_type = 'conversion' AND visitor IS NOT NULL AND visitor <> '' THEN 1 ELSE 0 END) AS labelled_conversions,
 				SUM(CASE WHEN event_type = 'view' AND (visitor IS NULL OR visitor = '') THEN 1 ELSE 0 END) AS unknown_views
 			FROM $events $where",
 			$params
@@ -200,6 +203,9 @@ class ES_Reports {
 		$dis = (int) ( $row->dismissals ?? 0 );
 		$uv  = (int) ( $row->unique_visitors ?? 0 );
 		$uc  = (int) ( $row->unique_conversions ?? 0 );
+		$ucl = (int) ( $row->unique_clickers ?? 0 );
+		$udr = (int) ( $row->unique_droppers ?? 0 );
+		$lc  = (int) ( $row->labelled_conversions ?? 0 );
 
 		return [
 			'page_views'       => $pv,
@@ -220,14 +226,14 @@ class ES_Reports {
 			'unknown_views'     => (int) ( $row->unknown_views ?? 0 ),
 			'view_rate'     => $pv > 0 ? round( $v / $pv * 100, 2 ) : 0.0,
 			'conv_rate'          => $v  > 0 ? round( $c / $v  * 100, 2 ) : 0.0,
-			'conv_rate_unique'   => $uv > 0 ? round( $c / $uv * 100, 2 ) : 0.0,
+			'conv_rate_unique'   => $uv > 0 ? round( $lc / $uv * 100, 2 ) : 0.0,
 			'unique_conv_rate'   => $uv > 0 ? round( $uc / $uv * 100, 2 ) : 0.0,
-			'conversions_per_person' => $uc > 0 ? round( $c / $uc, 2 ) : 0.0,
+			'conversions_per_person' => $uc > 0 ? round( $lc / $uc, 2 ) : 0.0,
 			'ctr'                => ( $shell === 'popup-click' && $tv > 0 ) ? round( $v / $tv * 100, 2 ) : null,
 			'click_rate'          => $v  > 0 ? round( $cl_mean / $v * 100, 2 ) : 0.0,
-			'click_rate_unique'   => $uv > 0 ? round( $cl_mean / $uv * 100, 2 ) : 0.0,
+			'click_rate_unique'   => $uv > 0 ? round( $ucl / $uv * 100, 2 ) : 0.0,
 			'dropoff_rate_views'  => $v  > 0 ? round( $drop / $v * 100, 2 ) : 0.0,
-			'dropoff_rate_unique' => $uv > 0 ? round( $drop / $uv * 100, 2 ) : 0.0,
+			'dropoff_rate_unique' => $uv > 0 ? round( $udr / $uv * 100, 2 ) : 0.0,
 		];
 	}
 
@@ -633,7 +639,7 @@ class ES_Reports {
 			WHERE event_type = 'conversion' AND visitor IS NOT NULL AND visitor <> ''$scope$range";
 		$unique_conv = (int) ( $rp ? $wpdb->get_var( $wpdb->prepare( $csql, $rp ) ) : $wpdb->get_var( $csql ) );
 
-		$tsql = "SELECT COUNT(*) FROM $events WHERE event_type = 'conversion'$scope$range";
+		$tsql = "SELECT COUNT(*) FROM $events WHERE event_type = 'conversion' AND visitor IS NOT NULL AND visitor <> ''$scope$range";
 		$total_conv = (int) ( $rp ? $wpdb->get_var( $wpdb->prepare( $tsql, $rp ) ) : $wpdb->get_var( $tsql ) );
 
 		return [

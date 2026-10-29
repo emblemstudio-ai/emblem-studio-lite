@@ -523,7 +523,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::per_person_html( (float) ( $k['conversions_per_person'] ?? 0 ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<td class="col-stat es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? (int) $k['dropoffs'] : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
-						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — drop-off events per person (can exceed 100%)', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<?php
 						$clicks_tracked = ! empty( $f->track_clicks );
 						?>
@@ -531,7 +531,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 							echo ! $k ? '—' : ( $clicks_tracked ? (int) $k['meaningful_clicks'] : '<span style="color:#8a8a8a;">—</span>' );
 						?></td>
 						<td class="col-stat-narrow es-col-click"><?php
-							echo ! $k ? '—' : ( $clicks_tracked ? ES_Reports::rate_pair_html( (float) $k['click_rate'], (float) $k['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — engaged clicks per person (can exceed 100%)', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' );
+							echo ! $k ? '—' : ( $clicks_tracked ? ES_Reports::rate_pair_html( (float) $k['click_rate'], (float) $k['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' );
 						?></td>
 						<td class="col-stat"><?php
 							echo ! $k ? '—' : ( (int) $k['bot_filtered'] > 0 ? esc_html( number_format_i18n( (int) $k['bot_filtered'] ) ) : '<span style="color:#8a8a8a;">—</span>' );
