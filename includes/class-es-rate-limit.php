@@ -52,6 +52,31 @@ final class ES_Rate_Limit {
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM $t WHERE bucket = %s", $bucket ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
+	public static function claim_once( string $key, int $ttl ): bool {
+		$bucket = md5( 'once:' . $key );
+		$now    = time();
+
+		if ( wp_using_ext_object_cache() ) {
+			return (bool) wp_cache_add( $bucket, 1, self::CACHE_GROUP, max( 1, $ttl ) );
+		}
+
+		global $wpdb;
+		$t  = self::table();
+		$ok = $wpdb->query( $wpdb->prepare(
+			"INSERT INTO $t (bucket, window_start, hits) VALUES (%s, %d, 1)
+			 ON DUPLICATE KEY UPDATE hits = IF(window_start < %d, 1, hits + 1), window_start = IF(window_start < %d, %d, window_start)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$bucket,
+			$now + $ttl,
+			$now,
+			$now,
+			$now + $ttl
+		) );
+		if ( $ok === false ) {
+			return true;
+		}
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM $t WHERE bucket = %s", $bucket ) ) === 1; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
 	public static function purge_stale(): int {
 		global $wpdb;
 		$t = self::table();

@@ -637,8 +637,32 @@
 		input.autocomplete = 'off';
 		wrap.appendChild(input);
 		form._esHoneypot = input;
-		form._esReadyAt = Date.now();
+		form.addEventListener('focusin', function () { requestStamp(form); }, { capture: true, once: true });
 		(form.parentNode || form).insertBefore(wrap, form.nextSibling);
+	}
+
+	const STAMP_WAIT_MS = 1500;
+	function requestStamp(form) {
+		if (form._esStampP) return form._esStampP;
+		const root = form.getRootNode && form.getRootNode();
+		const host = root && root.host;
+		const formId = host && host.getAttribute('data-esf-id');
+		if (!formId) return Promise.resolve('');
+		const body = new FormData();
+		body.append('action', 'es_stamp');
+		body.append('form_id', formId);
+		const p = fetch(ajax, { method: 'POST', body: body, credentials: 'same-origin' })
+			.then(function (r) { return r.ok ? r.json() : null; })
+			.then(function (j) { return (j && j.data && j.data.stamp) || ''; })
+			.catch(function () { return ''; });
+		form._esStampP = p;
+		p.then(function (stamp) { if (!stamp && form._esStampP === p) form._esStampP = null; });
+		return p;
+	}
+	function stampForSubmit(form) {
+		const p = requestStamp(form);
+		form._esStampP = null;
+		return Promise.race([p, new Promise(function (r) { setTimeout(function () { r(''); }, STAMP_WAIT_MS); })]);
 	}
 
 	function hasInlineThankYou(shadow) {
@@ -822,10 +846,7 @@
 		data.append('form_id', formId);
 
 		if (form._esHoneypot) data.append('esf_hp', form._esHoneypot.value);
-		if (form._esReadyAt) {
-			data.append('es_el', String(Date.now() - form._esReadyAt));
-			data.append('es_ts', String(form._esReadyAt));
-		}
+		const stampP = stampForSubmit(form);
 		data.append('post_id', postId);
 		data.append('vid', esVisitorId());
 
@@ -851,6 +872,8 @@
 		};
 
 		try { await enrichWithGeo(data); } catch (e) { }
+		const stamp = await stampP;
+		if (stamp) data.append('es_stamp', stamp);
 
 		fetch(ajax, { method: 'POST', body: data, credentials: 'same-origin' })
 			.then(r => r.json().then(j => ({ ok: r.ok, status: r.status, json: j })))

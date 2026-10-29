@@ -204,47 +204,17 @@ class ES_Event_Recorder {
 	}
 
 	public static function datacenter_providers(): array {
-		return array_keys( self::datacenter_ranges() );
+		return array_values( array_unique( array_merge( self::published_ranges()['providers'], array_keys( self::datacenter_ranges() ) ) ) );
 	}
 
 	public static function datacenter_ranges(): array {
 		$ranges = [
-			'DigitalOcean' => [
-				'45.55.0.0/16', '46.101.0.0/16', '64.225.0.0/16', '64.226.0.0/16', '64.227.0.0/16',
-				'68.183.0.0/16', '95.85.0.0/16', '104.131.0.0/16', '104.236.0.0/16', '128.199.0.0/16',
-				'134.122.0.0/16', '134.209.0.0/16', '137.184.0.0/16', '138.68.0.0/16', '138.197.0.0/16',
-				'139.59.0.0/16', '142.93.0.0/16', '143.110.0.0/16', '143.198.0.0/16', '146.190.0.0/16',
-				'157.230.0.0/16', '157.245.0.0/16', '159.65.0.0/16', '159.89.0.0/16', '159.203.0.0/16',
-				'159.223.0.0/16', '161.35.0.0/16', '164.90.0.0/16', '164.92.0.0/16', '165.22.0.0/16',
-				'165.227.0.0/16', '167.71.0.0/16', '167.99.0.0/16', '167.172.0.0/16', '170.64.0.0/16',
-				'174.138.0.0/16', '178.62.0.0/16', '178.128.0.0/16', '188.166.0.0/16', '192.241.0.0/16',
-				'198.199.0.0/16', '206.189.0.0/16', '209.38.0.0/16', '209.97.0.0/16',
-			],
-			'GCP' => [
-				'34.64.0.0/10', '34.128.0.0/10', '35.184.0.0/13', '35.192.0.0/13', '35.208.0.0/12',
-				'104.196.0.0/14', '130.211.0.0/16', '146.148.0.0/17',
-			],
-			'Azure' => [
-				'20.0.0.0/8', '4.128.0.0/9', '40.64.0.0/10', '13.64.0.0/11', '52.224.0.0/11',
-				'104.40.0.0/13', '23.96.0.0/13', '65.52.0.0/14', '137.116.0.0/15', '168.61.0.0/16',
-				'191.232.0.0/13',
-			],
-			'AWS' => [
-				'3.0.0.0/8', '13.32.0.0/15', '15.156.0.0/14', '18.32.0.0/11', '18.64.0.0/10',
-				'18.128.0.0/9', '34.192.0.0/10', '35.152.0.0/13', '44.192.0.0/10', '50.16.0.0/14',
-				'52.0.0.0/8', '54.64.0.0/11', '54.144.0.0/12', '54.160.0.0/11', '54.192.0.0/11',
-				'54.224.0.0/11', '99.77.0.0/16', '100.20.0.0/14', '107.20.0.0/14', '184.72.0.0/15',
-			],
-			'Linode' => [
-				'45.33.0.0/16', '45.56.0.0/16', '45.79.0.0/16', '50.116.0.0/16', '66.228.32.0/19',
-				'69.164.192.0/19', '96.126.96.0/19', '139.144.0.0/16', '139.162.0.0/16', '172.104.0.0/15',
-				'172.232.0.0/14', '178.79.128.0/18', '198.58.96.0/19',
-			],
 			'Hetzner' => [
 				'5.9.0.0/16', '49.12.0.0/15', '65.108.0.0/15', '78.46.0.0/15', '88.99.0.0/16',
 				'94.130.0.0/16', '95.216.0.0/15', '116.202.0.0/15', '136.243.0.0/16', '138.201.0.0/16',
 				'144.76.0.0/16', '148.251.0.0/16', '159.69.0.0/16', '168.119.0.0/16', '176.9.0.0/16',
 				'178.63.0.0/16', '188.40.0.0/16', '195.201.0.0/16',
+				'2a01:4f8::/32', '2a01:4f9::/32',
 			],
 			'OVH' => [
 				'5.135.0.0/16', '37.59.0.0/16', '37.187.0.0/16', '46.105.0.0/16', '51.68.0.0/14',
@@ -252,35 +222,52 @@ class ES_Event_Recorder {
 				'54.36.0.0/16', '91.121.0.0/16', '92.222.0.0/16', '94.23.0.0/16', '137.74.0.0/16',
 				'145.239.0.0/16', '147.135.0.0/16', '151.80.0.0/16', '158.69.0.0/16', '167.114.0.0/16',
 				'178.32.0.0/15', '188.165.0.0/16',
-			],
-			'Oracle Cloud' => [
-				'129.146.0.0/16', '129.213.0.0/16', '132.145.0.0/16', '140.238.0.0/16', '150.136.0.0/16',
-				'152.67.0.0/16', '152.69.0.0/16', '158.101.0.0/16', '158.178.0.0/16', '168.138.0.0/16',
-				'193.122.0.0/16', '193.123.0.0/16',
+				'2001:41d0::/32',
 			],
 		];
 		return (array) apply_filters( 'emblem_studio_datacenter_ranges', $ranges );
 	}
 
+	public static function published_ranges(): array {
+		static $data = null;
+		if ( $data === null ) {
+			$raw  = is_readable( __DIR__ . '/data/datacenter-ranges.php' ) ? (array) require __DIR__ . '/data/datacenter-ranges.php' : [];
+			$data = [
+				'providers' => (array) ( $raw['providers'] ?? [] ),
+				'v4'        => (string) base64_decode( (string) ( $raw['v4'] ?? '' ) ),
+				'v6'        => (string) base64_decode( (string) ( $raw['v6'] ?? '' ) ),
+			];
+		}
+		return $data;
+	}
+
 	public static function datacenter_provider( string $ip ): string {
-		if ( $ip === '' || strpos( $ip, ':' ) !== false ) {
+		$addr = $ip === '' ? false : @inet_pton( trim( $ip ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( $addr === false ) {
 			return '';
 		}
-		$ipl = ip2long( $ip );
-		if ( $ipl === false ) {
-			return '';
+		$data  = self::published_ranges();
+		$width = strlen( $addr );
+		$table = $width === 4 ? $data['v4'] : $data['v6'];
+		$size  = $width * 2 + 1;
+		$lo = 0;
+		$hi = intdiv( strlen( $table ), $size ) - 1;
+		$at = -1;
+		while ( $lo <= $hi ) {
+			$mid = ( $lo + $hi ) >> 1;
+			if ( strcmp( substr( $table, $mid * $size, $width ), $addr ) <= 0 ) {
+				$at = $mid;
+				$lo = $mid + 1;
+			} else {
+				$hi = $mid - 1;
+			}
 		}
-		$ipl &= 0xFFFFFFFF;
+		if ( $at >= 0 && strcmp( $addr, substr( $table, $at * $size + $width, $width ) ) <= 0 ) {
+			return (string) ( $data['providers'][ ord( $table[ $at * $size + $width * 2 ] ) ] ?? '' );
+		}
 		foreach ( self::datacenter_ranges() as $provider => $cidrs ) {
-			foreach ( $cidrs as $cidr ) {
-				$parts = explode( '/', $cidr );
-				$base  = ip2long( $parts[0] );
-				if ( $base === false ) {
-					continue;
-				}
-				$bits = isset( $parts[1] ) ? (int) $parts[1] : 32;
-				$mask = ( $bits >= 32 ) ? 0xFFFFFFFF : ( ( 0xFFFFFFFF << ( 32 - $bits ) ) & 0xFFFFFFFF );
-				if ( ( $ipl & $mask ) === ( ( $base & 0xFFFFFFFF ) & $mask ) ) {
+			foreach ( (array) $cidrs as $cidr ) {
+				if ( self::ip_in_cidr( trim( $ip ), (string) $cidr ) ) {
 					return (string) $provider;
 				}
 			}
@@ -383,11 +370,25 @@ class ES_Event_Recorder {
 		return (array) apply_filters( 'emblem_studio_bot_user_agents', $patterns );
 	}
 
+	public static function human_ua_words(): array {
+		return (array) apply_filters( 'emblem_studio_human_user_agent_words', [ 'Cubot' ] );
+	}
+
+	private static function ua_for_matching( string $ua ): string {
+		foreach ( self::human_ua_words() as $word ) {
+			if ( $word !== '' ) {
+				$ua = str_ireplace( (string) $word, ' ', $ua );
+			}
+		}
+		return $ua;
+	}
+
 	public static function is_bot_request(): bool {
 		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
 		if ( $ua === '' ) {
 			return true;
 		}
+		$ua = self::ua_for_matching( $ua );
 		foreach ( self::bot_patterns() as $needle ) {
 			if ( $needle !== '' && stripos( $ua, $needle ) !== false ) {
 				return true;
@@ -403,6 +404,7 @@ class ES_Event_Recorder {
 		if ( $ua === '' ) {
 			return '(no user-agent)';
 		}
+		$ua = self::ua_for_matching( $ua );
 		foreach ( self::bot_catalog() as $entry ) {
 			if ( stripos( $ua, $entry[0] ) !== false ) {
 				return $entry[1];

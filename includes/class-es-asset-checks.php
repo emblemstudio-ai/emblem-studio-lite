@@ -21,6 +21,7 @@ class ES_Asset_Checks {
 		'page',
 		'vid',
 		'esf_hp',
+		'es_stamp',
 		'es_ts',
 		'es_el',
 		'es_preview',

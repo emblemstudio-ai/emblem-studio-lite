@@ -173,15 +173,18 @@ class ES_Leads {
 		}
 
 		if ( empty( $signals['ts_received'] ) ) {
-			$trap = __( 'The hidden trap came back filled, and the submission carried no timing at all, so it never ran our script.', 'emblem-studio' );
+			$trap = __( 'The hidden trap came back filled, and the submission carried no valid time stamp, so it never ran our script.', 'emblem-studio' );
 		} elseif ( ! empty( $signals['clock_skew'] ) ) {
 			$ahead = abs( round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 ) );
 			/* translators: %s: seconds this visitor's device clock runs ahead of the server's. */
 			$trap  = sprintf( __( "The hidden trap came back filled, but this visitor's device clock runs about %ss ahead of ours, so the speed check had nothing readable to go on.", 'emblem-studio' ), $ahead );
 		} else {
 			$seconds = round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 );
-			/* translators: %s: seconds between the form appearing and the submission. */
-			$trap    = sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after it appeared.', 'emblem-studio' ), $seconds );
+			$trap = ( $signals['timing'] ?? null ) === 'stamp'
+				/* translators: %s: seconds between the visitor starting on the form and the submission. */
+				? sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after the visitor started on it.', 'emblem-studio' ), $seconds )
+				/* translators: %s: seconds between the form appearing and the submission. */
+				: sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after it appeared.', 'emblem-studio' ), $seconds );
 		}
 
 		$ua = (string) ( $signals['ua_bot'] ?? '' );

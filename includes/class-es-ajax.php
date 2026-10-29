@@ -34,6 +34,8 @@ class ES_Ajax {
 		add_action( 'wp_ajax_nopriv_es_engage',       [ $this, 'engage' ] );
 		add_action( 'wp_ajax_es_dropoff',             [ $this, 'dropoff' ] );
 		add_action( 'wp_ajax_nopriv_es_dropoff',      [ $this, 'dropoff' ] );
+		add_action( 'wp_ajax_es_stamp',               [ $this, 'stamp' ] );
+		add_action( 'wp_ajax_nopriv_es_stamp',        [ $this, 'stamp' ] );
 		add_action( 'wp_ajax_es_submit',              [ $this, 'submit' ] );
 		add_action( 'wp_ajax_nopriv_es_submit',       [ $this, 'submit' ] );
 		add_action( 'wp_ajax_es_test_webhook',        [ $this, 'test_webhook' ] );
@@ -74,6 +76,14 @@ class ES_Ajax {
 
 	public function engage(): void {
 		$this->record_event( 'engage' );
+	}
+
+	public function stamp(): void {
+		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
+		if ( ! $form_id || $this->bucket_exceeded( 'stamp', 60, 60 ) ) {
+			wp_send_json_success( [ 'stamp' => '' ] );
+		}
+		wp_send_json_success( [ 'stamp' => ES_Form_Stamp::issue( (string) $form_id ) ] );
 	}
 
 	public function dropoff(): void {
@@ -222,21 +232,14 @@ class ES_Ajax {
 
 		$is_preview = ! empty( $_POST['es_preview'] ) && current_user_can( 'edit_posts' );
 
-		$trap_filled   = ! empty( $_POST['esf_hp'] );
-		$form_ready_at = isset( $_POST['es_ts'] ) ? (int) $_POST['es_ts'] : 0;
+		$trap_filled = ! empty( $_POST['esf_hp'] );
 
-		if ( isset( $_POST['es_el'] ) && $_POST['es_el'] !== '' ) {
-			$timing_source = 'client';
-			$elapsed_ms    = (int) $_POST['es_el'];
-		} elseif ( $form_ready_at > 0 ) {
-			$timing_source = 'server';
-			$elapsed_ms    = (int) round( microtime( true ) * 1000 ) - $form_ready_at;
-		} else {
-			$timing_source = null;
-			$elapsed_ms    = null;
+		$stamp      = isset( $_POST['es_stamp'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['es_stamp'] ) ) : '';
+		$stamped_at = ES_Form_Stamp::issued_at( $stamp, (string) $form_id );
+		if ( $stamped_at !== null && $trap_filled && ! ES_Form_Stamp::claim( $stamp ) ) {
+			$stamped_at = null;
 		}
-
-		$clock_skew  = $timing_source === 'server' && $elapsed_ms < 0;
+		$elapsed_ms  = $stamped_at !== null ? (int) round( microtime( true ) * 1000 ) - $stamped_at : null;
 		$looks_human = $elapsed_ms !== null && $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS;
 
 		$ua        = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
@@ -247,20 +250,18 @@ class ES_Ajax {
 		$bot_label = $ua_bot !== '' ? $ua_bot : $dc;
 		$named_bot = $bot_label !== '';
 
-		$ran_our_script = $timing_source !== null;
+		$ran_our_script = $stamped_at !== null;
 		$hp_filled      = $trap_filled
 			&& ! $looks_human
-			&& ! $clock_skew
 			&& ( ! $ran_our_script || $named_bot );
 
 		$bot_signals = null;
 		if ( $trap_filled ) {
 			$bot_signals = [
 				'hp_filled'   => true,
-				'ts_received' => $timing_source !== null,
+				'ts_received' => $stamped_at !== null,
 				'elapsed_ms'  => $elapsed_ms,
-				'timing'      => $timing_source,
-				'clock_skew'  => $clock_skew,
+				'timing'      => $stamped_at !== null ? 'stamp' : null,
 				'ua_bot'      => $ua_bot !== '' ? $ua_bot : null,
 				'datacenter'  => $dc !== '' ? $dc : null,
 			];
@@ -386,7 +387,7 @@ class ES_Ajax {
 
 		$reserved      = [
 			'email', 'first_name', 'last_name', 'name', 'phone',
-			'form_id', 'esf_hp', 'es_ts', 'es_el', 'esf_tag', 'esf_list',
+			'form_id', 'esf_hp', 'es_stamp', 'es_ts', 'es_el', 'esf_tag', 'esf_list',
 			'action', '_wpnonce', '_wp_http_referer',
 		];
 		$allowed       = $this->allowed_field_names( $form );
@@ -661,7 +662,7 @@ class ES_Ajax {
 	private function collect_fields(): array {
 		$out = [];
 		foreach ( $_POST as $k => $v ) {
-			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_ts', 'es_el' ], true ) ) {
+			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_stamp', 'es_ts', 'es_el' ], true ) ) {
 				continue;
 			}
 			$out[ $k ] = self::sanitize_field_value( wp_unslash( $v ) );
