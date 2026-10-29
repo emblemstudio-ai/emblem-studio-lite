@@ -226,7 +226,6 @@ class ES_Reports {
 			'unknown_views'     => (int) ( $row->unknown_views ?? 0 ),
 			'view_rate'     => $pv > 0 ? round( $v / $pv * 100, 2 ) : 0.0,
 			'conv_rate'          => $v  > 0 ? round( $c / $v  * 100, 2 ) : 0.0,
-			'conv_rate_unique'   => $uv > 0 ? round( $lc / $uv * 100, 2 ) : 0.0,
 			'unique_conv_rate'   => $uv > 0 ? round( $uc / $uv * 100, 2 ) : 0.0,
 			'conversions_per_person' => $uc > 0 ? round( $lc / $uc, 2 ) : 0.0,
 			'ctr'                => ( $shell === 'popup-click' && $tv > 0 ) ? round( $v / $tv * 100, 2 ) : null,
