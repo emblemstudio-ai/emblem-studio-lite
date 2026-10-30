@@ -1,11 +1,3 @@
-/* ============================================================
- * Emblem Studio admin — self-hosted brand fonts
- * ============================================================
- * Inter (body/UI) + Titillium Web (display/headings), shipped in
- * assets/fonts/ so the admin never depends on Google Fonts (avoids
- * the offline-blank-font failure and the EU GDPR concern of phoning
- * Google on every admin load). woff2 only — every browser we target
- * supports it. font-display: swap so text paints immediately. */
 @font-face {
 	font-family: 'Inter';
 	font-style: normal;
@@ -56,35 +48,18 @@
 	src: url('fonts/titillium-web-700.woff2') format('woff2');
 }
 
-/* ============================================================
- * Emblem Studio admin — design tokens (Pass 1 of redesign)
- * ============================================================
- * Scoped to .emblem-studio-wrap so the variables only live on our
- * pages and the rest of wp-admin keeps its native palette. Token
- * decisions are documented in docs/DESIGN-SYSTEM.md — change a
- * value there first, then mirror it here.
- *
- * The accent tokens (--es-accent, -hover, -active, -soft) are the
- * single fixed Sunset brand theme, defined in the brand section
- * below. (They used to be injected per-install by ES_Theme, which
- * has been removed now that the admin ships one theme.) */
 .emblem-studio-wrap {
-	/* Neutral ramp — warm "Sunset → Dusk" neutrals (cream → night ink).
-	   Replaces the old cool slate ramp; same token names so every
-	   component that consumes the surface tokens below inherits the
-	   warm rebrand without edits. */
-	--es-gray-50:  #fffaf3;   /* warm page bg (cream) */
-	--es-gray-100: #fbf1e6;   /* warm hover tint */
-	--es-gray-200: #efe6da;   /* warm border */
-	--es-gray-300: #e7ddcf;   /* stronger border */
-	--es-gray-400: #9aa0b0;   /* faint text */
-	--es-gray-500: #6c7180;   /* muted text */
-	--es-gray-600: #555a72;   /* dense UI text */
-	--es-gray-700: #353a52;   /* body text (dusk ink-2) */
-	--es-gray-800: #22273f;   /* headings */
-	--es-gray-900: #181a2e;   /* max contrast (dusk ink) */
+	--es-gray-50:  #fffaf3;
+	--es-gray-100: #fbf1e6;
+	--es-gray-200: #efe6da;
+	--es-gray-300: #e7ddcf;
+	--es-gray-400: #9aa0b0;
+	--es-gray-500: #6c7180;
+	--es-gray-600: #555a72;
+	--es-gray-700: #353a52;
+	--es-gray-800: #22273f;
+	--es-gray-900: #181a2e;
 
-	/* Surface tokens — components consume these, never the raw ramp */
 	--es-surface:        #ffffff;
 	--es-surface-muted:  var(--es-gray-50);
 	--es-surface-hover:  var(--es-gray-100);
@@ -95,7 +70,6 @@
 	--es-text-muted:     var(--es-gray-500);
 	--es-text-faint:     var(--es-gray-400);
 
-	/* Semantic — locked, same regardless of accent choice */
 	--es-success:       #16a34a;
 	--es-success-soft:  #dcfce7;
 	--es-warning:       #d97706;
@@ -105,7 +79,6 @@
 	--es-info:          #0284c7;
 	--es-info-soft:     #e0f2fe;
 
-	/* Typography — Inter for body/UI, Titillium Web for display/headings */
 	--es-font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 	--es-font-display: 'Titillium Web', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--es-font-mono:  ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -121,7 +94,6 @@
 	--es-tracking-tight:  normal;
 	--es-tracking-wide:   0.06em;
 
-	/* Spacing — multiples of 4 */
 	--es-space-1: 4px;
 	--es-space-2: 8px;
 	--es-space-3: 12px;
@@ -131,29 +103,21 @@
 	--es-space-7: 48px;
 	--es-space-8: 64px;
 
-	/* Radii */
 	--es-radius-sm:   4px;
 	--es-radius-md:   6px;
 	--es-radius-lg:   10px;
 	--es-radius-pill: 9999px;
 
-	/* Shadows — minimal, soft */
 	--es-shadow-xs: 0 1px 1px rgba(15, 23, 42, 0.04);
 	--es-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
 	--es-shadow-md: 0 4px 6px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
 	--es-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
 
-	/* Motion */
 	--es-duration-fast:   120ms;
 	--es-duration-normal: 180ms;
 	--es-duration-slow:   240ms;
 	--es-easing:          cubic-bezier(0.4, 0, 0.2, 1);
 
-	/* ---------- Brand: Sunset → Dusk ----------
-	   The true emblem gradient (gold → orange → pink) is reserved for the
-	   logo mark so the brand stays vivid; the muted --es-sunset carries
-	   everything else (bars, primary buttons, accents). Dusk = the deep
-	   navy "sky after sundown" used for dark accents, badges, footers. */
 	--es-gold:        #EAA63C;
 	--es-orange:      #E27D40;
 	--es-pink:        #D85F82;
@@ -168,28 +132,16 @@
 	--es-dusk-soft:   #eef1f8;
 	--es-shadow-sun:  0 12px 26px rgba(200, 110, 60, 0.22);
 
-	/* Accent — the single fixed Sunset brand theme. Previously injected
-	   per-install by ES_Theme::inline_css(); now hardcoded here since the
-	   admin ships one theme. Components read these via var(--es-accent…). */
 	--es-accent:        #E27D40;
 	--es-accent-hover:  #cf6730;
 	--es-accent-active: #b85426;
 	--es-accent-soft:   #fbeede;
 
-	/* Re-point WordPress's own admin color-scheme variable to our accent,
-	   scoped to our pages. WP paints native checkboxes/radios (and a few
-	   other controls) by filling the box with var(--wp-admin-theme-color);
-	   overriding it here turns all those blue controls sunset orange in one
-	   place, instead of fighting each :checked/::before rule. */
 	--wp-admin-theme-color:            var(--es-accent);
 	--wp-admin-theme-color-darker-10:  var(--es-accent-hover);
 	--wp-admin-theme-color-darker-20:  var(--es-accent-active);
 }
 
-/* Typography + page surface for the entire Emblem Studio admin scope.
- * Inter falls through to system-ui if the woff2 isn't installed locally
- * — future polish step is dropping the font files into assets/fonts/
- * so it's used everywhere; for now system-ui carries the look. */
 .emblem-studio-wrap {
 	font-family: var(--es-font-sans);
 	font-size: var(--es-text-base);
@@ -197,10 +149,6 @@
 	color: var(--es-text);
 	background: var(--es-surface-muted);
 	min-height: 100vh;
-	/* margin:0 (not negative) — let the wrap fill its parent's content
-	 * area. Negative margins here overflow #wpbody-content's right edge
-	 * because the parent has no padding-right to absorb them, which
-	 * causes a horizontal scrollbar on every admin page. */
 	margin: 0;
 	padding: var(--es-space-5) var(--es-space-5) var(--es-space-7);
 	box-sizing: border-box;
@@ -226,21 +174,15 @@
 	color: var(--es-text-muted);
 	font-size: var(--es-text-sm);
 }
-/* WordPress wraps every form-table value cell text in tiny gray;
- * align with our scale so it doesn't read as "default WP UI" anymore. */
 .emblem-studio-wrap .form-table td,
 .emblem-studio-wrap .form-table th {
 	font-size: var(--es-text-base);
 	color: var(--es-text-strong);
 }
 
-/* Cards — promote big content groupings to floating surfaces over
- * the muted page background. .widefat is a WP table class we already
- * use on Settings; .es-form-editor, .es-tab-panel are ours. */
 .emblem-studio-wrap > h1 {
 	margin: 0 0 var(--es-space-5);
 }
-/* "← Forms & Assets" above the editor title, the web app's "← Forms". */
 .emblem-studio-wrap > .es-back-link {
 	margin: 0 0 var(--es-space-2);
 }
@@ -251,11 +193,6 @@
 .emblem-studio-wrap > .es-back-link a:hover {
 	text-decoration: underline;
 }
-/* .es-form-editor is intentionally not a card — it's an invisible
- * <form> wrapper. The form-header inside it IS a card (sticky top,
- * rounded corners, shadow) and each tab-panel IS a card too. Making
- * the form-editor a card too would stack card-in-card and force
- * negative margins on the header that overflow the parent. */
 .emblem-studio-wrap .widefat,
 .emblem-studio-wrap .es-tab-panel {
 	background: var(--es-surface);
@@ -268,7 +205,7 @@
 }
 .emblem-studio-wrap .widefat {
 	box-shadow: var(--es-shadow-xs);
-	overflow: hidden;                       /* clip rounded corners */
+	overflow: hidden;
 }
 .emblem-studio-wrap .widefat tbody td {
 	border-bottom: 1px solid var(--es-border);
@@ -276,28 +213,13 @@
 
 .emblem-studio-wrap .CodeMirror { border: 1px solid #c3c4c7; height: 520px !important; }
 .emblem-studio-wrap .CodeMirror-scroll { min-height: 520px; }
-/* CodeMirror's caret can render near-white under some themes (depends on
-   the user's WP admin color scheme). Force a dark, always-visible caret. */
 .emblem-studio-wrap .CodeMirror-cursor {
 	border-left: 1.5px solid #1d2327 !important;
 }
-/* ── The text I-beam ──────────────────────────────────────────────────────
-   Windows 11 ships a WHITE mouse cursor by default, so the I-beam over a
-   light field is white on white and disappears — the field looks dead until
-   you click it. Supplying our own cursor image is the only thing that stops
-   the OS theme winning. Full write-up: the SaaS repo's
-   docs/WINDOWS-CARET-QUIRK.md.
-
-   Shape tuned by hand in the SaaS repo's public/cursor-lab.html. inspector.css
-   here, the SaaS's resources/css/app.css, and the IBEAM constant in both
-   repos' embed runtimes all carry an identical copy — change them together. */
 .emblem-studio-wrap {
 	--es-ibeam: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23ffffff'%20stroke-width='2'%20stroke-opacity='0.85'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3Cpath%20stroke='%2352585b'%20stroke-width='1'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3C/g%3E%3C/svg%3E") 8 8, text;
 }
 
-/* Every text-entry surface on our admin screens, not just the code editor.
-   Checkboxes, radios and buttons are excluded — not text, so they keep their
-   own pointer. */
 .emblem-studio-wrap input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=range]):not([type=image]),
 .emblem-studio-wrap textarea,
 .emblem-studio-wrap [contenteditable] {
@@ -315,10 +237,9 @@
 .emblem-studio-wrap .es-success-field { display: none; }
 .emblem-studio-wrap .es-success-field.is-visible { display: table-row; }
 
-/* ---- Form-edit tabbed layout ---- */
 .emblem-studio-wrap .es-form-header {
 	position: sticky;
-	top: 32px; /* below WP admin bar */
+	top: 32px;
 	z-index: 50;
 	background: var(--es-surface);
 	margin: 0 0 var(--es-space-5);
@@ -327,11 +248,8 @@
 	border-radius: var(--es-radius-lg);
 	box-shadow: var(--es-shadow-sm);
 	box-sizing: border-box;
-	overflow: hidden; /* clip the sunset accent bar to the rounded corners */
+	overflow: hidden;
 }
-/* Sunset accent bar across the top of the editor's sticky header — the
-   same brand signal the KPI cards carry, so the editor reads as part of
-   the redesign even at rest. */
 .emblem-studio-wrap .es-form-header::before {
 	content: '';
 	position: absolute;
@@ -391,9 +309,6 @@
 }
 .emblem-studio-wrap .es-form-header-name::placeholder { color: var(--es-text-faint); font-weight: 400; }
 
-/* "Asset saved" toast — a small pill that floats over the content (fixed,
-   so it never reflows the page) and self-dismisses. No close button:
-   it animates in, holds ~0.75s, animates out. JS toggles .is-in / .is-out. */
 .es-toast {
 	position: fixed;
 	top: 60px;
@@ -402,9 +317,6 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	/* Short confirmations stay a tidy one-line pill; longer notices (e.g.
-	   "Form duplicated. You're now editing the copy…") wrap within this cap
-	   instead of running off-screen. */
 	max-width: min(460px, calc(100vw - 40px));
 	padding: 8px 16px;
 	border-radius: 18px;
@@ -438,10 +350,6 @@
 	.es-toast.is-out { transform: translateX(-50%); }
 }
 
-/* Custom date picker (reports filters) — replaces the native calendar so we
-   control which days are disabled and can show a cursor-following tooltip over
-   exactly the pre-first-date days. The native input stays for form submission
-   but is visually hidden (.es-dp-native). */
 .emblem-studio-wrap .es-dp { position: relative; display: inline-block; }
 .emblem-studio-wrap .es-dp-native {
 	position: absolute !important;
@@ -455,8 +363,6 @@
 	justify-content: space-between;
 	gap: 10px;
 	min-width: 160px;
-	/* Match the native select / input control height (36px) so the From/To
-	   fields line up with the Form/Shell selects in the filter row. */
 	height: 36px;
 	padding: 0 12px;
 	box-sizing: border-box;
@@ -582,9 +488,6 @@
 }
 .emblem-studio-wrap .es-dp-tip.is-visible { opacity: 1; }
 
-/* Status toggle — a switch in the form-header that flips Active / Inactive.
-   The visible control is a button[role=switch]; a hidden input carries the
-   "active"/"inactive" value so the form submits exactly as before. */
 .emblem-studio-wrap .es-status-toggle {
 	display: inline-flex;
 	align-items: center;
@@ -632,9 +535,6 @@
 }
 .emblem-studio-wrap .es-form-header[data-status="active"] .es-status-text { color: #1d2327; }
 
-/* TEST pill — only renders next to the status pill while an A/B test
-   is running on the form. Different shape + color from the status
-   pill so it reads as a separate piece of info, not a status state. */
 .emblem-studio-wrap .es-test-pill {
 	display: inline-flex;
 	align-items: center;
@@ -663,8 +563,6 @@
 	50%      { opacity: 0.4; }
 }
 
-/* A/B test badge on the Forms list — marks rows whose form has a
-   running test. Links to that form's Stats tab (winner declaration). */
 .emblem-studio-wrap .es-ab-badge {
 	display: inline-flex;
 	align-items: center;
@@ -696,17 +594,9 @@
 }
 .emblem-studio-wrap .es-ab-badge:hover .es-ab-badge-dot { background: #fff; }
 
-/* A/B variant pane — wraps a complete editor pair (HTML + CSS) per
-   slot when a test is running. Inactive pane is hidden; tab clicks
-   toggle .is-active to reveal one or the other. */
 .emblem-studio-wrap .es-ab-pane { display: none; }
 .emblem-studio-wrap .es-ab-pane.is-active { display: block; }
 
-/* A/B variant strip — lives above the editors grid on the Design tab.
-   Two states:
-     .es-ab-strip--idle    → just a "Start A/B test" button + tagline
-     .es-ab-strip--running → A/B tabs + day counter
-*/
 .emblem-studio-wrap .es-ab-strip {
 	display: flex;
 	align-items: center;
@@ -726,14 +616,6 @@
 .emblem-studio-wrap .es-ab-strip--running {
 	border-color: #c9d0e6;
 	background: var(--es-dusk-soft);
-	/* Dock below the sticky form header so the user can switch slots
-	   without scrolling back to the top. The top offset is set
-	   dynamically in admin.js (syncStickyStripOffset) by measuring
-	   the actual form-header + WP-admin-bar heights, so we don't
-	   have to guess across viewports + font-load timing. The 140px
-	   fallback below is in case JS doesn't run for some reason —
-	   close enough that the strip is still usable. z-index 49 is
-	   one below the form header (50) so the tabs win on overlap. */
 	position: sticky;
 	top: 140px;
 	z-index: 49;
@@ -783,8 +665,6 @@
 	color: var(--es-dusk-1);
 }
 .emblem-studio-wrap .es-ab-strip-active-slot { color: var(--es-dusk-1); }
-/* Declare-winner cluster on the running strip — right-aligned so the user can
-   pick a winner without leaving the Design tab. */
 .emblem-studio-wrap .es-ab-strip-declare {
 	margin-left: auto;
 	display: inline-flex;
@@ -793,8 +673,6 @@
 }
 .emblem-studio-wrap .es-ab-strip-declare-label { margin-right: 2px; }
 
-/* Start-test confirmation modal — graphic (two distinct variant mini-cards:
-   A = sunset accent, B = dusk) + an irreversible-reset warning. */
 .emblem-studio-wrap .es-ab-start-modal .es-modal-dialog { max-width: 470px; text-align: left; }
 .emblem-studio-wrap .es-ab-start-graphic {
 	display: flex;
@@ -848,7 +726,7 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 3px;
-	color: #38bdf8; /* matches the SaaS split icon (sky-400), via currentColor */
+	color: #38bdf8;
 }
 .emblem-studio-wrap .es-ab-start-split-icon { width: 28px; height: 28px; }
 .emblem-studio-wrap .es-ab-start-split-label {
@@ -856,7 +734,7 @@
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
-	color: #0284c7; /* matches the SaaS label (sky-600) */
+	color: #0284c7;
 }
 .emblem-studio-wrap .es-ab-start-text { color: var(--es-text); margin: 0 0 14px; }
 .emblem-studio-wrap .es-ab-start-warning {
@@ -871,9 +749,6 @@
 	font-size: 13px;
 }
 .emblem-studio-wrap .es-ab-start-warning .dashicons { color: #c98a00; flex: 0 0 auto; }
-/* Right-aligned row (Cancel + Start), like the SaaS modal. The compound
-   .es-modal-actions.es-ab-start-actions selector beats the base
-   .es-modal-actions rules (column + full-width buttons) regardless of order. */
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions {
 	margin-top: 18px;
 	flex-direction: row;
@@ -882,7 +757,6 @@
 	gap: 6px;
 }
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions .button { width: auto; }
-/* Match the SaaS modal: a borderless text Cancel + a sunset-gradient primary. */
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button,
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button:hover,
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-dismiss.button:focus {
@@ -904,9 +778,6 @@
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button:hover,
 .emblem-studio-wrap .es-modal-actions.es-ab-start-actions .es-ab-start-confirm.button:focus { transform: translateY(-1px); }
 
-/* A/B test settings panel — collapsible, lives above the variant strip
-   on the Design tab when a test is running. Traffic split inputs +
-   per-condition toggles + live met/not-met status badges. */
 .emblem-studio-wrap .es-ab-config {
 	border: 1px solid var(--es-border);
 	border-radius: var(--es-radius-md);
@@ -1039,9 +910,6 @@
 	color: var(--es-success);
 }
 
-/* A/B archive — sits in the variant strip's actions cluster. Toggle
-   button reveals the panel below the strip (or below the editors
-   when no strip is shown — same placement either way). */
 .emblem-studio-wrap .es-ab-strip-actions {
 	display: inline-flex;
 	align-items: center;
@@ -1104,7 +972,6 @@
 }
 .emblem-studio-wrap .es-ab-archive-table .button-small { margin-left: 4px; }
 
-/* Global A/B Tests admin page — list of every test across forms. */
 .emblem-studio-wrap .es-tests-filter { margin: var(--es-space-3) 0; }
 .emblem-studio-wrap .es-tests-table .es-tests-col-form { width: 22%; }
 .emblem-studio-wrap .es-tests-table .es-tests-col-status { width: 16%; }
@@ -1151,8 +1018,6 @@
 	font-weight: 500;
 }
 
-/* Stats tab A/B banner — appears at the top of Stats when a test is
-   running. Side-by-side variant cards + Declare-winner actions. */
 .emblem-studio-wrap .es-ab-banner {
 	border: 1px solid #c9d0e6;
 	border-radius: var(--es-radius-lg);
@@ -1267,9 +1132,6 @@
 	font-size: 12px;
 }
 
-/* Per-shell stats table — variant sub-rows when a test is running.
-   The base shell row stays in place (totals = A + B), with two
-   indented sub-rows directly under it showing per-variant numbers. */
 .emblem-studio-wrap .es-stats-variant-row > td { background: #fafafa; }
 .emblem-studio-wrap .es-stats-variant-label {
 	display: flex;
@@ -1317,8 +1179,6 @@
 	color: var(--es-text-strong);
 	background: transparent;
 }
-/* Sunset gradient underline on the active tab (3px, doesn't shift layout
-   because it's a pseudo-element over the 1px container border). */
 .emblem-studio-wrap .es-tab.is-active::after {
 	content: '';
 	position: absolute;
@@ -1340,10 +1200,6 @@
 	box-shadow: var(--es-shadow-xs);
 }
 
-/* Modernize form-table inside tab panels:
-   - lighter label weight and smaller font
-   - subtle row separators instead of bulky padding
-   - more breathing room around inputs */
 .emblem-studio-wrap .es-tab-panel .form-table {
 	margin-top: 0;
 }
@@ -1366,7 +1222,6 @@
 	color: #646970;
 }
 
-/* Section headers inside tab panels — quieter than default <h2> */
 .emblem-studio-wrap .es-tab-panel h2 {
 	font-size: 11px;
 	font-weight: 600;
@@ -1382,7 +1237,6 @@
 	margin-top: 0.5em;
 }
 
-/* Editor grid h2s are slightly different — they label two code editors */
 .emblem-studio-wrap .es-tab-panel .es-editors-grid h2 {
 	border-bottom: none;
 	padding-bottom: 0;
@@ -1390,7 +1244,6 @@
 	font-size: 11px;
 }
 
-/* Checkbox pill group (used for FunnelKit lists) — compact, scan-friendly */
 .emblem-studio-wrap .es-checkbox-group {
 	display: flex;
 	flex-wrap: wrap;
@@ -1424,7 +1277,6 @@
 	color: var(--es-text-strong);
 }
 
-/* ---- Shells tab: per-shell cards ---- */
 .emblem-studio-wrap .es-shells-intro {
 	margin: 0 0 1em;
 }
@@ -1435,8 +1287,6 @@
 	gap: 10px;
 	margin: 0 0 1.5em;
 }
-/* Left column: inline / click / auto popup (can be combined). Right column:
-   ribbon + slide-in (each exclusive) — fills the space beside the short cards. */
 .emblem-studio-wrap .es-shells-col {
 	display: flex;
 	flex-direction: column;
@@ -1448,7 +1298,6 @@
 		grid-template-columns: 1fr;
 	}
 }
-/* Column hint: left = "can be combined", right = "pick one". */
 .emblem-studio-wrap .es-shells-col-head {
 	padding: 0 2px 2px;
 }
@@ -1463,8 +1312,6 @@
 	font-size: 12px;
 	color: #646970;
 }
-/* Per-shell identity colour (+ soft tint), shared by the selector card and the
-   settings panel so a shell looks the same wherever it appears. */
 .emblem-studio-wrap .es-shell-card[data-shell="inline"],
 .emblem-studio-wrap .es-shell-settings-panel[data-shell="inline"]      { --shell-color: #1d4ed8; --shell-soft: #eef3fd; }
 .emblem-studio-wrap .es-shell-card[data-shell="popup-click"],
@@ -1476,9 +1323,6 @@
 .emblem-studio-wrap .es-shell-card[data-shell="slide-in"],
 .emblem-studio-wrap .es-shell-settings-panel[data-shell="slide-in"]    { --shell-color: #be185d; --shell-soft: #fdf0f6; }
 
-/* Shared settings container under the 2-column grid. Hidden by JS until an
-   auto shell (auto popup / ribbon / slide-in) is selected. The selected shell's
-   colour drives the top edge, header text/dot, and the background gradient. */
 .emblem-studio-wrap .es-shell-settings-wrap {
 	margin: 0 0 1.5em;
 	padding: 0;
@@ -1491,7 +1335,6 @@
 }
 .emblem-studio-wrap .es-shell-settings-panel {
 	border-top: 3px solid var(--shell-color, var(--es-accent, #2271b1));
-	/* Gradient from the shell's soft tint at the top down to the page bg. */
 	background: linear-gradient(180deg, var(--shell-soft, #eef4fb) 0%, #fff 110px);
 }
 .emblem-studio-wrap .es-shell-settings-head {
@@ -1516,16 +1359,10 @@
 .emblem-studio-wrap .es-shell-settings-panel > .es-auto-triggers {
 	padding: 16px;
 }
-/* The relocated trigger/rules panel — the box framing now comes from the
-   container above, so the panel itself is plain. Spans the full container so
-   the two-column settings + display-rules layouts use all available width. */
 .emblem-studio-wrap .es-auto-triggers {
 	max-width: none;
 }
 
-/* Connector: a line drawn (positioned by JS) from the selected shell card down
-   into its display-rules container, so it's obvious the two belong together.
-   The Shells tab panel is the positioning context. */
 .emblem-studio-wrap #es-tab-shells { position: relative; }
 .emblem-studio-wrap .es-shell-connector {
 	position: absolute;
@@ -1535,11 +1372,8 @@
 	pointer-events: none;
 	overflow: visible;
 	z-index: 4;
-	color: var(--es-accent, #2271b1); /* JS overrides with the active shell colour */
+	color: var(--es-accent, #2271b1);
 }
-/* Overlay stays rendered (so it's always measurable); the drawn pieces just
-   fade out via opacity when no shell with rules is selected. currentColor is
-   set on the SVG by JS to the selected shell's identity colour. */
 .emblem-studio-wrap .es-shell-connector:not(.is-visible) .es-connector-path,
 .emblem-studio-wrap .es-shell-connector:not(.is-visible) .es-connector-dot,
 .emblem-studio-wrap .es-shell-connector:not(.is-visible) .es-connector-arrow { opacity: 0; }
@@ -1553,15 +1387,12 @@
 .emblem-studio-wrap .es-connector-dot { fill: currentColor; }
 .emblem-studio-wrap .es-connector-arrow { fill: currentColor; }
 
-/* "who · when · which pages" hint next to the Targeting summary title. */
 .emblem-studio-wrap .es-dr-summary-hint {
 	font-weight: 400;
 	font-size: 11px;
 	letter-spacing: 0.02em;
 	color: #8a8a8a;
 }
-/* Settings panel split: trigger (left) vs appearance + dismissal (right),
-   divided by a vertical rule centred in the 48px channel between them. */
 .emblem-studio-wrap .es-shell-cfg-grid {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -1579,8 +1410,6 @@
 	padding-top: 14px;
 	border-top: 1px solid #f0f0f1;
 }
-/* Auto popup has no position/corner block, so its close config sits alone at
-   the top of the right column — drop the separator line in that case. */
 .emblem-studio-wrap .es-shell-cfg-appearance > .es-close-config:first-child {
 	margin-top: 0;
 	padding-top: 0;
@@ -1590,7 +1419,6 @@
 	.emblem-studio-wrap .es-shell-cfg-grid {
 		grid-template-columns: 1fr;
 	}
-	/* Stacked: swap the vertical rule for a horizontal one above the right col. */
 	.emblem-studio-wrap .es-shell-cfg-trigger { padding-right: 0; }
 	.emblem-studio-wrap .es-shell-cfg-appearance {
 		padding-left: 0;
@@ -1603,7 +1431,6 @@
 .emblem-studio-wrap .es-shell-card {
 	border: 1px solid #dcdcde;
 	border-radius: 6px;
-	/* Soft shell tint on the left fading to the page background on the right. */
 	background: linear-gradient(90deg, var(--shell-soft, #fff) 0%, #fff 75%);
 	transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -1640,7 +1467,7 @@
 }
 .emblem-studio-wrap .es-shell-card-body {
 	display: none;
-	padding: 0 16px 16px 40px; /* left padding aligns with the title, past the checkbox */
+	padding: 0 16px 16px 40px;
 }
 .emblem-studio-wrap .es-shell-card[data-enabled="true"] .es-shell-card-body {
 	display: block;
@@ -1653,7 +1480,6 @@
 	padding: 4px 8px;
 }
 
-/* ---- Help tooltip "?" icon ---- */
 .emblem-studio-wrap .es-help {
 	display: inline-flex;
 	align-items: center;
@@ -1734,7 +1560,6 @@
 }
 .emblem-studio-wrap .es-tab-empty h2 { margin-top: 0; }
 
-/* Live inline preview under the HTML/CSS editors */
 .emblem-studio-wrap .es-inline-preview {
 	margin-top: 1.5em;
 	padding-top: 1em;
@@ -1770,8 +1595,6 @@
 	background: #fff;
 }
 
-/* Stats tab — per-shell numbers, same shape as the Forms list */
-/* Revisions tab — chronological list of HTML/CSS saves with dual-preview */
 .emblem-studio-wrap .es-revisions-intro { margin: 0 0 12px; }
 .emblem-studio-wrap .es-revisions-list {
 	list-style: none;
@@ -1830,10 +1653,6 @@
 .emblem-studio-wrap .es-revision.is-open .es-revision-chevron { transform: rotate(180deg); }
 .emblem-studio-wrap .es-revision-body { padding: 12px 16px 16px; background: #fafafa; }
 
-/* Diff panes — CSS grid with each diff entry as one row of two cells.
-   The grid auto-equalizes row heights so wrapped lines on one side
-   don't break alignment with the other. Old (red) on the left,
-   current (green) on the right. */
 .emblem-studio-wrap .es-revision-diff-block { margin-bottom: 16px; }
 .emblem-studio-wrap .es-revision-diff-section-label {
 	font-size: 11px;
@@ -1843,9 +1662,6 @@
 	color: #50575e;
 	margin-bottom: 6px;
 }
-/* Shared pane label — pill badge + subtitle. Used above each diff column
-   AND above each preview iframe so old/new orientation reads identically
-   across the whole revision body. */
 .emblem-studio-wrap .es-revision-pane-labels {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -1902,8 +1718,6 @@
 .emblem-studio-wrap .es-diff-cell.is-removed { background: #fcebea; color: #8a1a1a; }
 .emblem-studio-wrap .es-diff-cell.is-added   { background: #e7f5e9; color: #1f5a2a; }
 .emblem-studio-wrap .es-diff-cell.is-spacer  { background: #fafafa; }
-/* Modified rows — softer line tint, with the actually-changed substring
-   wrapped in .is-changed for the stronger red/green highlight. */
 .emblem-studio-wrap .es-diff-cell.is-modified-old { background: #fdf5f5; color: #1d2327; }
 .emblem-studio-wrap .es-diff-cell.is-modified-new { background: #f5fbf5; color: #1d2327; }
 .emblem-studio-wrap .es-diff-cell.is-modified-old .is-changed {
@@ -1982,7 +1796,6 @@
 }
 .emblem-studio-wrap .es-stats-table th.num,
 .emblem-studio-wrap .es-stats-table td.num { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Vertical column delimiters so the many stat columns read clearly. */
 .emblem-studio-wrap .es-stats-table th.num,
 .emblem-studio-wrap .es-stats-table td.num { border-left: 1px solid var(--es-border); }
 .emblem-studio-wrap .es-forms-table th.col-stat,
@@ -1992,10 +1805,6 @@
 .emblem-studio-wrap .es-stats-table td.dim,
 .emblem-studio-wrap .es-stats-table td .dim { color: var(--es-text-faint); }
 
-/* Stats tab — section headings + clicks subsection. The Stats panel now
- * has two data sections (per-shell, per-click-target); both get the same
- * h3 treatment so they read as peers. The toggle + summary live on
- * dedicated rows so they don't crowd the heading. */
 .emblem-studio-wrap .es-stats-section-heading {
 	margin: var(--es-space-5) 0 var(--es-space-2);
 	font-size: var(--es-text-xs);
@@ -2045,8 +1854,6 @@
 	font-style: italic;
 }
 
-/* Close / backdrop rows: shown in the breakdown but excluded from the
-   headline Clicks numbers. Dim them and tag them so it's obvious why. */
 .emblem-studio-wrap .es-stats-table tr.es-click-row-excluded td {
 	color: var(--es-text-muted);
 }
@@ -2092,7 +1899,6 @@
 	color: var(--es-text);
 }
 
-/* ---- Modal ---- */
 .emblem-studio-wrap .es-modal {
 	position: fixed;
 	inset: 0;
@@ -2180,9 +1986,6 @@
 .emblem-studio-wrap .es-editors-grid h2 { margin-top: 0; }
 .emblem-studio-wrap .es-editors-grid .es-editor-col { min-width: 0; }
 
-/* Reports */
-/* Reports filter bar — a card that groups the Form/Shell/date controls and
-   the quick-range pills so the whole control surface reads as one unit. */
 .emblem-studio-wrap .es-filter-bar {
 	background: var(--es-surface);
 	border: 1px solid var(--es-border);
@@ -2212,10 +2015,6 @@
 .emblem-studio-wrap .es-reports-filters input[type="date"] {
 	min-width: 160px;
 }
-/* Pin every control in the filter row to one height + box model so the
-   selects, the custom date trigger, the native date fallback, and the
-   Update button all line up exactly. WP's .button base sets height without
-   box-sizing (→ 38px), which is what threw the row off. */
 .emblem-studio-wrap .es-reports-filters select,
 .emblem-studio-wrap .es-reports-filters input[type="date"],
 .emblem-studio-wrap .es-reports-filters .es-dp,
@@ -2226,8 +2025,6 @@
 	box-sizing: border-box;
 }
 
-/* Quick-range dropdown — sits under a divider inside the filter bar. The
-   <select>'s option values are target URLs; reports.js navigates on change. */
 .emblem-studio-wrap .es-presets {
 	display: flex;
 	align-items: center;
@@ -2272,7 +2069,6 @@
 				transform var(--es-duration-fast) var(--es-easing),
 				box-shadow var(--es-duration-fast) var(--es-easing);
 }
-/* Sunset gradient accent bar across the top of each KPI tile. */
 .emblem-studio-wrap .es-kpi::before {
 	content: '';
 	position: absolute;
@@ -2315,9 +2111,6 @@
 .emblem-studio-wrap .es-kpi-delta-down { color: #b32d2e; }
 .emblem-studio-wrap .es-kpi-delta-flat { color: #8a8a8a; }
 
-/* A KPI card's own rate line (e.g. "12.4% click rate"), set off from the
-   main value + delta above it with a divider — same idea as es-kpi-sub but
-   its own row since it carries a second, smaller delta of its own. */
 .emblem-studio-wrap .es-kpi-rate {
 	margin-top: var(--es-space-2);
 	padding-top: var(--es-space-2);
@@ -2330,11 +2123,9 @@
 }
 .emblem-studio-wrap .es-kpi-rate-value { font-weight: 600; color: var(--es-text-strong); }
 
-/* KPI tile rendered as an anchor (e.g. "Bots filtered" → #bots). */
 .emblem-studio-wrap a.es-kpi-link { text-decoration: none; display: block; color: inherit; }
 .emblem-studio-wrap a.es-kpi-link:hover { color: inherit; }
 
-/* Bot traffic breakdown — foldable category → per-bot tree. */
 .emblem-studio-wrap .es-bot-breakdown { margin-top: var(--es-space-7, 2rem); scroll-margin-top: 2rem; }
 .emblem-studio-wrap .es-bot-cats {
 	max-width: 640px;
@@ -2400,9 +2191,6 @@
 }
 .emblem-studio-wrap .es-chart { width: 100%; position: relative; }
 .emblem-studio-wrap .es-chart .es-chart-dot { cursor: pointer; }
-/* Instant, JS-driven chart tooltip (replaces native SVG <title>, which has
-   an unavoidable browser hover delay). No transition on opacity → no fade-in
-   delay; it snaps on the instant the pointer hits a node. */
 .emblem-studio-wrap .es-chart-tip {
 	position: absolute;
 	z-index: 10;
@@ -2419,7 +2207,6 @@
 }
 .emblem-studio-wrap .es-chart-tip.is-visible { opacity: 1; }
 
-/* Tag input (chip / token style) */
 .emblem-studio-wrap .es-tag-input {
 	position: relative;
 	display: flex;
@@ -2511,9 +2298,6 @@
 	font-weight: 600;
 	color: #1d2327;
 }
-/* Two groups in the list: FunnelKit's own tags, then the ones this site's other
-   assets name, which FunnelKit gets on the first signup carrying them
-   (SER-1464). The heading says which is which, so no tag needs a label. */
 .emblem-studio-wrap .es-tag-suggestion-group {
 	padding: 6px 10px 2px;
 	color: var(--es-text-muted);
@@ -2522,7 +2306,6 @@
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 }
-/* "Beta users" exists and you typed "beta users". */
 .emblem-studio-wrap .es-tag-warning {
 	margin: 6px 0 0;
 	color: #9a5b00;
@@ -2539,7 +2322,6 @@
 	cursor: pointer;
 }
 
-/* Field mapper */
 .emblem-studio-wrap .es-mapper { margin: 1em 0 1.5em; }
 .emblem-studio-wrap .es-mapper-cols {
 	display: grid;
@@ -2597,7 +2379,6 @@
 	font-size: 13px;
 	color: #1d2327;
 }
-/* Visible, not a hover hint: FunnelKit silently drops answers it has no option for. */
 .emblem-studio-wrap .es-mapper-row-warning {
 	grid-column: 1 / -1;
 	margin: 0;
@@ -2708,7 +2489,6 @@
 }
 .emblem-studio-wrap .es-mapper-form-pill .es-mapper-form-name { flex: 1; }
 
-/* Action rows (above and below the editors) */
 .emblem-studio-wrap .es-editor-actions {
 	margin: 0.5em 0 1.5em;
 	display: flex;
@@ -2722,8 +2502,6 @@
 	gap: 0.5rem;
 	flex-wrap: wrap;
 }
-/* Save button + its "Unsaved" flag. The flag sits absolutely below the
-   button so showing/hiding it never reflows the header row. */
 .emblem-studio-wrap .es-save-group {
 	position: relative;
 	display: inline-flex;
@@ -2764,10 +2542,6 @@
 	vertical-align: -1px;
 }
 
-/* Forms list: tighter, content-aware column widths + centered numbers + dividers. */
-/* Compound .wp-list-table.es-forms-table selectors so these out-rank
-   the generic .wp-list-table cell rules defined later in this file —
-   at equal specificity source order would otherwise win. */
 .emblem-studio-wrap .wp-list-table.es-forms-table th,
 .emblem-studio-wrap .wp-list-table.es-forms-table td {
 	border-right: 1px solid var(--es-border);
@@ -2787,14 +2561,6 @@
 	border-bottom: 2px solid var(--es-orange);
 }
 
-/* ── Forms-table type & numbers (the "feel" pass) ─────────────────── */
-/* Asset name in the display face, dusk ink, sunset on hover. */
-/* The name stays on one line, as in the web app. With the table at 1700px+ and
-   the stat columns all nowrap, the name was the only thing the browser could
-   squeeze, so a three-word name broke over three lines (item 6 of Catalina's
-   Lite test pass). Capped at 340px, because the name sits in the pinned lane
-   and an 80-character name would pin half the screen. Past the cap it ends in
-   "…", and the full name is in the link's title. */
 .emblem-studio-wrap .es-forms-table .col-name strong { font-family: var(--es-font-display); font-weight: 600; white-space: nowrap; }
 .emblem-studio-wrap .es-forms-table .col-name .es-asset-name,
 .emblem-studio-wrap .es-forms-table .col-name .es-asset-name-trash {
@@ -2812,7 +2578,6 @@
 }
 .emblem-studio-wrap .es-forms-table .col-name strong a:hover,
 .emblem-studio-wrap .es-forms-table .col-name strong a:focus { color: var(--es-orange); }
-/* Stat columns: tabular figures so digits line up column-to-column. */
 .emblem-studio-wrap .es-forms-table td.col-stat,
 .emblem-studio-wrap .es-forms-table td.col-stat-narrow {
 	font-variant-numeric: tabular-nums;
@@ -2826,50 +2591,21 @@
 .emblem-studio-wrap .es-forms-table .col-date { color: var(--es-text-muted); font-size: 11px; }
 .emblem-studio-wrap .es-forms-table .col-cb          { width: 2.4em; text-align: center; padding-left: 8px; padding-right: 0; }
 .emblem-studio-wrap .es-forms-table .col-cb input[type="checkbox"] { margin: 0; }
-/* Horizontal scroll wrapper. With 16 columns the table is wider than
-   the WP admin content area on most screens — scroll instead of squeeze.
-   Min-width keeps each column comfortable; on wide monitors the table
-   stretches to fill, on narrow ones the user scrolls. */
 .emblem-studio-wrap .es-forms-table-scroll {
 	overflow-x: auto;
 	width: 100%;
 }
 .emblem-studio-wrap .es-forms-table {
-	/* Auto layout (override WP's .fixed) so the two-number rate cells size to
-	   their content instead of overflowing fixed % widths into the next column.
-	   The column widths below become hints; nowrap content sets the real minimum. */
 	table-layout: auto;
 	min-width: 1700px;
 }
 
-/* ── Sticky identity lane (drag · checkbox · name) ─────────────────
-   The table is 1700px+ across 16 columns, so scrolling out to Drop-off rate
-   leaves the row anonymous — you can read the numbers but not whose they are.
-   Pin the identity cells; the stats scroll underneath them.
-
-   The offsets must be EXACT: a `left` that disagrees with the real column width
-   by a pixel reads as a seam or an overlap. So the checkbox column is pinned to
-   a px width here rather than the 2.4em it carries above — an em resolves
-   against whatever font-size wins the cascade, which is not something a `left`
-   can be computed from. The drag column exists only on the All tab
-   (.es-forms-reorderable), so every offset after it shifts with it: hence the
-   variable rather than three hardcoded numbers.
-
-   No background is declared here on purpose. These cells are already opaque
-   (#fff, further down) and the group-hover rule repaints them #fff7ef — a
-   background here would beat the hover and freeze the lane white while the rest
-   of the card lit up. */
 .emblem-studio-wrap .es-forms-table {
 	--es-lane-drag: 0px;
 	--es-lane-cb: 34px;
 }
 .emblem-studio-wrap .es-forms-table.es-forms-reorderable { --es-lane-drag: 26px; }
 
-/* `.widefat` sets overflow: hidden to round the corners, and that makes the
-   table its own scroll box. A sticky cell pins to the nearest scroll box, and
-   this one never scrolls, so the lane silently stopped pinning and slid away
-   with the stats. `clip` rounds the corners without being a scroll box, so
-   the lane pins to .es-forms-table-scroll, which is the one that scrolls. */
 .emblem-studio-wrap .wp-list-table.es-forms-table { overflow: clip; }
 
 .emblem-studio-wrap .es-forms-table .col-drag,
@@ -2878,7 +2614,6 @@
 	position: sticky;
 	z-index: 2;
 }
-/* Where the pinned lane crosses the header, the header wins. */
 .emblem-studio-wrap .es-forms-table thead th.col-drag,
 .emblem-studio-wrap .es-forms-table thead th.col-cb,
 .emblem-studio-wrap .es-forms-table thead th.col-name { z-index: 3; }
@@ -2886,10 +2621,6 @@
 .emblem-studio-wrap .es-forms-table .col-drag { left: 0; }
 .emblem-studio-wrap .es-forms-table .col-cb {
 	left: var(--es-lane-drag);
-	/* The padding and border count inside the width. Without this the cell came
-	   out 47px (34 plus the table's 6px padding each side, plus the border),
-	   the name's `left` still assumed 34, and the pinned name slid 13px over
-	   the checkboxes. */
 	box-sizing: border-box;
 	width: var(--es-lane-cb);
 	min-width: var(--es-lane-cb);
@@ -2897,17 +2628,10 @@
 }
 .emblem-studio-wrap .es-forms-table .col-name { left: calc(var(--es-lane-drag) + var(--es-lane-cb)); }
 
-/* border-collapse: collapse (further down) hands the card's left border to the
-   table's border grid rather than to the cell — so it stays behind at the
-   table's real edge and slides out of view the moment the lane is pinned. An
-   inset shadow belongs to the cell and travels with it. Unscrolled the two sit
-   exactly on top of each other, so this costs nothing when it isn't needed. */
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td:first-child {
 	box-shadow: inset 1px 0 0 var(--es-border-strong);
 }
 
-/* The lane's trailing edge, so a pinned column reads as pinned rather than as a
-   column that happens to be sitting there. */
 .emblem-studio-wrap .es-forms-table .col-name::after {
 	content: '';
 	position: absolute;
@@ -2947,36 +2671,24 @@
 .emblem-studio-wrap .es-shell-popup-auto  { background: #ddebd6; color: #2d5226; }
 .emblem-studio-wrap .es-shell-ribbon      { background: #f2d6e4; color: #6b1f44; }
 .emblem-studio-wrap .es-shell-slide-in    { background: #e2e4f1; color: #2d3060; }
-/* Vertically centre each trigger option (radio + label) with its field
-   (number input + unit), overriding WP's top-aligned .form-table cells. The
-   "Leaving the page" row keeps top alignment for its multi-line description. */
 .emblem-studio-wrap .es-auto-triggers .es-trigger-row td { vertical-align: middle; }
 .emblem-studio-wrap .es-auto-triggers .es-trigger-row[data-trigger="exit"] td { vertical-align: top; }
 
-/* Close-button style, now grouped with the other close-button settings. */
 .emblem-studio-wrap .es-close-theme-row {
 	margin-top: 10px;
 	padding-left: 1.6em;
 }
 .emblem-studio-wrap .es-close-theme-row--bare { padding-left: 0; }
-/* The Auto caveat shows only while Auto is picked, as it does in the SaaS. */
 .emblem-studio-wrap .es-close-theme-auto-note { display: none; margin: 4px 0 0; max-width: 34em; font-size: 11px; line-height: 1.4; color: #646970; }
 .emblem-studio-wrap .es-close-theme-row:has(option[value="auto"]:checked) .es-close-theme-auto-note { display: block; }
 .emblem-studio-wrap .es-close-theme-select { max-width: 100%; }
 
-/* Click popup's modal options live inside its selector card (no separate
-   panel), divided from the shortcode above. */
 .emblem-studio-wrap .es-shell-card-options {
 	margin-top: 10px;
 	padding-top: 10px;
 	border-top: 1px solid #f0f0f1;
 }
 
-/* Popup options (max width + full-screen) shown at the top of the click +
-   auto popup panels. Two-row grid — labels on row 1, fields on row 2 — so the
-   two fields share a grid row and stay perfectly aligned no matter the label
-   heights. Both field cells are 36px tall (= input height) and centre their
-   content, so the full-screen toggle lines up with the max-width input. */
 .emblem-studio-wrap .es-popup-options {
 	display: grid;
 	grid-template-columns: max-content max-content;
@@ -3007,7 +2719,6 @@
 	gap: 8px;
 	cursor: pointer;
 }
-/* Narrow: stack the two options (label + field pairs) one above the other. */
 @media (max-width: 640px) {
 	.emblem-studio-wrap .es-popup-options {
 		grid-template-columns: max-content;
@@ -3017,17 +2728,10 @@
 	.emblem-studio-wrap .es-popup-options > :nth-child(3) { margin-bottom: 6px; }
 }
 
-/* Auto-popup trigger panel: keep the radio + label fully readable on every
-   row (so the user knows they can click it to switch), but dim the inputs
-   and helper text on the rows that aren't currently picked. */
 .emblem-studio-wrap .es-auto-triggers .es-trigger-row.is-disabled td:nth-child(2) { opacity: 0.5; }
 .emblem-studio-wrap .es-auto-triggers .es-trigger-row.is-disabled input[type="number"],
 .emblem-studio-wrap .es-auto-triggers .es-trigger-row.is-disabled input[type="checkbox"] { pointer-events: none; }
 
-/* Display rules disclosure. */
-/* Display rules: its own card so it stands apart from the trigger panel,
-   with a header bar that stays obvious (and shows a rotating chevron) once
-   the section is expanded — so it's easy to find and collapse again. */
 .emblem-studio-wrap .es-display-rules {
 	margin-top: 14px;
 	border: 1px solid #c6d6e6;
@@ -3067,8 +2771,6 @@
 .emblem-studio-wrap .es-dr-summary-note { font-weight: 400; font-size: 12px; }
 .emblem-studio-wrap .es-display-rules-body { padding: 12px; }
 
-/* Display rules layout: who/when gates side by side, then the page-targeting
-   include (Show on) / exclude (Hide on) pair side by side. */
 .emblem-studio-wrap .es-dr-gate-grid,
 .emblem-studio-wrap .es-dr-pagematch-grid {
 	display: grid;
@@ -3082,9 +2784,6 @@
 	.emblem-studio-wrap .es-dr-pagematch-grid { grid-template-columns: 1fr; }
 }
 
-/* Green = where it shows (include), red = where it's blocked (exclude). Subtle
-   tint + left-rail accent + colored heading; the ✓ / ✕ badge carries the
-   meaning for anyone who can't distinguish the colors. */
 .emblem-studio-wrap .es-display-rules .es-dr-fieldset.es-dr-include {
 	border-left: 3px solid #46b450;
 	background: #f3faf5;
@@ -3110,11 +2809,8 @@
 }
 .emblem-studio-wrap .es-dr-badge-include { background: #46b450; }
 .emblem-studio-wrap .es-dr-badge-exclude { background: #d63638; }
-/* Reserves the height of the two Show-on radios on the Hide-on side so the
-   filter pickers in both columns line up. Hidden but still occupies space. */
 .emblem-studio-wrap .es-dr-align-spacer { visibility: hidden; }
 @media (max-width: 900px) {
-	/* Columns stack — no alignment to preserve, so reclaim the space. */
 	.emblem-studio-wrap .es-dr-align-spacer { display: none; }
 }
 
@@ -3131,10 +2827,8 @@
 }
 .emblem-studio-wrap .es-display-rules .es-dr-cell { min-width: 0; }
 .emblem-studio-wrap .es-display-rules .es-dr-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #50575e; font-weight: 600; margin-bottom: 4px; }
-/* When show_mode=all, the show-filters grid is dimmed and non-interactive. */
 .emblem-studio-wrap .es-display-rules .es-dr-filters.is-disabled { opacity: 0.45; pointer-events: none; }
 
-/* Posts / pages chip pickers — sit beneath the 4-column filter grid, full width per cell. */
 .emblem-studio-wrap .es-display-rules .es-dr-pickers {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -3228,25 +2922,14 @@
 	box-sizing: border-box;
 	vertical-align: middle;
 }
-/* Top-align cells that span multiple shell rows so the form-level info
-   (Name, Updated, Actions) lines up with the first shell row. */
 .emblem-studio-wrap .es-forms-table td[rowspan] { vertical-align: top; }
-/* Each form renders as its own card. See the border-collapse note below
-   the actions section for the radii vs. double-border trade-off. */
 .emblem-studio-wrap .es-forms-table { border-spacing: 0; background: transparent; border: 0; }
 .emblem-studio-wrap .es-forms-table.widefat { border: 0; box-shadow: none; }
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr > td,
 .emblem-studio-wrap .es-forms-table.striped > tbody.es-form-group > tr > td { background: #fff; }
-/* Card-to-card gap lives as a spacer ROW inside each form-group
- * tbody (not a separate spacer tbody). When jQuery UI reorders the
- * tbodies, each spacer row moves WITH its parent group — no more
- * orphaned gaps after a drop. The :last-of-type rule hides the
- * spacer on whichever group is currently last in the DOM. */
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr.es-form-spacer-row > td {
 	padding: 0;
 	height: 7px;
-	/* Paint the gap with the page cream so the generic tbody tr:hover
-	   highlight can't bleed through the otherwise-transparent spacer. */
 	background: var(--es-gray-50);
 	border: 0;
 }
@@ -3256,9 +2939,6 @@
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group:last-of-type > tr.es-form-spacer-row {
 	display: none;
 }
-/* Breathing room between the header and the first card (mirrors the
-   between-card spacer; sits in its own static tbody so reordering the
-   form-group tbodies never moves it). */
 .emblem-studio-wrap .es-forms-table > tbody > tr.es-form-topspacer > td {
 	padding: 0;
 	height: 8px;
@@ -3266,10 +2946,6 @@
 	border: 0;
 }
 
-/* Whole-card hover — lift the entire form card together (warm the white
-   cells + the outline) instead of the per-row flash that used to bleed
-   into the gap. The tinted conv/click columns keep their own colour, so
-   only the white cells and the border respond to hover. */
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group:hover > tr:not(.es-form-spacer-row) > td:not(.es-col-conv):not(.es-col-click) {
 	background: #fff7ef;
 }
@@ -3288,9 +2964,6 @@
 	border-right-color: var(--es-orange);
 }
 
-/* Forms-list actions cell — primary actions on row 1, destructive
- * (Trash / Delete Permanently) on row 2 so the Trash text can't
- * overflow the column on narrow widths. */
 .emblem-studio-wrap .es-actions-row {
 	display: block;
 	white-space: nowrap;
@@ -3309,25 +2982,9 @@
 	color: #991b1b;
 	text-decoration: underline;
 }
-/* Card outline. We draw it with cell borders because <tbody> can't reliably
-   carry border-radius. Top + bottom borders go on the first / last-VISIBLE
-   <tr>; left on the rowspan'd Name cell (first child of the first tr);
-   right on the rowspan'd Actions cell (last child of the first tr) —
-   both extend the full card height because of rowspan.
-   border-collapse: collapse merges adjacent borders so the thead's
-   bottom border doesn't visually double-up with the first card's top.
-   Trade-off accepted: collapse ignores per-cell border-radius, so the
-   bottom corners on the last card are square instead of rounded.
-   User chose this trade-off over chasing the corner fix further. */
 .emblem-studio-wrap .es-forms-table { border-collapse: collapse; }
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td { border-top: 1px solid var(--es-border-strong); }
-/* nth-last-child(2) targets the row right BEFORE the spacer-row (which is
-   always the literal last child of the tbody, sometimes hidden via
-   display:none on the last group). That row IS the last visible shell row
-   — exactly what we want to get the bottom border. */
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:nth-last-child(2) > td { border-bottom: 1px solid var(--es-border-strong); }
-/* Rowspan'd cells (Name, Updated, Actions) sit in the first <tr> but extend
-   to the bottom of the card — they need a bottom border too. */
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td[rowspan] { border-bottom: 1px solid var(--es-border-strong); }
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr:first-child > td:first-child {
 	border-left: 1px solid var(--es-border-strong);
@@ -3339,13 +2996,9 @@
 	border-top-right-radius: var(--es-radius-lg);
 	border-bottom-right-radius: var(--es-radius-lg);
 }
-/* Inactive shell row (won't render — form inactive OR shell disabled OR blank):
-   dim everything so it reads as "off" at a glance. */
 .emblem-studio-wrap .es-forms-table tr.es-shell-row-inactive td { color: #8a8a8a; }
 .emblem-studio-wrap .es-forms-table tr.es-shell-row-inactive .es-shell-pill { opacity: 0.55; }
 
-/* Status as a pill badge (green = will render, neutral = off) rather than a
-   full-cell tint — lighter, reads cleaner against the warm card. */
 .emblem-studio-wrap .es-status-pill {
 	display: inline-flex;
 	align-items: center;
@@ -3368,28 +3021,18 @@
 .emblem-studio-wrap .es-status-active::before   { background: var(--es-success); }
 .emblem-studio-wrap .es-status-inactive { background: var(--es-gray-100); color: var(--es-text-muted); }
 .emblem-studio-wrap .es-status-inactive::before { background: var(--es-gray-400); }
-/* Active-but-not-rendering: amber = scheduled (not started yet), slate = expired
-   (window passed). Distinct from the green Active so the "why isn't it showing?"
-   case stands out at a glance. */
 .emblem-studio-wrap .es-status-scheduled { background: #fef3c7; color: #92400e; }
 .emblem-studio-wrap .es-status-scheduled::before { background: #d97706; }
 .emblem-studio-wrap .es-status-expired   { background: #e2e8f0; color: #475569; }
 .emblem-studio-wrap .es-status-expired::before   { background: #64748b; }
-/* Showing now, but has an end date still ahead ("scheduled to end") — sky, so
-   it reads as live-but-time-limited, distinct from plain green Active. */
 .emblem-studio-wrap .es-status-ending    { background: #e0f2fe; color: #075985; }
 .emblem-studio-wrap .es-status-ending::before    { background: #0ea5e9; }
-/* Archived — hidden from the normal lists/tabs and never renders, kept for
-   history/comparison. Violet, distinct from every render-state color above. */
 .emblem-studio-wrap .es-status-archived  { background: #f5f3ff; color: #6d28d9; }
 .emblem-studio-wrap .es-status-archived::before  { background: #8b5cf6; }
-/* Schedule display-zone toggle (Site time / My local time) — a small joined
-   segmented control. Display only; times are always saved in site time. */
 .emblem-studio-wrap .es-tz-toggle { display: inline-flex; border: 1px solid var(--es-gray-300, #c3c4c7); border-radius: 6px; overflow: hidden; }
 .emblem-studio-wrap .es-tz-btn { appearance: none; border: 0; background: #fff; color: var(--es-text-muted, #646970); padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .emblem-studio-wrap .es-tz-btn + .es-tz-btn { border-left: 1px solid var(--es-gray-300, #c3c4c7); }
 .emblem-studio-wrap .es-tz-btn.is-active { background: var(--es-ink, #1d2327); color: #fff; }
-/* Click-to-copy shortcodes. */
 .es-copy { cursor: pointer; transition: background-color 0.15s; }
 .es-copy:hover { background: var(--es-sunset-soft); }
 .es-copy:active { background: #f6dfc4; }
@@ -3410,8 +3053,6 @@
 .es-copy-tip.is-visible { opacity: 1; transform: translate(-50%, -110%); }
 .es-copy-tip.is-error { background: #b32d2e; }
 
-/* Click-to-copy box for a snippet (Privacy & Cookies), the web app's CopyBox:
-   dark, as wide as the page, as tall as its text, and nothing to drag. */
 .emblem-studio-wrap .es-copybox.es-copy {
 	display: flex;
 	align-items: flex-start;
@@ -3451,32 +3092,6 @@
 }
 .emblem-studio-wrap .es-copybox.es-copy:hover .es-copybox-btn { border-color: #8a8fa8; color: #fff; }
 
-/* ============================================================
- * Tactical accent overrides — apply the chosen --es-accent to a
- * handful of high-visibility elements that currently use WP's
- * blue. Full design-system rollout is a separate pass (see
- * docs/DESIGN-SYSTEM.md).
- * ============================================================ */
-/* ============================================================
- * Pass 2 — Button system
- * ============================================================
- * Two layers:
- *
- * 1. Global restyle of WP's .button + .button-primary inside our
- *    scope. Every existing button (Save, Add new, pagination,
- *    revision actions, etc.) gets the modern look automatically —
- *    no template changes. WP's submit_button() helper keeps working.
- *
- * 2. Explicit .es-btn family for NEW components that want a variant
- *    WP doesn't have (.es-btn-ghost, .es-btn-danger) or a different
- *    size (.es-btn-sm 28px, .es-btn-lg 44px). Always paired with a
- *    .es-btn-* variant class.
- *
- * Heights: sm 28px / md 36px (default) / lg 44px. Same height as the
- * matching form input so they align in toolbars / sticky bars.
- */
-
-/* --- Layer 1: WP button restyle ------------------------------ */
 .emblem-studio-wrap .button,
 .emblem-studio-wrap input.button,
 .emblem-studio-wrap input[type="submit"].button {
@@ -3531,7 +3146,6 @@
 	transform: none;
 }
 
-/* Primary — accent-filled. Overrides the .button base above. */
 .emblem-studio-wrap .button-primary {
 	background: var(--es-accent, #2271b1);
 	border-color: var(--es-accent, #2271b1);
@@ -3548,7 +3162,6 @@
 	border-color: var(--es-accent-active, #135e96);
 }
 
-/* Sizes — applied via WP's existing .button-large / .button-small. */
 .emblem-studio-wrap .button.button-small {
 	height: 28px;
 	padding: 0 10px;
@@ -3561,8 +3174,6 @@
 	font-size: var(--es-text-md);
 }
 
-/* WP renders link-style buttons in some places (.button-link). Keep
- * them visually link-y, just retoned to the accent. */
 .emblem-studio-wrap .button-link {
 	display: inline;
 	height: auto;
@@ -3581,7 +3192,6 @@
 	text-decoration: underline;
 }
 
-/* --- Layer 2: explicit .es-btn family for new components ----- */
 .emblem-studio-wrap .es-btn {
 	display: inline-flex;
 	align-items: center;
@@ -3658,14 +3268,6 @@
 .emblem-studio-wrap .es-btn-sm { height: 28px; padding: 0 10px; font-size: var(--es-text-sm); }
 .emblem-studio-wrap .es-btn-lg { height: 44px; padding: 0 20px; font-size: var(--es-text-md); }
 
-/* ============================================================
- * Page header — title + subtitle on the left, action buttons on
- * the right. Replaces WP's float-based wp-heading-inline layout
- * (which let .subsubsub float up beside the title). Shared by the
- * Forms & Assets list and the Reports page.
- * ============================================================ */
-/* Eyebrow pill — the recurring "Sunset" label above a page/section title.
-   Uppercase, sunset-soft fill, gradient dot. Reusable across admin pages. */
 .emblem-studio-wrap .es-eyebrow {
 	display: inline-flex;
 	align-items: center;
@@ -3689,7 +3291,6 @@
 	background: var(--es-sunset);
 	flex-shrink: 0;
 }
-/* Horizon rule — a fading sunset hairline used as a section divider. */
 .emblem-studio-wrap .es-horizon {
 	height: 2px;
 	border: 0;
@@ -3724,12 +3325,9 @@
 	align-items: center;
 	flex-wrap: wrap;
 	gap: var(--es-space-2);
-	/* Nudge down so the button row aligns to the title baseline, not its top. */
 	padding-top: var(--es-space-1);
 }
-/* Inside the flex header, drop the left margin WP relies on for inline spacing. */
 .emblem-studio-wrap .es-page-header-actions .page-title-action { margin-left: 0; }
-/* Primary header action — sunset-gradient pill (e.g. "Add New"). */
 .emblem-studio-wrap .page-title-action.es-action-primary {
 	color: #fff;
 	background: var(--es-sunset-btn);
@@ -3745,8 +3343,6 @@
 	box-shadow: 0 16px 32px rgba(200, 110, 60, 0.30);
 }
 
-/* Status filter tabs (All / Active / Inactive / Trash) as a pill row.
-   Overrides WP's .subsubsub float so it no longer rides up next to the title. */
 .emblem-studio-wrap .es-filter-pills {
 	float: none;
 	display: inline-flex;
@@ -3775,8 +3371,6 @@
 	background: var(--es-sunset-soft);
 	color: var(--es-gray-900);
 }
-/* Solid accent fill for the selected filter — the soft-accent default read as
-   washed out. Extra .subsubsub specificity so this wins over the base rule. */
 .emblem-studio-wrap .subsubsub.es-filter-pills a.current {
 	background: var(--es-sunset-btn);
 	border-color: transparent;
@@ -3806,8 +3400,6 @@
 	color: var(--es-accent, #2271b1);
 }
 
-/* WP's "Add New" header-action link sits next to <h1>. Restyle to
- * match our secondary button so it doesn't read as a different system. */
 .emblem-studio-wrap .page-title-action {
 	display: inline-flex;
 	align-items: center;
@@ -3838,20 +3430,6 @@
 	box-shadow: var(--es-shadow-sm);
 	color: var(--es-text-strong);
 }
-/* ============================================================
- * Pass 3 — Form controls + toggle switches
- * ============================================================
- * Restyle native text-like inputs / textareas / selects to match
- * the button system: 36px tall, same border + radius treatment,
- * Montserrat 13px, accent focus ring. Apply broadly across the
- * scope so every form across every Emblem Studio screen lifts.
- *
- * The .CodeMirror textarea is excluded — it has its own layout
- * and lives in a different visual lane (code authoring, not
- * config). Multi-line textareas (.es-success-message,
- * .es-html / .es-css editors when CodeMirror is off) get the
- * same treatment with auto height.
- */
 .emblem-studio-wrap input[type="text"],
 .emblem-studio-wrap input[type="email"],
 .emblem-studio-wrap input[type="url"],
@@ -3898,9 +3476,6 @@
 .emblem-studio-wrap textarea::placeholder { color: var(--es-text-faint); }
 
 .emblem-studio-wrap select {
-	/* Custom chevron — appearance:none kills the native arrow so we can
-	 * paint a single, consistent SVG that works across browsers + matches
-	 * the surrounding text color via currentColor. */
 	appearance: none;
 	-webkit-appearance: none;
 	padding-right: 32px;
@@ -3917,8 +3492,6 @@
 	padding: 6px;
 }
 
-/* Unified focus state — single source of truth, replaces the old
- * scattered focus rules. Accent ring with offset for keyboard nav. */
 .emblem-studio-wrap input[type="text"]:focus,
 .emblem-studio-wrap input[type="email"]:focus,
 .emblem-studio-wrap input[type="url"]:focus,
@@ -3937,26 +3510,12 @@
 	outline: none;
 }
 
-/* Native checkboxes + radios get their fill from WP's own
- * var(--wp-admin-theme-color), which we re-point to the brand accent in
- * the token block above — so the checked box, white check/dot, borders
- * and focus ring all follow the sunset accent with no per-state hacks.
- * accent-color covers range sliders + any natively-rendered control. */
 .emblem-studio-wrap input[type="checkbox"]:not(.es-toggle-input),
 .emblem-studio-wrap input[type="radio"],
 .emblem-studio-wrap input[type="range"] {
 	accent-color: var(--es-accent);
 }
 
-/* ============================================================
- * Toggle switch — checkbox visually rendered as a 36×20 pill
- * ============================================================
- * Opt-in: any <input type="checkbox" class="es-toggle-input">
- * renders as a switch. The checkbox stays semantic (form posts
- * the same value, screen readers read it correctly) — only the
- * visual changes. Pair with a sibling label/text however the
- * template wants — we don't dictate the wrapper.
- */
 .emblem-studio-wrap .es-toggle-input {
 	appearance: none;
 	-webkit-appearance: none;
@@ -4001,24 +3560,6 @@
 	cursor: not-allowed;
 }
 
-/* ============================================================
- * Pass 4 — Semantic notices
- * ============================================================
- * Two layers:
- *
- * 1. Override WP's .notice variants inside our scope so every
- *    existing inline notice (form saved, restored, duplicated,
- *    imported, etc.) gets the new look automatically — no
- *    template changes. WP's is-dismissible × close still works.
- *
- * 2. .es-notice classes for explicit usage in new components.
- *
- * Treatment per variant: soft tinted background + bold semantic
- * color text + thick left border in the same bold color. Card-
- * like in feel, never the WP yellow-and-blue strip look.
- */
-
-/* Layer 1: WP .notice overrides */
 .emblem-studio-wrap .notice {
 	margin: 0 0 var(--es-space-4);
 	padding: var(--es-space-3) var(--es-space-4);
@@ -4054,7 +3595,6 @@
 	background: var(--es-info-soft);
 	border-left-color: var(--es-info);
 }
-/* WP's dismissible close button — retone to inherit the notice color */
 .emblem-studio-wrap .notice-dismiss {
 	color: var(--es-text-muted);
 }
@@ -4068,7 +3608,6 @@
 	outline-offset: 2px;
 }
 
-/* Layer 2: explicit .es-notice classes for new components */
 .emblem-studio-wrap .es-notice {
 	display: flex;
 	gap: var(--es-space-3);
@@ -4098,16 +3637,6 @@
 	border-left-color: var(--es-info);
 }
 
-/* ============================================================
- * Pass 5 — Cross-screen polish (Forms list / Reports / Trash /
- * Leads / Settings logs)
- * ============================================================
- * Retones WP's stock list table + tablenav + subsubsub filter
- * row + search box inside our scope so every "data screen"
- * looks like one product. No template changes — WP's
- * wp_list_table() output keeps working. */
-
-/* WP list table — borders + radii so it reads as a card */
 .emblem-studio-wrap .wp-list-table {
 	border-collapse: separate;
 	border-spacing: 0;
@@ -4140,7 +3669,7 @@
 	background: var(--es-surface-hover);
 }
 .emblem-studio-wrap .wp-list-table.striped tbody tr:nth-child(odd) {
-	background: transparent;            /* kill WP's zebra — hover-only feels cleaner */
+	background: transparent;
 }
 .emblem-studio-wrap .wp-list-table.striped tbody tr:nth-child(odd):hover {
 	background: var(--es-surface-hover);
@@ -4163,7 +3692,6 @@
 }
 .emblem-studio-wrap .wp-list-table .row-actions .trash a { color: var(--es-danger); }
 
-/* Filter row — "All (n) | Active (n) | Inactive (n) | Trash (n)" */
 .emblem-studio-wrap .subsubsub {
 	margin: var(--es-space-4) 0 var(--es-space-3);
 	font-size: var(--es-text-base);
@@ -4194,7 +3722,6 @@
 	font-weight: 400;
 }
 
-/* Tablenav — pagination + bulk actions bar above/below the table */
 .emblem-studio-wrap .tablenav {
 	display: flex;
 	align-items: center;
@@ -4232,7 +3759,6 @@
 	margin-right: var(--es-space-2);
 }
 
-/* Search box on Leads list */
 .emblem-studio-wrap .search-box {
 	display: inline-flex;
 	align-items: center;
@@ -4240,8 +3766,6 @@
 	margin-bottom: var(--es-space-3);
 }
 
-/* Date range picker on Reports — the inline form with from/to dates +
- * Filter button. Group them visually so it reads as one control bar. */
 .emblem-studio-wrap .es-date-range-form {
 	display: inline-flex;
 	align-items: center;
@@ -4253,8 +3777,6 @@
 	box-shadow: var(--es-shadow-xs);
 }
 
-/* WP form-table (Settings page) — retone label cells + remove
- * the wide first column treatment that makes settings feel cramped */
 .emblem-studio-wrap .form-table {
 	border-spacing: 0;
 }
@@ -4270,7 +3792,6 @@
 	vertical-align: top;
 }
 
-/* Section gap rhythm between adjacent <h2> sections on a settings page */
 .emblem-studio-wrap > h2,
 .emblem-studio-wrap form > h2 {
 	margin-top: var(--es-space-6);
@@ -4279,9 +3800,6 @@
 	border-bottom: 1px solid var(--es-border);
 }
 
-/* ============================================================
- * Templates gallery — industry-bundle picker
- * ============================================================ */
 .emblem-studio-wrap .es-templates-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -4372,11 +3890,6 @@
 	border-style: dashed;
 }
 
-/* ============================================================
- * Form picker (replaces direct-to-blank on Add New)
- * ============================================================ */
-
-/* Blank card — wide, prominent, top of picker */
 .emblem-studio-wrap .es-picker-blank {
 	display: flex;
 	align-items: center;
@@ -4432,7 +3945,6 @@
 	flex-shrink: 0;
 }
 
-/* Filter chips */
 .emblem-studio-wrap .es-picker-filters {
 	display: flex;
 	flex-wrap: wrap;
@@ -4468,7 +3980,6 @@
 	background: var(--es-accent-hover);
 }
 
-/* Collections */
 .emblem-studio-wrap .es-picker-collections {
 	display: grid;
 	gap: var(--es-space-6);
@@ -4491,7 +4002,6 @@
 }
 .emblem-studio-wrap .es-picker-collection.is-empty { display: none; }
 
-/* Template thumbnail grid */
 .emblem-studio-wrap .es-picker-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -4527,7 +4037,7 @@
 	height: 100%;
 	border: 0;
 	display: block;
-	pointer-events: none;   /* visual only — never an install trigger */
+	pointer-events: none;
 }
 .emblem-studio-wrap .es-picker-card-meta {
 	display: flex;
@@ -4556,9 +4066,6 @@
 }
 .emblem-studio-wrap .es-picker-card-actions .button-primary { flex: 2; }
 
-/* ============================================================
- * Leads filter bar + status pills
- * ============================================================ */
 .emblem-studio-wrap .es-leads-filter {
 	margin: var(--es-space-4) 0 var(--es-space-3);
 	padding: var(--es-space-4);
@@ -4614,8 +4121,6 @@
 	}
 }
 
-/* Flat data tables (Leads, Tests, …) share the forms-list "standout"
-   gold header + warm row hover so every list reads as one family. */
 .emblem-studio-wrap .es-data-table thead th {
 	background: linear-gradient(180deg, #fdeada 0%, #fae0c6 100%);
 	color: var(--es-dusk-1);
@@ -4628,7 +4133,6 @@
 	background: #fff7ef;
 }
 
-/* Lead status pills — Synced / Failed / Pending */
 .emblem-studio-wrap .es-lead-status-pill {
 	display: inline-flex;
 	align-items: center;
@@ -4653,9 +4157,6 @@
 .emblem-studio-wrap .es-lead-pending { background: var(--es-warning-soft); color: var(--es-warning); }
 .emblem-studio-wrap .es-lead-bot     { background: var(--es-gray-100); color: var(--es-text-muted); }
 
-/* Bot leads — soft warm tint on the row + a small "BOT" tag in the name
- * cell so an at-a-glance scan separates them from human leads even when
- * the Bots tab is mixed with humans in the All view. */
 .emblem-studio-wrap tr.es-lead-row-bot {
 	background-color: #fdf6ee;
 }
@@ -4686,24 +4187,15 @@
 	color: var(--es-text-faint);
 }
 
-/* Humans / Bots / All tab strip — uses WP's stock .subsubsub markup
- * for layout, just adds the count badge tone. */
 .emblem-studio-wrap .es-leads-tabs {
 	margin: 6px 0 12px;
 }
-/* Count bubble styling comes from .es-filter-pills (shared with the
-   Forms list); no per-tab overrides needed here. */
 
-/* Form column on the leads list — don't break form names onto two lines.
- * The form-link can shrink/ellipsize but should never wrap. */
 .emblem-studio-wrap .es-leads-col-form {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-/* Name and Email the same way, with the full text in the cell's title. A long
-   name with no spaces broke over several lines and made one row very tall
-   (item 14 of Catalina's Lite test pass). */
 .emblem-studio-wrap .es-leads-col-name,
 .emblem-studio-wrap .es-leads-col-email {
 	white-space: nowrap;
@@ -4711,22 +4203,11 @@
 	text-overflow: ellipsis;
 }
 
-/* ============================================================
- * Forms list — drag-reorder handle column
- * ============================================================ */
 .emblem-studio-wrap .wp-list-table.es-forms-table .col-drag {
 	width: 26px;
 	padding-left: 6px;
 	padding-right: 0;
 }
-/* Using ns-resize (vertical double-arrow ↕) over grab/grabbing because:
- *   - Drag-reorder is constrained to the Y axis here, so the cursor
- *     semantically matches what the user can actually do
- *   - ns-resize renders with a visible outline on every browser/OS,
- *     including the Chrome-on-Windows case where grab silently
- *     dropped its stroke and went white-on-white
- *   - Applied to all descendants so the cursor doesn't flicker as the
- *     pointer crosses between the td and the inner dashicon span */
 .emblem-studio-wrap .es-form-drag-handle,
 .emblem-studio-wrap .es-form-drag-handle *,
 .emblem-studio-wrap .ui-sortable-helper .es-form-drag-handle,
@@ -4749,8 +4230,6 @@
 	line-height: 18px;
 }
 
-/* The placeholder tbody jQuery UI inserts during drag — a soft accent
- * outline at the drop target. */
 .emblem-studio-wrap .es-form-group-placeholder {
 	background: var(--es-surface-hover);
 	outline: 2px dashed var(--es-accent, #2271b1);
@@ -4758,16 +4237,12 @@
 }
 .emblem-studio-wrap .es-form-group-placeholder td { visibility: hidden; }
 
-/* While being dragged, the row floats with a soft shadow */
 .emblem-studio-wrap .es-form-group.ui-sortable-helper {
 	box-shadow: 0 14px 32px -10px rgba(15, 23, 42, 0.25);
 	opacity: 0.95;
 	background: var(--es-surface);
 }
 
-/* ============================================================
- * Connect tab — destination cards (FunnelKit, Webhooks, ...)
- * ============================================================ */
 .emblem-studio-wrap .es-connect-card {
 	margin: var(--es-space-4) 0;
 	padding: var(--es-space-5);
@@ -4784,10 +4259,6 @@
 	padding-bottom: var(--es-space-3);
 	border-bottom: 1px solid var(--es-border);
 }
-/* Title + tag live in their OWN baseline-aligned flex container so the
- * tag text sits on the same baseline as the title text. The toggle
- * still centers against this whole title block via the head's
- * align-items: center. */
 .emblem-studio-wrap .es-connect-card-titles {
 	display: flex;
 	align-items: baseline;
@@ -4816,10 +4287,6 @@
 	flex-shrink: 0;
 }
 
-/* Disabled state — when a destination's active toggle is OFF, hide the
- * entire config body. Header (with the active toggle) stays visible so
- * the user can flip it back on. Config is preserved in the DB; just
- * not rendered until the destination is re-activated. */
 .emblem-studio-wrap .es-connect-card.is-destination-off {
 	background: var(--es-surface-muted);
 	padding-bottom: var(--es-space-3);
@@ -4836,9 +4303,6 @@
 	display: none;
 }
 
-/* Inside the Connect tab, override the global es-tab-panel as the card
- * itself — drop the tab-panel's own card-y treatment so we don't get
- * card-in-card (the cards inside ARE the visible content surfaces). */
 .emblem-studio-wrap #es-tab-connect {
 	background: transparent;
 	border: 0;
@@ -4846,9 +4310,6 @@
 	padding: var(--es-space-2) 0 0;
 }
 
-/* ============================================================
- * Webhook repeater rows (Connect tab → Webhooks card)
- * ============================================================ */
 .emblem-studio-wrap .es-webhook-list {
 	display: grid;
 	gap: var(--es-space-3);
@@ -4947,8 +4408,6 @@
 	margin-top: var(--es-space-2);
 }
 
-/* ── Checks — Design-tab list of problems in the asset (SER-1358) ──
-   Not a WP .notice: initAutoCloseNotices() would turn it into a toast. */
 .emblem-studio-wrap .es-checks {
 	margin: 0 0 var(--es-space-4);
 	padding: 14px 16px;
@@ -5003,7 +4462,6 @@
 	color: var(--es-text);
 }
 
-/* ── Authoring help — Design-tab "copy spec / pre-prompt" links ─── */
 .emblem-studio-wrap .es-authoring-help {
 	margin: 0 0 var(--es-space-4);
 	padding: 14px 16px;
@@ -5039,7 +4497,6 @@
 .emblem-studio-wrap .es-authoring-link:hover { color: var(--es-accent-hover, #135e96); }
 .emblem-studio-wrap .es-authoring-help-sep { color: var(--es-text-muted); }
 
-/* ── Forms list — row action icons ─────────────────────────────── */
 .emblem-studio-wrap .es-actions-icons {
 	display: flex;
 	gap: 0;
@@ -5066,10 +4523,6 @@
 .emblem-studio-wrap .es-action-icon.es-action-danger { color: var(--es-danger); }
 .emblem-studio-wrap .es-action-icon.es-action-danger:hover { background: #fdecec; }
 
-/* ── Conversion vs click column tints (scanability) ─────────────── */
-/* Applied on the Forms & Assets list AND on each asset's Stats-tab
-   per-shell table, so the two metric groups read the same way in both
-   places. */
 .emblem-studio-wrap .es-forms-table thead th.es-col-conv,
 .emblem-studio-wrap .es-forms-table > tbody.es-form-group > tr > td.es-col-conv,
 .emblem-studio-wrap .es-stats-table thead th.es-col-conv,
@@ -5083,7 +4536,6 @@
 	background-color: #fbeaf0;
 }
 
-/* Concurrent-edit lock — take-over modal + locked-out banner. */
 .es-lock-modal {
 	position: fixed;
 	inset: 0;
@@ -5128,7 +4580,6 @@
 .es-lock-banner[hidden] { display: none; }
 @media screen and (max-width: 782px) { .es-lock-banner { top: 46px; } }
 
-/* "Edit lock" badge on the assets list — someone has the asset open. */
 .es-lock-badge {
 	display: inline-flex;
 	align-items: center;
@@ -5144,8 +4595,6 @@
 	white-space: nowrap;
 	vertical-align: middle;
 }
-/* Copy-down (Lite): shells / assets the SaaS uses that Lite can't run — shown
-   struck through so the user sees what Lite deactivated vs. inactive by choice. */
 .es-lite-badge {
 	display: inline-flex;
 	align-items: center;
@@ -5184,7 +4633,6 @@
 	color: var(--es-dusk-1);
 }
 
-/* ── Preview-first Design tab (single-version, saved assets) ───────── */
 .es-design-preview {
 	border: 1px solid #e2e8f0;
 	border-radius: 10px;
@@ -5228,11 +4676,8 @@
 	align-items: flex-start;
 	min-height: 520px;
 	background: #f1f5f9;
-	overflow: auto; /* fixed widths wider than the stage scroll horizontally */
+	overflow: auto;
 }
-/* "Preview" badge in the toolbar — makes it unmistakable this is a preview,
-   not the live page. Lives in the bar (above the stage) so it never overlaps
-   a ribbon or other shell pinned to the top of the viewport. */
 .es-design-preview-tag {
 	display: inline-flex;
 	align-items: center;
@@ -5247,7 +4692,7 @@
 }
 .es-design-preview-frame {
 	display: block;
-	width: 100%; /* fluid default; the width buttons/slider set a fixed px */
+	width: 100%;
 	height: 520px;
 	flex: 0 0 auto;
 	border: 0;
@@ -5255,7 +4700,6 @@
 	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 8px 28px rgba(15, 23, 42, 0.14);
 }
 
-/* Preview width controls (320 / 480 / 768 / 1024 / Fluid + slider). */
 .es-design-width { display: inline-flex; align-items: center; gap: 8px; }
 .es-design-width button {
 	border: 1px solid #cbd5e1;
@@ -5284,7 +4728,6 @@
 	min-width: 44px;
 }
 
-/* Preview testing toggles — enforce required / submit for real. */
 .es-design-test { display: inline-flex; align-items: center; gap: 12px; }
 .es-design-test-opt {
 	display: inline-flex;
@@ -5300,7 +4743,6 @@
 .es-design-test-opt input:disabled { cursor: not-allowed; }
 .es-design-test-opt:has(input:disabled) { color: #94a3b8; }
 
-/* Hint for easy-to-miss shells (e.g. a ribbon pinned to a viewport edge). */
 .es-design-shell-hint {
 	position: absolute;
 	left: 50%;
@@ -5315,7 +4757,6 @@
 .es-design-shell-hint.is-bottom { bottom: 64px; }
 .es-design-shell-hint.is-top { top: 64px; }
 
-/* Loading overlay — centered on both axes until the preview asset renders. */
 .es-design-loader {
 	position: absolute;
 	inset: 0;
@@ -5337,7 +4778,6 @@
 }
 @keyframes es-design-spin { to { transform: rotate(360deg); } }
 
-/* Shell-aware empty-state placeholder (shown when the asset has no HTML). */
 .es-design-placeholder {
 	position: absolute;
 	inset: 0;
@@ -5363,7 +4803,6 @@
 	border-radius: 16px;
 	color: #475569;
 }
-/* Ribbon → horizontal bar across the top. */
 .es-design-placeholder.is-bar .es-design-ph-box {
 	flex-direction: row;
 	align-items: center;
@@ -5374,7 +4813,6 @@
 	border-radius: 10px;
 	padding: 16px 22px;
 }
-/* Slide-in → smaller corner card. */
 .es-design-placeholder.is-corner .es-design-ph-box { max-width: 280px; }
 
 .es-design-ph-icon {
@@ -5392,16 +4830,8 @@
 .es-design-ph-title { margin: 0; font-size: 15px; font-weight: 700; color: #0f172a; }
 .es-design-ph-text { margin: 0; font-size: 13px; line-height: 1.5; }
 
-/* ── Tooltips ─────────────────────────────────────────────────────────────
-   Instant tooltips for data-es-tip are now rendered by a cursor-following bubble
-   at <body> level (admin.js), so they escape overflow:hidden/auto ancestors
-   (e.g. scrollable stats tables) and never clip. Only the hover affordance
-   remains here. */
 [data-es-tip] { cursor: help; }
 
-/* Rate numbers (the "X% / Y%" pair): each becomes a pill that fills in on hover
-   so it's obvious which number the tooltip is describing. Padding is always
-   present so hovering doesn't shift the layout. */
 .emblem-studio-wrap .es-rate-num {
 	display: inline-block;
 	padding: 1px 6px;
@@ -5414,11 +4844,6 @@
 }
 .emblem-studio-wrap .es-rate-sep { color: var(--es-text-faint); }
 
-/* ============================================================
-   Reports redesign — tier-aware, two layouts (Journey / Grid).
-   Mirrors the SaaS Reports page: same cards, funnel, bars, deltas,
-   locked teasers, and preview switcher.
-   ============================================================ */
 .emblem-studio-wrap .es-rep-switcher {
 	display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
 	margin: 12px 0 4px; padding: 8px 14px;
@@ -5443,7 +4868,6 @@
 .emblem-studio-wrap .es-rep-seg a.is-active { background: var(--es-accent); color: #fff; }
 .emblem-studio-wrap .es-rep-switcher-now { margin-left: auto; font-size: var(--es-text-base); color: var(--es-text-faint); }
 
-/* Headline deltas + accent tile */
 .emblem-studio-wrap .es-rep-vs { color: var(--es-text-faint); font-weight: 400; }
 .emblem-studio-wrap .es-kpi-accent {
 	background: linear-gradient(160deg, var(--es-accent-soft), var(--es-surface));
@@ -5452,7 +4876,6 @@
 .emblem-studio-wrap .es-rep-kpi-locked { justify-content: center; text-align: center; }
 .emblem-studio-wrap .es-rep-kpi-lock { margin-top: 4px; font-size: var(--es-text-base); color: var(--es-info); }
 
-/* Cards (shared by funnel / chart / breakdowns) */
 .emblem-studio-wrap .es-rep-card {
 	background: var(--es-surface); border: 1px solid var(--es-border);
 	border-radius: var(--es-radius-lg); box-shadow: var(--es-shadow-xs);
@@ -5472,7 +4895,6 @@
 	background: var(--es-surface-muted); color: var(--es-text-faint); font-size: var(--es-text-md);
 }
 
-/* Grids */
 .emblem-studio-wrap .es-rep-grid { display: grid; gap: 18px; margin-top: 18px; }
 .emblem-studio-wrap .es-rep-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .emblem-studio-wrap .es-rep-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -5485,7 +4907,6 @@
 	.emblem-studio-wrap .es-rep-grid-3 { grid-template-columns: 1fr; }
 }
 
-/* Funnel */
 .emblem-studio-wrap .es-rep-funnel { display: flex; flex-direction: column; gap: 12px; }
 .emblem-studio-wrap .es-rep-funnel-top { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--es-text-md); margin-bottom: 5px; }
 .emblem-studio-wrap .es-rep-funnel-label { font-weight: 600; color: var(--es-text-strong); }
@@ -5497,20 +4918,17 @@
 .emblem-studio-wrap .es-rep-fill-e { background: #e98f54; }
 .emblem-studio-wrap .es-rep-fill-c { background: var(--es-accent); }
 
-/* Horizontal bar rows (device) */
 .emblem-studio-wrap .es-rep-bars { display: flex; flex-direction: column; gap: 11px; }
 .emblem-studio-wrap .es-rep-bar-top { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--es-text-md); margin-bottom: 4px; color: var(--es-text); }
 .emblem-studio-wrap .es-rep-bar { height: 6px; border-radius: var(--es-radius-pill); background: var(--es-gray-100); overflow: hidden; }
 .emblem-studio-wrap .es-rep-bar > span { display: block; height: 100%; border-radius: var(--es-radius-pill); background: #e98f54; }
 
-/* Simple rows (page) */
 .emblem-studio-wrap .es-rep-rows { display: flex; flex-direction: column; gap: 7px; }
 .emblem-studio-wrap .es-rep-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: var(--es-text-md); }
 .emblem-studio-wrap .es-rep-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--es-text); }
 .emblem-studio-wrap .es-rep-row .es-rep-vs { white-space: nowrap; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .emblem-studio-wrap .es-rep-row strong { color: var(--es-text-strong); }
 
-/* Locked teaser cards */
 .emblem-studio-wrap .es-rep-locked-title { color: var(--es-text-faint) !important; }
 .emblem-studio-wrap .es-rep-tier-badge {
 	font-size: var(--es-text-sm); font-weight: 700; padding: 2px 8px; border-radius: var(--es-radius-pill);
@@ -5524,7 +4942,6 @@
 .emblem-studio-wrap .es-rep-lock-ico { font-size: 22px; }
 .emblem-studio-wrap .es-rep-lock-msg { font-size: var(--es-text-md); font-weight: 600; color: var(--es-text-muted); }
 
-/* Lite-edition upsell card — shown where an account-only feature would be. */
 .emblem-studio-wrap .es-lite-upsell {
 	border: 1px dashed var(--es-border, #d6d6e0);
 	border-radius: 12px;
@@ -5543,11 +4960,6 @@
 .emblem-studio-wrap .es-lite-upsell strong { display: block; font-size: 14px; margin-bottom: 4px; }
 .emblem-studio-wrap .es-lite-upsell p { margin: 0; font-size: 12px; color: var(--es-text-muted, #6c7180); line-height: 1.5; }
 
-/* Display-rule presets — Manage Presets modal (SER-899 phase 2). Appended
-   INSIDE .emblem-studio-wrap (not document.body) on purpose, so it inherits
-   the .es-content-picker/.es-content-chip styling below, which is scoped to
-   that wrapper — position:fixed still overlays the full viewport regardless
-   of DOM ancestry. */
 #es-preset-modal { display: none; position: fixed; inset: 0; z-index: 100000; }
 #es-preset-modal.is-open { display: block; }
 #es-preset-modal .es-preset-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
@@ -5576,9 +4988,6 @@
 #es-preset-modal .es-preset-modal-chk { display: inline-flex; align-items: center; gap: 4px; margin: 0 10px 4px 0; font-size: 12px; }
 #es-preset-modal .es-preset-modal-urls { width: 100%; font-family: Menlo, Consolas, monospace; font-size: 12px; }
 
-/* ── Leads: expandable submission detail ──────────────────────────────────
-   A "View" action in the actions column, next to Delete. Styled to match the
-   other row actions, which are plain links, so the column reads as one set. */
 .es-lead-toggle {
 	background: none;
 	border: 0;
@@ -5609,14 +5018,10 @@
 
 .es-lead-fields { margin: 0; }
 .es-lead-fields dt { font-size: 12px; color: #646970; }
-/* pre-line: a long answer is typed in paragraphs, and HTML would fold it into
-   one run-on line. The breaks are stored, so show them (SER-1384). */
 .es-lead-fields dd { margin: 0 0 8px; word-break: break-word; white-space: pre-line; }
 
 .es-lead-detail-none { margin: 0; font-size: 12px; color: #646970; }
 
-/* Confirmed = a known bot name or a datacenter address, not just the trap.
-   Amber for the unconfirmed case: it is a "look at this", not a verdict. */
 .es-lead-bot-verdict {
 	display: inline-block;
 	margin-left: 6px;
@@ -5641,8 +5046,6 @@
 	word-break: break-word;
 }
 
-/* The per-consent "View wording" link sits inline in its own line, so it
-   shouldn't take the bolder treatment the row-name toggle gets. */
 .es-consent-toggle {
 	margin-left: 6px;
 	font-size: 11px;

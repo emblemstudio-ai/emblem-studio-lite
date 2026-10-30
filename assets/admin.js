@@ -1,8 +1,5 @@
 (function ($) {
 	function relaxedSettings(base) {
-		// Disable lint markers for hand-authored form HTML/CSS — the linter raises
-		// false positives on legitimate SVG attributes (viewBox), and on indentation
-		// style, which aren't real errors for this use case.
 		if (!base || !base.codemirror) return base;
 		base.codemirror.lint = false;
 		if (Array.isArray(base.codemirror.gutters)) {
@@ -11,17 +8,10 @@
 		return base;
 	}
 
-	// ── Checks list (SER-1358) ─────────────────────────────────────
-	// Shared by the Design tab box (below) and the full-screen editor
-	// (inspector.js). The server runs ES_Asset_Checks on HTML/CSS that has not
-	// been saved; nothing is stored. The list only warns, it never blocks a save.
 	window.EmblemStudioChecks = (function () {
 		var cfg = window.EmblemStudioAdmin || {};
 		var labels = cfg.checkLabels || { error: 'Will break', warning: 'Worth fixing', title: 'Checks' };
 
-		// cb(items) with the check items, or cb(null) when the request failed
-		// (a failure keeps whatever the list already shows, rather than
-		// pretending the asset is clean).
 		function request(html, css, cb) {
 			if (!cfg.ajaxUrl || !cfg.checkNonce) { cb(null); return; }
 			var body = new URLSearchParams();
@@ -43,8 +33,6 @@
 			return n;
 		}
 
-		// Fill `container` with the grouped list: "Will break" then "Worth
-		// fixing", each item its message and its fix. textContent only.
 		function renderGroups(container, items) {
 			container.textContent = '';
 			['error', 'warning'].forEach(function (level) {
@@ -81,18 +69,8 @@
 	})();
 
 	$(function () {
-		// Mount CodeMirror on editor textareas. Single-version forms get
-		// #es-html / #es-css. A/B test forms get #es-html-A / #es-css-A
-		// IMMEDIATELY (slot A pane is visible from page load), but slot
-		// B's editors are LAZY-INITIALIZED on the first click of the B
-		// tab — CodeMirror's auto-save submit handler doesn't reliably
-		// attach when init runs in a display:none container, which would
-		// silently swallow the user's B edits on form submit.
 		function initEditorIfExists(id, settings) {
 			var el = document.getElementById(id);
-			// Skip hidden fields — the preview-first Design tab keeps es-html /
-			// es-css as hidden inputs (edited only via the takeover editor), so
-			// mounting CodeMirror on them would surface a stray editor.
 			if (!settings || !el || el.hidden) return;
 			wp.codeEditor.initialize($('#' + id), relaxedSettings(settings));
 		}
@@ -102,17 +80,8 @@
 			initEditorIfExists('es-css',    EmblemStudioAdmin.cssEditor);
 			initEditorIfExists('es-html-A', EmblemStudioAdmin.htmlEditor);
 			initEditorIfExists('es-css-A',  EmblemStudioAdmin.cssEditor);
-			// Slot B is intentionally NOT initialized here — see
-			// ensureSlotBEditorsInited inside the variant strip IIFE.
 		})();
 
-		// Belt-and-suspenders form-submit flush: CodeMirror.fromTextArea
-		// normally adds its own submit handler that calls cm.save() (which
-		// copies CM's internal value back to the underlying textarea so
-		// the form POST carries it). With editors mounted in panes that
-		// may have been hidden at some point, the auto-save attachment
-		// can flake — so we also explicitly walk every possible editor
-		// id and force cm.save() before the form submits.
 		(function flushEditorsOnSubmit() {
 			var form = document.querySelector('form.es-form-editor');
 			if (!form) return;
@@ -123,7 +92,7 @@
 					var cm = el.CodeMirror || (el.nextElementSibling && el.nextElementSibling.CodeMirror);
 					if (cm) { try { cm.save(); } catch (e) {} }
 				});
-			}, true); // capture-phase so we run before any cancel listeners
+			}, true);
 		})();
 
 		function syncSuccessFields() {
@@ -136,9 +105,6 @@
 		$(document).on('change', 'input[data-es-success-mode]', syncSuccessFields);
 		syncSuccessFields();
 
-		// Full-screen toggle now appears once per popup panel (click + auto).
-		// Keep every copy in lock-step, and disable the max-width input wherever
-		// full-screen is on (it's meaningless then).
 		function syncPopupFullscreen(on) {
 			var $fs = $('input[name="popup_fullscreen"]');
 			if (!$fs.length) return;
@@ -151,9 +117,6 @@
 		});
 		syncPopupFullscreen();
 
-		// Status toggle: flip the hidden status value + label live, and keep
-		// the header's data-status in sync (drives styling elsewhere). The
-		// hidden input changing is what the dirty-tracker picks up.
 		$(document).on('click', '.es-status-switch', function () {
 			var $sw     = $(this);
 			var active  = $sw.attr('aria-checked') !== 'true';
@@ -164,14 +127,10 @@
 			var hidden = document.getElementById('es-status');
 			if (hidden) {
 				hidden.value = value;
-				// Native bubbling event so the dirty-tracker (addEventListener) sees it.
 				hidden.dispatchEvent(new Event('change', { bubbles: true }));
 			}
 		});
 
-		// Start A/B test — open the confirmation modal (graphic + irreversible
-		// reset warning). The modal's confirm button submits the form with
-		// ab_action=start; cancel / backdrop / Escape dismiss it.
 		var $abStartModal = $('#es-modal-ab-start');
 		function openAbStartModal() {
 			$abStartModal.prop('hidden', false);
@@ -187,9 +146,6 @@
 			if (e.key === 'Escape' && $abStartModal.length && ! $abStartModal.prop('hidden')) closeAbStartModal();
 		});
 
-		// A/B archive panel toggle. Button has aria-controls pointing at
-		// the panel id, aria-expanded flips on click. Multiple toggles
-		// can target the same panel (idle + running strips both show it).
 		$(document).on('click', '.es-ab-archive-toggle', function () {
 			var panelId = this.getAttribute('aria-controls');
 			var panel = panelId ? document.getElementById(panelId) : null;
@@ -217,10 +173,6 @@
 			}
 		});
 
-		// A/B traffic split: A and B inputs are locked to sum 100. User
-		// edits A → B auto-derives. B is editable too — when user types
-		// in B, we mirror back to A. The B input is not submitted (no
-		// name attr); A is the single source of truth.
 		(function initABTrafficSplit() {
 			var a = document.getElementById('es-ab-traffic-a');
 			var b = document.getElementById('es-ab-traffic-b');
@@ -235,16 +187,10 @@
 				var v = clamp(parseInt(b.value, 10) || 50);
 				b.value = v;
 				a.value = 100 - v;
-				// Bubble change on A so the dirty tracker sees it (B has
-				// no name, won't trigger FormData diff on its own).
 				a.dispatchEvent(new Event('change', { bubbles: true }));
 			});
 		})();
 
-		// Declare-winner / end-test confirmation. data-winner is "A", "B",
-		// or "" (end without winner). Each carries different consequences
-		// so the message is tailored per case. The href already carries
-		// a per-form nonce — JS just gates the click.
 		$(document).on('click', '.es-ab-declare-winner', function (e) {
 			var slot = this.getAttribute('data-winner') || '';
 			var msg;
@@ -258,22 +204,6 @@
 			if (!confirm(msg)) e.preventDefault();
 		});
 
-		// A/B variant strip — only present on the Design tab of a form
-		// with a running test. The form now has TWO complete editor
-		// panes (one per slot), each with its own mounted CodeMirror.
-		// Tab clicks just toggle which pane is visible — no value
-		// shuffling, no hidden fields, no browser-cache fights. The
-		// textareas submit directly as variants[A|B][html|css].
-		// `window.EmblemStudioAB.activeSlot` reflects the user's current
-		// pick — read by the inline-preview helper to render the right
-		// variant. Stays 'A' for single-version forms.
-		// Variant strip sticks below the form header on scroll. Form
-		// header height varies with viewport width, font loading
-		// (Montserrat reflows once it's ready), and any admin-bar
-		// state — so a CSS-hardcoded offset misjudges in either
-		// direction (gap when header is short, overlap when tall).
-		// Measure both at mount + on resize + after fonts load and
-		// stamp the result as inline top:Npx on the strip.
 		(function syncStickyStripOffset() {
 			var header = document.querySelector('.es-form-header');
 			var strip  = document.querySelector('.es-ab-strip--running');
@@ -281,8 +211,6 @@
 			function update() {
 				var wpBar = document.getElementById('wpadminbar');
 				var wpBarH = wpBar ? wpBar.offsetHeight : 32;
-				// -1 to overlap the form-header's bottom border by a hair
-				// so the strip sits flush instead of leaving a 1px seam.
 				strip.style.top = (wpBarH + header.offsetHeight - 1) + 'px';
 			}
 			update();
@@ -311,10 +239,6 @@
 				return el.CodeMirror || (el.nextElementSibling && el.nextElementSibling.CodeMirror) || null;
 			}
 
-			// Initialize slot B's editors the FIRST time the user clicks
-			// the B tab — at that moment the pane is visible (we've just
-			// added .is-active), so CodeMirror can lay out correctly and
-			// its auto-save submit handler attaches reliably. Idempotent.
 			function ensureSlotBEditorsInited() {
 				if (slotBInited) return;
 				if (!window.EmblemStudioAdmin || !wp.codeEditor) return;
@@ -335,9 +259,6 @@
 					t.setAttribute('aria-selected', on ? 'true' : 'false');
 				});
 				if (activeLabel) activeLabel.textContent = slot;
-				// First time we reveal slot B, mount its CodeMirrors. After
-				// that, just refresh on every reveal so the gutter renders
-				// (CM can lose layout when its container goes display:none).
 				if (slot === 'B') ensureSlotBEditorsInited();
 				setTimeout(function () {
 					var cmH = getCM('es-html-' + slot);
@@ -345,11 +266,6 @@
 					try { if (cmH) cmH.refresh(); } catch (e) {}
 					try { if (cmC) cmC.refresh(); } catch (e) {}
 				}, 0);
-				// Notify other components (inline preview, future hooks)
-				// that the user is now editing a different variant. Tab
-				// clicks don't fire CodeMirror change events on their own
-				// in the two-pane architecture, so without this the
-				// preview iframe would stay stuck on the prior slot.
 				document.dispatchEvent(new CustomEvent('os:variant-changed', { detail: { slot: slot } }));
 			}
 
@@ -361,40 +277,23 @@
 			});
 		})();
 
-		// (Popup options — max-width, full-screen — and close-button style now
-		// live inside each shell's settings panel, shown/hidden with the panel.)
-
-		// Shell card: toggle data-enabled when checkbox flips so CSS can
-		// show/hide the body and tint the border.
 		$(document).on('change', '.es-shell-toggle', function () {
 			$(this).closest('.es-shell-card').attr('data-enabled', this.checked ? 'true' : 'false');
 		});
 
-		// Display-rules Visitor block: user-role checkboxes only make sense
-		// when "Only logged-in" is selected — toggle visibility live so the
-		// admin doesn't see options that won't apply.
 		$(document).on('change', 'input[data-visitor-logged-in]', function () {
 			var $fieldset = $(this).closest('.es-dr-visitor');
 			var $roles    = $fieldset.find('.es-dr-roles');
 			$roles.toggle($(this).val() === 'in');
 		});
 
-		// Checkbox-pill group: keep is-checked class in sync with the actual
-		// checkbox state so the pill background reflects current selection.
 		$(document).on('change', '.es-checkbox-pill input[type="checkbox"]', function () {
 			$(this).closest('.es-checkbox-pill').toggleClass('is-checked', this.checked);
 		});
 
-		// Inline live preview under the HTML/CSS editors.
-		// User-toggleable via a checkbox; persisted in localStorage so the
-		// choice sticks across reloads. Refreshes the iframe (debounced)
-		// after CodeMirror change events, and re-renders if the success-mode
-		// radios or success-message textarea change. Reuses the same POST
-		// mechanism as the "Preview in new tab" button — just targets the
-		// iframe instead of _blank.
 		(function initInlivePreview() {
 			var checkbox = document.getElementById('es-inline-preview-enabled');
-			if (!checkbox) return; // No inline preview block on this page (new form etc.)
+			if (!checkbox) return;
 			var wrap = document.querySelector('.es-inline-preview-frame-wrap');
 			var btn = document.querySelector('.es-preview-btn');
 			var url = btn ? btn.getAttribute('data-preview-url') : null;
@@ -405,9 +304,6 @@
 
 			function render() {
 				if (!checkbox.checked) return;
-				// preview_frame=1 → the positioned, uninstrumented frame
-				// (correct shell placement + entrance animation + Replay),
-				// the same render the editor's live stage uses.
 				submitPreviewPost(url, 'es-inline-preview-iframe', { preview_frame: '1' });
 			}
 
@@ -429,7 +325,6 @@
 
 			checkbox.addEventListener('change', function () { applyState(checkbox.checked); });
 
-			// Replay entry animations in the preview frame.
 			var replayBtn = document.getElementById('es-inline-preview-replay');
 			if (replayBtn) {
 				replayBtn.addEventListener('click', function () {
@@ -438,7 +333,6 @@
 						iframe.contentWindow.postMessage({ type: 'es-inspector:replay' }, '*');
 					}
 				});
-				// Disable Replay when the frame reports the asset has no animation.
 				window.addEventListener('message', function (e) {
 					var iframe = document.getElementById('es-inline-preview-iframe');
 					if (!iframe || e.source !== iframe.contentWindow) return;
@@ -449,19 +343,13 @@
 				});
 			}
 
-			// Restore previous preference.
 			try {
 				if (localStorage.getItem(STORAGE_KEY) === '1') {
 					checkbox.checked = true;
-					// Wait briefly for CodeMirror to mount its editors before
-					// the first render — otherwise we'd POST empty values.
 					setTimeout(function () { applyState(true); }, 400);
 				}
 			} catch (e) {}
 
-			// Hook CodeMirror change events for debounced refresh.
-			// Dedup via a flag on the CM instance so we can safely
-			// re-call hookEditor when slot B's editors lazy-init.
 			function hookEditor(id) {
 				var el = document.getElementById(id);
 				if (!el) return;
@@ -478,31 +366,18 @@
 					else if (++tries > 80) clearInterval(t);
 				}, 100);
 			}
-			// Hook either the single-version editors OR the per-slot
-			// A/B editors — whichever the page rendered.
 			['es-html', 'es-html-A', 'es-html-B'].forEach(hookEditor);
 			['es-css', 'es-css-A', 'es-css-B'].forEach(hookEditor);
 
-			// Variant tab switches don't fire CodeMirror change events,
-			// so without an explicit hook the preview would stay stuck
-			// on the previously-edited slot. Listen for the synthetic
-			// event from the variant strip + re-hook B's editors in case
-			// they were lazy-initialized AFTER our initial polling expired.
 			document.addEventListener('os:variant-changed', function () {
 				hookEditor('es-html-B');
 				hookEditor('es-css-B');
 				scheduleRender();
 			});
 
-			// Success-mode + message changes should also trigger a re-render
-			// since the preview reflects what shows after submit.
 			$(document).on('change', 'input[name="success_mode"], #es-success-message', scheduleRender);
 		})();
 
-		// Preview-first Design tab (single-version). The HTML/CSS fields are
-		// hidden; this shows the positioned preview when there's markup, a
-		// shell-aware placeholder when it's empty, switches between enabled
-		// shells, replays entry animations, and refreshes after the editor.
 		(function initDesignPreview() {
 			var wrap = document.querySelector('.es-design-preview');
 			if (!wrap) return;
@@ -518,7 +393,6 @@
 				return a ? a.getAttribute('data-shell') : 'inline';
 			}
 			function htmlFieldId() {
-				// A/B: the preview tracks whichever variant the tabs have active.
 				if (window.EmblemStudioAB && window.EmblemStudioAB.testRunning) {
 					return 'es-html-' + window.EmblemStudioAB.activeSlot;
 				}
@@ -544,15 +418,15 @@
 			var loader = wrap.querySelector('.es-design-loader');
 			function refresh() {
 				syncTestVisibility();
-				if (shellHint) shellHint.hidden = true; // re-shown when the new frame reports its shell
+				if (shellHint) shellHint.hidden = true;
 				if (isEmpty() || !url) {
-					if (loader) loader.hidden = true; // nothing to load — show the placeholder instead
+					if (loader) loader.hidden = true;
 					buildPlaceholder();
 					ph.hidden = false;
 				} else {
 					ph.hidden = true;
-					if (loader) loader.hidden = false; // spinner until the iframe finishes loading
-					iframe.style.height = '520px'; // reset to the floor; the frame re-reports its size
+					if (loader) loader.hidden = false;
+					iframe.style.height = '520px';
 					submitPreviewPost(url, 'es-inline-preview-iframe', { preview_frame: '1', inspector_shell: activeShell() });
 				}
 			}
@@ -570,21 +444,14 @@
 				if (iframe.contentWindow) iframe.contentWindow.postMessage({ type: 'es-inspector:replay' }, '*');
 			});
 
-			// Preview testing toggles. Default = sandbox (no validation, no send).
-			// "Submit for real" implies "Enforce required", so we tick + lock that
-			// box when it's on. We push the current state to the frame on every
-			// (re)load so a fresh preview document picks it up.
 			var validateCb = wrap.querySelector('.es-design-validate');
 			var sendCb = wrap.querySelector('.es-design-send');
 			var testGroup = wrap.querySelector('.es-design-test');
 			var shellHint = wrap.querySelector('.es-design-shell-hint');
 
-			// The preview frame reports which shell/position it rendered; flag the
-			// ones that are easy to miss (a ribbon pinned to the top/bottom edge).
 			window.addEventListener('message', function (e) {
 				if (e.source !== iframe.contentWindow) return;
 				var d = e.data || {};
-				// Disable Replay when the asset has no animation to run.
 				if (d && d.type === 'es-inspector:animatable') {
 					if (replay) {
 						replay.disabled = !d.animatable;
@@ -592,8 +459,6 @@
 					}
 					return;
 				}
-				// Grow the preview to fit a taller asset (520px floor + ~150px
-				// above/below). Ribbon / slide-in / fullscreen report 0 → stay min.
 				if (d && d.type === 'es-inspector:size') {
 					var sh = (typeof d.height === 'number') ? d.height : 0;
 					iframe.style.height = sh > 0 ? Math.max(520, sh + 100) + 'px' : '520px';
@@ -605,17 +470,12 @@
 					shellHint.textContent = atBottom
 						? '↓ This ribbon shows at the bottom of the page'
 						: '↑ This ribbon shows at the top of the page';
-					// Pin the hint to the OPPOSITE edge so it never overlaps the ribbon.
 					shellHint.className = 'es-design-shell-hint ' + (atBottom ? 'is-top' : 'is-bottom');
 					shellHint.hidden = false;
 				} else {
 					shellHint.hidden = true;
 				}
 			});
-			// The client-side mirror of ES_Form_Repo::has_fields() — the editor needs
-			// the answer live, as the user types. Keep the two in sync. A <form> tag
-			// is NOT the test: the authoring spec puts one on every asset, form-less
-			// announcements included; only a real field means there is data to capture.
 			function hasFields() {
 				var ta = document.getElementById(htmlFieldId());
 				if (!ta) return false;
@@ -623,17 +483,14 @@
 				if (/<(?:textarea|select)[\s>]/i.test(html)) return true;
 				var inputs = html.match(/<input\b[^>]*>/gi);
 				if (!inputs) return false;
-				// <input> types that capture nothing a visitor typed or chose.
 				var nonFields = ['hidden', 'submit', 'button', 'image', 'reset'];
 				return inputs.some(function (tag) {
-					// An <input> with no type= is a text field.
 					var m = tag.match(/\btype\s*=\s*("|'|)([a-zA-Z-]+)\1/i);
 					var type = m ? m[2].toLowerCase() : 'text';
 					return nonFields.indexOf(type) === -1;
 				});
 			}
 			function syncTestVisibility() {
-				// Only relevant when the asset has fields to submit.
 				if (testGroup) testGroup.hidden = !hasFields();
 			}
 			function sendPreviewConfig() {
@@ -652,12 +509,9 @@
 			if (validateCb) validateCb.addEventListener('change', sendPreviewConfig);
 			iframe.addEventListener('load', function () {
 				sendPreviewConfig();
-				// Asset has rendered — drop the spinner (a frame later so its
-				// entrance animation starts under the veil, not after a flash).
 				if (loader && !loader.hidden) requestAnimationFrame(function () { loader.hidden = true; });
 			});
 
-			// Width controls — resize the preview iframe (centered in the stage).
 			var widthBtns = wrap.querySelectorAll('.es-design-width button[data-w]');
 			var slider = wrap.querySelector('.es-design-width-slider');
 			var widthLabel = wrap.querySelector('.es-design-width-label');
@@ -668,7 +522,7 @@
 			}
 			function setWidth(w) {
 				if (w === 'fluid') {
-					iframe.style.width = ''; // falls back to 100% via CSS
+					iframe.style.width = '';
 					if (widthLabel) widthLabel.textContent = 'Fluid';
 				} else {
 					var px = parseInt(w, 10) || 0;
@@ -687,19 +541,12 @@
 				markActiveWidth(null);
 			});
 
-			// The editor writes its edits back to the hidden fields on Done.
 			document.addEventListener('es:editor-closed', refresh);
-			// A/B: re-render when the variant tabs switch the active variant.
 			document.addEventListener('os:variant-changed', refresh);
 
 			setTimeout(refresh, 150);
 		})();
 
-		// Design tab Checks box (SER-1358). PHP renders it from the stored asset;
-		// from then on it follows the HTML/CSS fields. Those fields are hidden and
-		// the full-screen editor writes to them without firing any event, so the
-		// editor closing is the main trigger. Typing into a visible textarea or a
-		// CodeMirror (if one is ever mounted) counts too, debounced.
 		(function initAssetChecksBox() {
 			var box = document.getElementById('es-checks');
 			var checks = window.EmblemStudioChecks;
@@ -722,8 +569,6 @@
 				return { html: read(f.html), css: read(f.css) };
 			}
 
-			// What the box currently reflects. Starts as the page-load values,
-			// which PHP already checked, so an unchanged asset makes no request.
 			var start = current();
 			var shown = start.html + '\u0000' + start.css;
 			var timer = null;
@@ -736,7 +581,7 @@
 				if (key === shown) return;
 				var mine = ++seq;
 				checks.request(now.html, now.css, function (items) {
-					if (mine !== seq || items === null) return; // a newer check is on its way, or this one failed
+					if (mine !== seq || items === null) return;
 					shown = key;
 					checks.renderGroups(body, items);
 					box.hidden = items.length === 0;
@@ -763,15 +608,10 @@
 					}
 				}, 250);
 			});
-			// The editor wrote its edits back (Done) or left the fields alone
-			// (Cancel). Either way, check what the fields hold now.
 			document.addEventListener('es:editor-closed', run);
-			// A/B: the box follows whichever variant the tabs show.
 			document.addEventListener('os:variant-changed', run);
 		})();
 
-		// New-asset "Open editor": there's no saved row yet, so save first
-		// (flagging the redirect) and the editor auto-opens on the reload.
 		(function initCreateAndEdit() {
 			var btn = document.querySelector('.es-design-create-edit');
 			if (!btn) return;
@@ -789,17 +629,6 @@
 			});
 		})();
 
-		// Revisions tab — chronological list with side-by-side diff + preview.
-		// Click a row to expand. The body holds:
-		//   1. HTML diff (old left, current right) — red lines = removed, green = added
-		//   2. CSS diff  (same shape)
-		//   3. Previews (old left, current right) — iframes named in PHP so the
-		//      POST-to-iframe form submission resolves a named browsing context
-		//      on the very first try (no race with .name set via JS).
-		// Scheduled change previews: "How it looks now" (the saved form) beside
-		// "After this change" (the queued HTML and CSS). Same POST-into-a-named-
-		// iframe route as the past revision previews below, so both render through
-		// ES_Preview exactly like the Design tab.
 		(function initScheduledPreviews() {
 			document.querySelectorAll('.es-sched-previews').forEach(function (box) {
 				var url = box.getAttribute('data-preview-url');
@@ -850,15 +679,10 @@
 					.replace(/'/g, '&#39;');
 			}
 
-			// Strip CR (CRLF/CR → LF) and drop a trailing newline so split('\n')
-			// doesn't yield phantom empty trailing lines or per-line \r mismatches
-			// that make every line look "different."
 			function normalizeForDiff(s) {
 				return String(s).replace(/\r\n?/g, '\n').replace(/\n$/, '');
 			}
 
-			// Longest common prefix and suffix of two strings — used to highlight
-			// only the changed middle within a modified line.
 			function commonPrefixLen(a, b) {
 				var i = 0, n = Math.min(a.length, b.length);
 				while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
@@ -866,14 +690,9 @@
 			}
 			function commonSuffixLen(a, b, capA, capB) {
 				var i = 0, la = a.length, lb = b.length;
-				// Don't let the suffix overlap with the already-counted prefix.
 				while (i < (la - capA) && i < (lb - capB) && a.charCodeAt(la - 1 - i) === b.charCodeAt(lb - 1 - i)) i++;
 				return i;
 			}
-			// Heuristic: are two changed lines similar enough to pair up as a
-			// "modified" row (with intra-line highlights) instead of two separate
-			// red/green rows? Yes if the matching prefix+suffix covers at least
-			// 25% of the longer line. Otherwise they're effectively unrelated.
 			function linesSimilar(a, b) {
 				if (!a.length || !b.length) return false;
 				var p = commonPrefixLen(a, b);
@@ -881,13 +700,6 @@
 				return ( p + s ) / Math.max(a.length, b.length) >= 0.25;
 			}
 
-			// Line-level LCS diff. Returns {type, oldLine, newLine} entries.
-			//
-			// Lines the two versions share at the start and end are matched first,
-			// and only the changed middle goes through the table (audit J3). The
-			// full table was m by n: two 3,000-line assets cost about 36 MB and
-			// 9 million steps on every expand. Past MAX_CELLS the middle is shown
-			// as removed then added, which is still correct, only less tidy.
 			function diffLines(oldText, newText) {
 				var MAX_CELLS = 4000000;
 				var a = normalizeForDiff(oldText).split('\n');
@@ -938,19 +750,11 @@
 				return out;
 			}
 
-			// Post-process: pair adjacent removed+added lines as "modified" when
-			// they're similar enough that the intra-line highlight is meaningful.
-			// Handles either LCS walk-back order (removed-then-added or
-			// added-then-removed) by collecting any contiguous block of
-			// non-common entries and re-pairing them positionally. Unrelated
-			// lines stay separate.
 			function pairModified(diff) {
 				var out = [];
 				var i = 0;
 				while (i < diff.length) {
 					if (diff[i].type === 'common') { out.push(diff[i]); i++; continue; }
-					// Collect a contiguous run of non-common entries — any
-					// interleaving of removed and added.
 					var removed = [];
 					var added = [];
 					while (i < diff.length && diff[i].type !== 'common') {
@@ -958,7 +762,6 @@
 						else added.push(diff[i]);
 						i++;
 					}
-					// Pair them up positionally; only fuse when "similar."
 					var pairs = Math.min(removed.length, added.length);
 					var k = 0;
 					for (; k < pairs; k++) {
@@ -977,8 +780,6 @@
 				return out;
 			}
 
-			// Build the inner HTML for one modified line — prefix/suffix render
-			// plain, middle wrapped in <span class="is-changed"> for highlight.
 			function inlineHighlight(oldLine, newLine) {
 				var p = commonPrefixLen(oldLine, newLine);
 				var s = commonSuffixLen(oldLine, newLine, p, p);
@@ -992,10 +793,6 @@
 				};
 			}
 
-			// Render the diff into a CSS grid: each diff entry becomes one
-			// grid row with two cells (old left, new right). The grid
-			// auto-equalizes row heights so wrapping in one column doesn't
-			// desynchronize the alignment with the other.
 			function renderDiff(diff, gridEl) {
 				diff = pairModified(diff);
 				var cells = [];
@@ -1018,10 +815,6 @@
 				gridEl.innerHTML = cells.join('');
 			}
 
-			// Render a revision into a named iframe through the positioned
-			// preview frame (preview_frame=1 → correct shell placement). Pass
-			// html/css for the old revision; pass null for the current version
-			// so the server uses the saved DB values.
 			function postToIframe(iframeName, html, css) {
 				var f = document.createElement('form');
 				f.method = 'POST';
@@ -1050,7 +843,6 @@
 				var oldHtml = li.querySelector('.es-revision-data-html').value;
 				var oldCss  = li.querySelector('.es-revision-data-css').value;
 
-				// Diff panes: HTML + CSS
 				renderDiff(
 					diffLines(oldHtml, currentHtml),
 					li.querySelector('.es-revision-diff-grid[data-which="html"]')
@@ -1060,10 +852,6 @@
 					li.querySelector('.es-revision-diff-grid[data-which="css"]')
 				);
 
-				// Previews — both rendered through the positioned preview frame.
-				// Iframes have name= set in PHP so the POST resolves the named
-				// target on the first try. LEFT = old revision (its HTML/CSS),
-				// RIGHT = current saved version (DB values).
 				postToIframe('es-rev-cur-' + revisionId, null, null);
 				postToIframe('es-rev-old-' + revisionId, oldHtml, oldCss);
 			}
@@ -1110,8 +898,6 @@
 				fd.append('revision_id', this.getAttribute('data-revision-id'));
 				fd.append('note', this.value);
 				fd.append('_wpnonce', this.getAttribute('data-nonce'));
-				// Next to admin-ajax.php, wherever WordPress lives: a hard-coded
-				// /wp-admin/ broke on sites installed in a subfolder (audit J6).
 				var postUrl = (typeof window.ajaxurl === 'string' ? window.ajaxurl : '/wp-admin/admin-ajax.php').replace(/admin-ajax\.php.*$/, 'admin-post.php');
 				var input = this;
 				input.classList.remove('es-note-failed');
@@ -1119,7 +905,6 @@
 				fetch(postUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
 					.then(function (r) { if (!r.ok) throw new Error(String(r.status)); })
 					.catch(function () {
-						// Said, not swallowed: the note looked saved when it was not.
 						input.classList.add('es-note-failed');
 						input.title = 'This note was not saved. Edit it again to retry.';
 					});
@@ -1129,8 +914,6 @@
 			});
 		})();
 
-		// Danger zone modal: open on "Reset stats…" click, close on backdrop /
-		// close button / Escape. Lock body scroll while open.
 		var $dangerModal = $('#es-modal-danger');
 		function openDangerModal() {
 			$dangerModal.prop('hidden', false);
@@ -1147,10 +930,6 @@
 			if (e.key === 'Escape' && !$dangerModal.prop('hidden')) closeDangerModal();
 		});
 
-		// Form-edit tabs. URL hash remembers which tab is open across reloads.
-		// If form submit hits an invalid field on a hidden tab, we switch to
-		// that tab first so the browser's :invalid focus actually lands somewhere
-		// the user can see.
 		(function initFormEditTabs() {
 			var $tabs   = $('.es-tabs .es-tab');
 			var $panels = $('.es-tab-panel');
@@ -1181,15 +960,11 @@
 					window.location.hash = slug;
 				}
 				activate(slug);
-				// Each tab should open at its top, not inherit the previous
-				// tab's scroll position (panels share one scroll container).
 				window.scrollTo({ top: 0 });
 			});
 
 			window.addEventListener('hashchange', function () { activate(fromHash()); });
 
-			// Capture-phase 'invalid' listener: switch to the tab holding the
-			// offending field before the browser scrolls to it.
 			document.addEventListener('invalid', function (e) {
 				var el = e.target;
 				if (!el || !el.closest) return;
@@ -1199,26 +974,18 @@
 			}, true);
 		})();
 
-		// Initialize chip-style tag inputs.
 		document.querySelectorAll('.es-tag-input').forEach(initTagInput);
 
-		// Initialize field mapper(s).
 		document.querySelectorAll('.es-mapper').forEach(initMapper);
 
-		// Dirty-state tracker for the form editor (highlights both Save buttons).
 		initDirtyTracker();
 
-		// Click-to-copy on any element marked .es-copy / [data-es-copy].
 		initCopyTargets();
 
-		// Asset list: keep the "You're editing" labels current.
 		initLockLabels();
 
-		// Success notices float in as auto-dismissing toasts (like "Asset saved").
 		initAutoCloseNotices();
 
-		// Forms-list "select all" checkbox in the thead toggles every
-		// per-form checkbox in the table body.
 		var selectAll = document.getElementById('es-cb-select-all-1');
 		if (selectAll) {
 			selectAll.addEventListener('change', function () {
@@ -1228,43 +995,24 @@
 			});
 		}
 
-		// Form edit — every auto-injected shell panel: only visible when its
-		// checkbox is ticked, and the unselected trigger rows are dimmed so
-		// you can see at a glance which one will fire.
 		initShellPanels();
 
-		// Reveal the shared settings container when an auto shell is selected.
 		initShellSettingsContainer();
 
-		// Draw the connector from the selected shell card to its rules below.
 		initShellConnector();
 
-		// Ribbon and slide-in are fully exclusive with all other shells —
-		// checking one auto-unchecks the others. Server-side enforces too.
 		initShellExclusivity();
 
-		// Per-shell "after close" config is meaningless when there's no close
-		// button — hide it whenever the close-button checkbox is unticked.
 		initCloseConfigVisibility();
 
-		// Keep form-level fields shown in multiple panels in sync (close style,
-		// popup max width).
 		initFormLevelSync();
 
-		// Form edit — Display rules: when "All front-end pages" is picked, dim the
-		// show-filters grid so it's clear the per-rule pickers are ignored.
 		initDisplayRulesPanel();
 
-		// Display rules — post / page chip pickers. Live title-search via REST,
-		// chips show currently selected items, hidden inputs carry the IDs.
 		initContentPickers();
 
-		// Display-rule presets (SER-899 phase 2) — per-shell picker + the
-		// Manage Presets modal.
 		initPresetPickers();
 
-		// "Clear all" — reset one shell's whole Targeting panel (where/when/who,
-		// and un-link any preset) back to "everywhere, any time, for everyone".
 		initClearAllButtons();
 	});
 
@@ -1290,7 +1038,6 @@
 		var debounceTimer = null;
 		var activeFetch   = 0;
 
-		// Wire any chips rendered server-side.
 		chipsBox.querySelectorAll('.es-content-chip-remove').forEach(function (btn) {
 			btn.addEventListener('click', function () {
 				var chip = btn.closest('.es-content-chip');
@@ -1344,13 +1091,13 @@
 				suggestions.appendChild(li);
 			} else {
 				items.forEach(function (item) {
-					if (isChipped(item.id)) return; // hide already-selected
+					if (isChipped(item.id)) return;
 					var li = document.createElement('li');
 					li.className = 'es-content-suggestion';
 					li.dataset.id = item.id;
 					li.textContent = item.title || '(no title)';
 					li.addEventListener('mousedown', function (e) {
-						e.preventDefault(); // keep focus in input
+						e.preventDefault();
 						addChip(item.id, item.title || '(no title)');
 						search.value = '';
 						hideSuggestions();
@@ -1385,7 +1132,7 @@
 			})
 				.then(function (r) { return r.ok ? r.json() : []; })
 				.then(function (items) {
-					if (token !== activeFetch) return; // stale
+					if (token !== activeFetch) return;
 					renderSuggestions(items);
 				})
 				.catch(function () {
@@ -1402,21 +1149,15 @@
 		});
 
 		search.addEventListener('focus', function () {
-			fetchSuggestions(search.value.trim()); // show recent posts on first focus
+			fetchSuggestions(search.value.trim());
 		});
 
-		// Removes itself once the picker is gone from the page. The preset modal
-		// builds new pickers on every open, and each one used to leave its
-		// listener behind for good (audit J6).
 		function onOutsideClick(e) {
 			if (!root.isConnected) { document.removeEventListener('click', onOutsideClick); return; }
 			if (!root.contains(e.target)) hideSuggestions();
 		}
 		document.addEventListener('click', onOutsideClick);
 
-		// Exposed so other code (the display-rule preset picker, SER-899) can
-		// replace this picker's selection without duplicating the chip markup
-		// or re-implementing add/clear here.
 		root._escpApi = {
 			setSelection: function (items) {
 				chipsBox.innerHTML = '';
@@ -1424,25 +1165,6 @@
 			}
 		};
 	}
-
-	/* ── Display-rule presets (SER-899 phase 2) ──────────────────────────
-	 *
-	 * Picking/changing/un-linking a preset on a shell is CLIENT-SIDE ONLY —
-	 * it fills the shell's own WHERE fields (show_mode/show_filters/
-	 * hide_filters) from #es-presets-data and locks them, but nothing is
-	 * persisted until the page's normal Save button, matching the SaaS
-	 * picker's own local-state-until-Save behavior. "Save current as preset"
-	 * and everything in the Manage Presets modal DO hit the server
-	 * immediately (ES_Preset_Ajax) because they mutate the preset ROW itself,
-	 * same as the SaaS picker.
-	 *
-	 * Known gap: editing a preset's post-type/category/tag/post/page filters
-	 * is only possible by applying it to a shell (which has the real WP
-	 * post-type/taxonomy environment already rendered), adjusting there, and
-	 * "Save current as preset" under the same name — the modal's own editor
-	 * only covers show_mode + URL patterns. Full parity with the SaaS's
-	 * WpFilterPane-in-modal editing wasn't built this pass.
-	 */
 
 	function escapeHtml(s) {
 		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1462,7 +1184,7 @@
 	}
 
 	function presetFieldName(key, side, field) {
-		return 'display_' + key + '_' + side + '_' + field; // matches $render_filters()
+		return 'display_' + key + '_' + side + '_' + field;
 	}
 
 	function presetWhereFieldset(picker) {
@@ -1533,8 +1255,6 @@
 			setChipPicker(fieldset, 'page', presetFieldName(key, side, 'pages'), filters.pages, titles.pages);
 		});
 
-		// Re-run the "All pages" dim-the-filters sync (initDisplayRulesPanel) now
-		// that show_mode may have changed programmatically.
 		fieldset.querySelectorAll('input[name="display_' + key + '_show_mode"]').forEach(function (r) {
 			r.dispatchEvent(new Event('change', { bubbles: true }));
 		});
@@ -1644,7 +1364,7 @@
 					saveAsBtn.disabled = false;
 					if (!data || !data.preset) return;
 					var preset = data.preset;
-					presetsById[preset.id] = preset; // now includes titles, straight from ES_Preset_Ajax::present()
+					presetsById[preset.id] = preset;
 					document.querySelectorAll('.es-dr-preset-picker').forEach(function (p) { addOrUpdatePresetOption(p, preset); });
 					setPresetCoupledState(picker, presetsById[preset.id]);
 					saveNameField.value = '';
@@ -1654,11 +1374,6 @@
 		});
 	}
 
-	// Reset one shell's whole Targeting panel — where/when/who, and any linked
-	// preset — back to "everywhere, any time, for everyone". Mirrors the SaaS
-	// editor's "Clear all" (FormScreen.tsx blankRules()); same end state as
-	// ES_Display_Rules::defaults() (unlinking a preset first, then manually
-	// undoing every field), just done in one click instead of by hand.
 	function clearAllDisplayRules(picker) {
 		var key = picker.getAttribute('data-shell-key');
 		var body = picker.closest('.es-display-rules-body');
@@ -1678,13 +1393,11 @@
 			setChipPicker(fieldset, 'post', presetFieldName(key, side, 'posts'), [], {});
 			setChipPicker(fieldset, 'page', presetFieldName(key, side, 'pages'), [], {});
 		});
-		// Re-run the "All pages" dim-the-filters sync now that show_mode changed.
 		fieldset.querySelectorAll('input[name="display_' + key + '_show_mode"]').forEach(function (r) {
 			r.dispatchEvent(new Event('change', { bubbles: true }));
 		});
 		setPresetCoupledState(picker, null);
 
-		// Visitor + schedule live outside the preset-controlled fieldset.
 		var loggedInAny = body.querySelector('input[name="display_' + key + '_visitor_logged_in"][value="any"]');
 		if (loggedInAny) { loggedInAny.checked = true; loggedInAny.dispatchEvent(new Event('change', { bubbles: true })); }
 		setCheckboxGroup(body, 'display_' + key + '_visitor_roles', []);
@@ -1724,10 +1437,6 @@
 				'<p class="es-preset-modal-sub">Editing here updates every shell already following a preset. Post types, categories, tags, and specific posts/pages: apply the preset to a shell, adjust it there, then "Save current as preset" under the same name.</p>' +
 				'<div class="es-preset-modal-body"><p>Loading…</p></div>' +
 			'</div>';
-		// Appended inside .emblem-studio-wrap (not document.body) so the reused
-		// .es-content-picker/.es-content-chip styling (scoped to that wrapper)
-		// applies here too — position:fixed still overlays the full viewport
-		// regardless of DOM ancestry.
 		var wrap = document.querySelector('.emblem-studio-wrap') || document.body;
 		wrap.appendChild(el);
 		el.querySelector('.es-preset-modal-close').addEventListener('click', closePresetManageModal);
@@ -1758,15 +1467,6 @@
 		presets.forEach(function (preset) { body.appendChild(renderPresetModalRow(body, preset)); });
 	}
 
-	/**
-	 * One side's (show/hide) full filter editor for the Manage Presets modal —
-	 * same fields as $render_filters() in shell-trigger-and-rules.php (specials,
-	 * post types, categories, tags, specific posts/pages, WooCommerce pages,
-	 * URL patterns), just single-column instead of the shell panel's grid.
-	 * Chip pickers are wired up separately, after this HTML is in the DOM
-	 * (see initModalContentPickers below) — initContentPicker() needs real
-	 * elements, not an HTML string.
-	 */
 	function renderModalFilterSide(scopeId, side, filters, titles, urlLabel) {
 		var cfg = window.EmblemStudioAdmin || {};
 		filters = filters || {};
@@ -1809,7 +1509,6 @@
 		return html;
 	}
 
-	/** Wire up every chip picker just inserted for one modal row, pre-populated from titles. */
 	function initModalContentPickers(container, filters, titles) {
 		['show', 'hide'].forEach(function (side) {
 			var sideFilters = (filters && filters[side + '_filters']) || {};
@@ -1825,7 +1524,6 @@
 		});
 	}
 
-	/** Read one side's filter editor back into a sanitize_where()-ready shape. */
 	function gatherModalFilterSide(container, side) {
 		var root = container.querySelector('.es-preset-modal-side[data-side="' + side + '"]');
 		if (!root) return {};
@@ -1931,10 +1629,6 @@
 	}
 
 	function initDisplayRulesPanel() {
-		// One Display-rules block per auto shell (popup-auto / ribbon / slide-in),
-		// each with its own `display_<key>_show_mode` radios + show-filters grid.
-		// Scope to each shell's body so multiple shells don't cross-wire, and
-		// match the real per-shell field name (ends in `_show_mode`).
 		document.querySelectorAll('.es-dr-show-filters').forEach(function (showFilters) {
 			var body = showFilters.closest('.es-display-rules-body');
 			if (!body) return;
@@ -1942,8 +1636,6 @@
 			if (!modeInputs.length) return;
 			function sync() {
 				var checked = body.querySelector('input[name$="_show_mode"]:checked');
-				// "All front-end pages" → the per-rule pickers are ignored, so dim
-				// them and make them non-clickable (CSS: opacity + pointer-events).
 				showFilters.classList.toggle('is-disabled', !checked || checked.value === 'all');
 			}
 			modeInputs.forEach(function (r) { r.addEventListener('change', sync); });
@@ -1955,7 +1647,7 @@
 		document.querySelectorAll('.es-shell-panel[data-shell]').forEach(function (panel) {
 			var shell = panel.getAttribute('data-shell');
 			if (!shell) return;
-			var key      = shell.replace(/-/g, '_'); // popup-auto → popup_auto
+			var key      = shell.replace(/-/g, '_');
 			var checkbox = document.getElementById('es-form-type-' + shell);
 			if (!checkbox) return;
 
@@ -1979,10 +1671,6 @@
 		});
 	}
 
-	// Show the shared settings container only when one of the three settings-
-	// bearing shells (auto popup / ribbon / slide-in) is selected. Each panel
-	// inside still shows/hides by its own checkbox (initShellPanels); this just
-	// hides the whole card when none of them is active.
 	function initShellSettingsContainer() {
 		var wrap = document.getElementById('es-shell-settings-wrap');
 		if (!wrap) return;
@@ -1998,11 +1686,6 @@
 		sync();
 	}
 
-	// Draw a connector line from the selected shell card down into its
-	// display-rules container, so the link between "what I picked above" and
-	// "the rules below" is visually explicit. Positions are computed live
-	// (relative to the Shells tab panel) and redrawn on selection / resize /
-	// tab change. Pure decoration — pointer-events:none, aria-hidden.
 	function initShellConnector() {
 		var section = document.getElementById('es-tab-shells');
 		var conn    = document.getElementById('es-shell-connector');
@@ -2025,16 +1708,13 @@
 		function hide() { conn.classList.remove('is-visible'); }
 
 		function draw() {
-			// Bail when the Shells tab is hidden or no auto shell is selected.
 			if (section.offsetParent === null || wrap.style.display === 'none') { hide(); return; }
 			var panel = activePanel();
 			if (!panel) { hide(); return; }
 			var card = section.querySelector('.es-shell-card[data-shell="' + panel.getAttribute('data-shell') + '"]');
 			if (!card) { hide(); return; }
 
-			conn.classList.add('is-visible'); // make the overlay measurable first
-			// Adopt the selected shell's identity colour (the path/dot/arrow use
-			// currentColor). Read it from the panel so CSS stays the single source.
+			conn.classList.add('is-visible');
 			var shellColor = window.getComputedStyle(panel).getPropertyValue('--shell-color').trim();
 			conn.style.color = shellColor || '';
 			var base = conn.getBoundingClientRect();
@@ -2042,27 +1722,22 @@
 			var c    = card.getBoundingClientRect();
 			var w    = wrap.getBoundingClientRect();
 
-			var entryY = c.top - base.top + c.height / 2; // attach at the card's mid-height
-			var topY   = w.top - base.top;                // container top edge
+			var entryY = c.top - base.top + c.height / 2;
+			var topY   = w.top - base.top;
 			if (topY <= entryY) { hide(); return; }
 
-			// 2-col shells grid stacks to 1 column at 1100px (see admin.css).
 			var stacked = window.matchMedia('(max-width: 1100px)').matches;
 			var startX, channelX;
 			if (stacked) {
-				// Single column: run down the right side, around the stacked cards.
 				startX   = c.right - base.left;
 				channelX = Math.min(g.right - base.left + 14, base.width - 3);
 			} else {
-				// Two columns: attach to the card's INNER edge and run straight
-				// down the empty gap between the columns — never over a card.
 				var gridCenter = g.left - base.left + g.width / 2;
 				var cardCenter = c.left - base.left + c.width / 2;
 				startX   = cardCenter < gridCenter ? (c.right - base.left) : (c.left - base.left);
 				channelX = gridCenter;
 			}
 
-			// Elbow: out the card's side, a rounded corner, then down to the box.
 			var dir = channelX >= startX ? 1 : -1;
 			var r   = Math.max(0, Math.min(8, Math.abs(channelX - startX), topY - entryY));
 			path.setAttribute('d',
@@ -2080,15 +1755,7 @@
 
 		function redraw() { window.requestAnimationFrame(draw); }
 
-		// Redraw on ANY option change inside the Shells tab — enabling a
-		// different shell, toggling a trigger, picking an appearance option,
-		// etc. can all move the active panel / change the container height,
-		// and the arrow must follow. (Delegated, so it covers controls added
-		// or revealed later too.)
 		section.addEventListener('change', redraw);
-		// Catch layout shifts that don't fire 'change' — expanding a
-		// disclosure, content reflow, fonts settling — by observing the
-		// settings container and the shells grid for size/position changes.
 		if (window.ResizeObserver) {
 			var ro = new ResizeObserver(redraw);
 			ro.observe(wrap);
@@ -2099,7 +1766,7 @@
 			t.addEventListener('click', function () { setTimeout(draw, 30); });
 		});
 		window.addEventListener('hashchange', function () { setTimeout(draw, 30); });
-		setTimeout(draw, 60); // initial, after layout settles
+		setTimeout(draw, 60);
 	}
 
 	function initCloseConfigVisibility() {
@@ -2117,9 +1784,6 @@
 		});
 	}
 
-	// Form-level fields that appear in more than one shell panel (close-button
-	// style, popup max width) are kept in lock-step so the form submits one
-	// consistent value no matter which panel the user edited.
 	function initFormLevelSync() {
 		var groups = {};
 		document.querySelectorAll('.es-formlevel-sync').forEach(function (el) {
@@ -2148,9 +1812,6 @@
 		if (!all.length) return;
 
 		function fireChange(cb) {
-			// Dispatch a BUBBLING change event so both the direct panel-visibility
-			// listeners AND the document-delegated handlers (the one that flips
-			// data-enabled to hide a card's body / shortcode) pick up the uncheck.
 			cb.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 
@@ -2161,11 +1822,9 @@
 				all.forEach(function (other) {
 					if (other === cb || !other.checked) return;
 					if (isExclusive) {
-						// Just checked ribbon/slide-in → uncheck every other shell.
 						other.checked = false;
 						fireChange(other);
 					} else if (EXCLUSIVE.indexOf(other.value) !== -1) {
-						// Just checked a non-exclusive shell → uncheck any exclusive ones.
 						other.checked = false;
 						fireChange(other);
 					}
@@ -2175,18 +1834,6 @@
 	}
 
 	function initAutoCloseNotices() {
-		// Convert our success admin-notices (the old "Settings saved." /
-		// "Form restored." green dismissible boxes) into the same floating
-		// toast used for "Asset saved": over the content, no close button,
-		// smooth in/out, auto-dismiss. Errors/warnings keep WP's persistent
-		// notice so they don't vanish before they're read.
-		//
-		// `.inline` notices are left alone. Those are boxes placed inside the
-		// page on purpose, like the Connect tab's "Direct integration" status,
-		// and pulling one out turned a permanent status into a toast on every
-		// page load while the box vanished from its tab (item 25 of Catalina's
-		// Lite test pass). The "just happened" messages are all top-of-page
-		// dismissible notices, never inline.
 		document.querySelectorAll('.emblem-studio-wrap .notice.notice-success:not(.inline)').forEach(function (notice) {
 			var p = notice.querySelector('p');
 			var text = ((p ? p.textContent : notice.textContent) || '').trim();
@@ -2200,13 +1847,9 @@
 			if (notice.parentNode) { notice.parentNode.removeChild(notice); }
 		});
 
-		// Animate every toast (PHP-rendered or just-converted). Stack multiples
-		// so they don't sit on top of each other.
 		document.querySelectorAll('.es-toast').forEach(function (el, i) {
 			el.style.top = (60 + i * 52) + 'px';
-			// Slide+fade in on the next frame so the CSS transition fires.
 			requestAnimationFrame(function () { el.classList.add('is-in'); });
-			// Hold ~2s, then slide+fade out and remove from the DOM.
 			setTimeout(function () {
 				el.classList.remove('is-in');
 				el.classList.add('is-out');
@@ -2215,12 +1858,6 @@
 		});
 	}
 
-	// The asset list drew its "You're editing" labels once, at page load, so a
-	// label stayed after you had left the editor: you often land here a moment
-	// before the editor's release reaches the server, and Back shows the page
-	// from the browser's cache (item 7 of Catalina's Lite test pass). Ask the
-	// server again shortly after loading, every 15 seconds while the tab is in
-	// view, when the tab comes back into view, and on Back.
 	function initLockLabels() {
 		var table = document.querySelector('.es-forms-table[data-es-lock-nonce]');
 		if (!table || typeof window.ajaxurl !== 'string') return;
@@ -2261,10 +1898,9 @@
 						if (state) slot.appendChild(badge(state));
 					});
 				})
-				.catch(function () {}); // Keep what is shown; the next round tries again.
+				.catch(function () {});
 		}
 
-		// Twice early: the editor's release can land a moment after this page.
 		setTimeout(refresh, 1500);
 		setTimeout(refresh, 4000);
 		setInterval(function () { if (document.visibilityState === 'visible') refresh(); }, 15000);
@@ -2318,7 +1954,6 @@
 		tip.style.top = (rect.top - 8) + 'px';
 		tip.style.transform = 'translate(-50%, -100%)';
 		document.body.appendChild(tip);
-		// Force reflow so the transition kicks in.
 		void tip.offsetWidth;
 		tip.classList.add('is-visible');
 		setTimeout(function () {
@@ -2331,7 +1966,6 @@
 		var el = document.getElementById(textareaId);
 		if (!el) return '';
 		if (el.CodeMirror) return el.CodeMirror.getValue();
-		// WP's wp.codeEditor mounts CodeMirror as a sibling .CodeMirror div.
 		if (el.nextElementSibling && el.nextElementSibling.CodeMirror) {
 			return el.nextElementSibling.CodeMirror.getValue();
 		}
@@ -2340,10 +1974,6 @@
 
 	function submitPreviewPost(previewUrl, target, extra) {
 		if (!previewUrl) return;
-		// When an A/B test is running, preview shows whichever variant
-		// the user is currently editing — the active pane's editors,
-		// not a stale "es-html" that doesn't exist. Single-version
-		// forms fall through to the original ids.
 		var slot = (window.EmblemStudioAB && EmblemStudioAB.testRunning) ? EmblemStudioAB.activeSlot : '';
 		var htmlId = slot ? ('es-html-' + slot) : 'es-html';
 		var cssId  = slot ? ('es-css-'  + slot) : 'es-css';
@@ -2386,8 +2016,6 @@
 		var snapshot = null;
 
 		function currentState() {
-			// Make sure CodeMirror values are flushed into their textareas so
-			// FormData picks them up.
 			Object.keys(cmInstances).forEach(function (id) {
 				try { cmInstances[id].save(); } catch (e) {}
 			});
@@ -2406,10 +2034,6 @@
 			form.classList.toggle('is-dirty', dirty);
 		}
 
-		// Re-snapshot is only safe during the initial page-load phase —
-		// before the user has touched anything. If we re-snapshot AFTER
-		// edits exist, those edits get baked into the new baseline and
-		// the dirty indicator falsely clears.
 		var initialHookPhase = true;
 		setTimeout(function () { initialHookPhase = false; }, 5000);
 
@@ -2420,18 +2044,11 @@
 			var t = setInterval(function () {
 				var cm = el.CodeMirror || (el.nextElementSibling && el.nextElementSibling.CodeMirror);
 				if (cm) {
-					// Dedup: a CM instance only ever gets one change
-					// listener wired here, even if hookCm is called
-					// again later (e.g. on os:variant-changed for
-					// lazy-initialized slot B editors).
 					if (!cm._osDirtyHooked) {
 						cm._osDirtyHooked = true;
 						cmInstances[id] = cm;
 						cm.on('change', check);
 						if (initialHookPhase) {
-							// Re-snapshot only during initial mount, when
-							// the textarea value may have differed from
-							// what CM actually loaded.
 							snapshot = currentState();
 						}
 					}
@@ -2446,9 +2063,6 @@
 		form.addEventListener('change', check);
 		form.addEventListener('submit', function () { form.classList.remove('is-dirty'); });
 
-		// Warn before leaving (reload / navigate away / close) with unsaved
-		// edits. The submit handler above clears is-dirty first, so the form's
-		// own save never triggers this prompt.
 		window.addEventListener('beforeunload', function (e) {
 			if (form.classList.contains('is-dirty')) {
 				e.preventDefault();
@@ -2456,33 +2070,15 @@
 			}
 		});
 
-		// Initial snapshot — covers regular inputs immediately. CodeMirror hooks
-		// re-snapshot once mounted, replacing the early snapshot.
 		snapshot = currentState();
-		// Register every editor that's actually on the page — single-version
-		// has es-html / es-css; A/B running adds the per-slot pairs.
 		['es-html', 'es-html-A', 'es-html-B', 'es-css', 'es-css-A', 'es-css-B'].forEach(hookCm);
 
-		// When slot B's CodeMirrors are lazy-initialized after the
-		// user first clicks the B tab, re-run the hooks so edits
-		// inside B start triggering the dirty indicator. Dedup flag
-		// makes this idempotent.
 		document.addEventListener('os:variant-changed', function () {
 			hookCm('es-html-B');
 			hookCm('es-css-B');
 		});
 	}
 
-	/**
-	 * Tags are matched by name, and a tag is created in FunnelKit only on the
-	 * first signup that carries it. So a tag typed here exists nowhere to pick
-	 * from until then, the next asset gets it retyped, and "Beta users" and
-	 * "beta users " end up as two tags on two groups of people (SER-1464).
-	 *
-	 * Tags this site's other assets already name are offered too, marked "not
-	 * created yet". Picking one keeps the spelling identical, and still writes
-	 * nothing to FunnelKit early. The near-match line catches the rest.
-	 */
 	function initTagInput(container) {
 		var funnelkitTags = [];
 		var pendingTags = [];
@@ -2499,7 +2095,6 @@
 		var allTags = funnelkitTags.concat(pendingTags.filter(function (p) {
 			return !funnelkitTags.some(function (t) { return tagKey(t) === tagKey(p); });
 		}));
-		// Same tag, different spelling: one typed, or one already picked.
 		function nearMatch(name) {
 			return allTags.find(function (t) { return tagKey(t) === tagKey(name) && t !== String(name).trim(); });
 		}
@@ -2516,8 +2111,6 @@
 
 		function syncHidden() {
 			hidden.value = selected.join(',');
-			// Hidden inputs don't fire 'change' on their own; dispatch one so
-			// the dirty tracker on the parent form sees the update.
 			hidden.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 
@@ -2560,8 +2153,6 @@
 			}
 			suggEl.style.display = '';
 			suggEl.innerHTML = '';
-			// Two groups, not a label on each tag: where a tag sits says what it
-			// is. getMatches() lists FunnelKit's own first, so one heading each.
 			var lastGroup = null;
 			matches.forEach(function (name, i) {
 				var group = isPending(name) ? 'From your assets' : 'In FunnelKit';
@@ -2593,8 +2184,6 @@
 			}
 		}
 
-		// "Beta users" exists and you typed "beta users": say so, and offer the
-		// one that exists. Same line for a tag already picked that way.
 		function renderWarning() {
 			var warn = container.querySelector('.es-tag-warning');
 			if (!warn) {
@@ -2690,10 +2279,7 @@
 
 		renderAll();
 	}
-	// ---------- Field mapper ------------------------------------------------
 
-	// Compatibility matrix: which form-input kinds are a "clean" match for each FK field kind.
-	// Anything not listed is a soft warning (still allowed). Empty / unset → text-like fallback.
 	var MAPPER_COMPATIBILITY = {
 		text:           ['text', 'email', 'tel', 'url', 'hidden', 'select-single', 'radio', 'checkbox-single', 'textarea'],
 		email:          ['email', 'text', 'hidden'],
@@ -2722,13 +2308,10 @@
 
 	function isCompatible(fkKind, formKind) {
 		var ok = MAPPER_COMPATIBILITY[fkKind];
-		if (!ok) return true; // unknown → permissive
+		if (!ok) return true;
 		return ok.indexOf(formKind) !== -1;
 	}
 
-	// Parse an HTML string in the browser (no PHP) into the same shape as
-	// the server-side extractor. Used to refresh the form-fields panel live
-	// when the user edits the HTML in CodeMirror.
 	function parseFormFields(html) {
 		var doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
 		var seen = {};
@@ -2741,8 +2324,6 @@
 			if (!seen[name]) seen[name] = { name: name, kind: kind };
 			return seen[name];
 		}
-		// The answers a choice field can send. Mirrors ES_Form_Parser::add_option:
-		// once each, and an empty value is a placeholder, not an answer.
 		function addOption(field, value) {
 			if (!field || value === '') return;
 			if (!field.options) field.options = [];
@@ -2774,8 +2355,6 @@
 			if (type === 'checkbox' || type === 'radio') {
 				addOption(field, el.hasAttribute('value') ? el.getAttribute('value') : 'on');
 			}
-			// Several checkboxes sharing a plain name are a group: frontend.js
-			// sends two or more ticked ones as name[]. Same rule as the PHP parser.
 			if (type === 'checkbox') {
 				checkboxCount[name] = (checkboxCount[name] || 0) + 1;
 				if (checkboxCount[name] >= 2 && field.kind === 'checkbox-single') field.kind = 'checkbox-multi';
@@ -2809,7 +2388,7 @@
 		var fkCol = root.querySelector('.es-mapper-fk');
 		var formCol = root.querySelector('.es-mapper-form');
 		var hidden = root.querySelector('input[type="hidden"][name="field_mapping_json"]');
-		var selectedForm = null; // currently selected form-input name
+		var selectedForm = null;
 
 		function esc(s) {
 			return String(s).replace(/[&<>"']/g, function (c) {
@@ -2827,9 +2406,6 @@
 			return null;
 		}
 
-		// Case-insensitive lookup by any of several candidate names — for the
-		// auto-detect variants below. formFieldExists() above stays an exact
-		// match; it's also used to check a MAPPED field still exists.
 		function findFieldCi(names) {
 			for (var i = 0; i < names.length; i++) {
 				var wanted = names[i].toLowerCase();
@@ -2840,19 +2416,11 @@
 			return null;
 		}
 
-		// Last-resort signal when no name variant matches: any field whose HTML
-		// input type (its 'kind', from parseFormFields()) fits — e.g. a field
-		// named "contact" but type="tel" still auto-detects for the phone column.
 		function findFieldByKind(kind) {
 			for (var i = 0; i < formFields.length; i++) if (formFields[i].kind === kind) return formFields[i];
 			return null;
 		}
 
-		// Name-convention variants tried case-insensitively when no explicit
-		// mapping exists. Mirrors includes/class-es-field-matcher.php's
-		// EMAIL_NAME_VARIANTS / FIRST_NAME_VARIANTS / LAST_NAME_VARIANTS /
-		// PHONE_NAME_VARIANTS (the server-side, authoritative copy) — keep
-		// both lists in sync.
 		var NAME_VARIANTS = {
 			'col:email': ['email', 'your-email', 'email_address', 'user_email', 'e-mail'],
 			'col:contact_no': ['phone', 'tel', 'phone_number', 'mobile', 'contact_number'],
@@ -2861,10 +2429,6 @@
 		};
 		var KIND_FALLBACK = { 'col:email': 'email', 'col:contact_no': 'tel' };
 
-		// Server-side auto-detection rules (mirrors class-es-ajax.php):
-		// when no explicit mapping is set, certain FK columns automatically
-		// pick up form inputs by conventional name (or, for email/phone, by
-		// HTML input type as a last resort).
 		function autoDetected(fkKey) {
 			var names = NAME_VARIANTS[fkKey];
 			if (!names) return null;
@@ -2882,12 +2446,6 @@
 			return byKind ? { name: byKind.name } : null;
 		}
 
-		// The form's answers that a FunnelKit choice field will throw away.
-		// FunnelKit (BWFCRM_Contact::get_field_values) keeps only values that
-		// match one of the field's option labels, case-insensitive, and drops the
-		// rest silently. Both option lists come from the server (and from
-		// parseFormFields() as the HTML is edited). Empty when either side has no
-		// options, so a text field never warns.
 		function unmatchedOptions(fkField, formField) {
 			if (!fkField.options || !fkField.options.length || !formField.options || !formField.options.length) return [];
 			var known = fkField.options.map(function (o) { return String(o).toLowerCase(); });
@@ -2953,11 +2511,6 @@
 							warning.setAttribute('role', 'note');
 							warning.textContent = 'FunnelKit only keeps values it knows. These will be dropped: ' + dropped.join(', ') + '.';
 						}
-						// A message box holds an answer of any length. FunnelKit's
-						// single-line Text field is varchar(99), so it keeps the first
-						// 99 characters and drops the rest without a word (measured on
-						// a live FunnelKit, SER-1384). Its Text Area field is longtext
-						// and keeps the whole answer, line breaks included.
 						if (!warning && detected && detected.kind === 'textarea' && (f.kind || 'text') === 'text') {
 							warning = document.createElement('div');
 							warning.className = 'es-mapper-row-warning';
@@ -3021,8 +2574,6 @@
 			});
 		}
 
-		// Live refresh from CodeMirror — re-parse the HTML editor's contents
-		// and update the right column whenever the user changes the markup.
 		function watchHtmlEditor() {
 			var sourceSel = root.dataset.htmlSource;
 			if (!sourceSel) return;
@@ -3046,7 +2597,6 @@
 				}, 250);
 			}
 
-			// CodeMirror hook
 			function tryHook() {
 				var cm = textarea.nextElementSibling && textarea.nextElementSibling.CodeMirror;
 				if (cm) {
@@ -3056,13 +2606,11 @@
 				return false;
 			}
 			if (!tryHook()) {
-				// CodeMirror may not be initialized yet; retry briefly.
 				var tries = 0;
 				var t = setInterval(function () {
 					if (tryHook() || ++tries > 20) clearInterval(t);
 				}, 100);
 			}
-			// Plain textarea fallback (in case CodeMirror is disabled)
 			textarea.addEventListener('input', refresh);
 		}
 
@@ -3070,13 +2618,6 @@
 		watchHtmlEditor();
 	}
 
-	// ============================================================
-	// Forms list — drag-and-drop reorder
-	// ============================================================
-	// Only enabled on the "All" filter view. Each form is a <tbody>
-	// with data-form-id; jQuery UI Sortable rearranges them; on drop
-	// we POST the new id order to wp-admin/admin-ajax.php?action=
-	// es_reorder_forms.
 	$(function () {
 		const table = document.querySelector('.es-forms-reorderable');
 		if (!table || typeof $.fn.sortable !== 'function') return;
@@ -3088,8 +2629,6 @@
 			handle: '.es-form-drag-handle',
 			placeholder: 'es-form-group es-form-group-placeholder',
 			helper: function (e, item) {
-				// Preserve cell widths during drag so the placeholder doesn't
-				// collapse to content-width on detach.
 				item.children().each(function () {
 					$(this).width($(this).width());
 				});
@@ -3111,15 +2650,11 @@
 				ids.forEach(function (id) { body.append('ids[]', String(id)); });
 				fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
 					.then(function (r) { return r.json(); })
-					.catch(function () { /* swallow — order will re-sync on next page load */ });
+					.catch(function () { });
 			}
 		});
 	});
 
-	// ============================================================
-	// Connect tab — live-toggle the disabled state on destination cards
-	// when the user flips the "active" toggle in the card header
-	// ============================================================
 	$(function () {
 		document.querySelectorAll('.es-destination-toggle').forEach(function (toggle) {
 			const card = toggle.closest('.es-connect-card');
@@ -3130,9 +2665,6 @@
 		});
 	});
 
-	// ============================================================
-	// Webhooks repeater on the Connect tab — add / remove / send-test
-	// ============================================================
 	$(function () {
 		const list = document.querySelector('.es-webhook-list');
 		if (!list) return;
@@ -3142,7 +2674,6 @@
 		const ajaxUrl = (window.ajaxurl || '/wp-admin/admin-ajax.php');
 
 		function nextIndex() {
-			// Find max numeric index currently used in name="webhooks[X][..]"
 			let max = -1;
 			list.querySelectorAll('input[name^="webhooks["]').forEach(function (input) {
 				const m = input.getAttribute('name').match(/^webhooks\[(\d+)\]/);
@@ -3151,7 +2682,6 @@
 			return max + 1;
 		}
 
-		// Add — clone template, swap __INDEX__ for the next free integer
 		if (addBtn) {
 			addBtn.addEventListener('click', function () {
 				if (!template) return;
@@ -3168,7 +2698,6 @@
 			});
 		}
 
-		// Remove — delegate clicks on .es-webhook-remove
 		list.addEventListener('click', function (e) {
 			const btn = e.target.closest('.es-webhook-remove');
 			if (!btn) return;
@@ -3178,8 +2707,6 @@
 			}
 		});
 
-		// Send test — POST current row's URL/secret/headers to admin-ajax,
-		// show the result inline in the row's .es-webhook-test-result span
 		list.addEventListener('click', function (e) {
 			const btn = e.target.closest('.es-webhook-test');
 			if (!btn) return;
@@ -3240,20 +2767,11 @@
 		});
 	});
 
-	// ============================================================
-	// Form picker (Add New) — filter chips + lazy thumbnail iframes
-	// ============================================================
-	// Filter chips toggle which cards are visible by data-shell. The
-	// thumbnail iframes lazy-load via IntersectionObserver — each card's
-	// real src lives in data-thumb-src and only gets swapped in when the
-	// card scrolls into view. Keeps the initial render fast even when we
-	// eventually have 60+ templates.
 	$(function () {
 		const picker = document.querySelector('.es-picker-collections');
 		const filters = document.querySelectorAll('.es-picker-filter');
 		if (!picker && !filters.length) return;
 
-		// Lazy-load thumbnails when they hit the viewport.
 		const iframes = document.querySelectorAll('.es-picker-thumb-iframe[data-thumb-src]');
 		if (iframes.length && 'IntersectionObserver' in window) {
 			const io = new IntersectionObserver(function (entries) {
@@ -3270,15 +2788,12 @@
 			}, { rootMargin: '300px 0px' });
 			iframes.forEach(function (f) { io.observe(f); });
 		} else {
-			// Fallback: no IntersectionObserver, eager-load all.
 			iframes.forEach(function (f) {
 				const src = f.getAttribute('data-thumb-src');
 				if (src) { f.src = src; f.removeAttribute('data-thumb-src'); }
 			});
 		}
 
-		// Filter chips: show/hide cards by data-shell. "all" shows everything.
-		// Collections with zero visible cards collapse via .is-empty class.
 		if (filters.length) {
 			filters.forEach(function (chip) {
 				chip.addEventListener('click', function () {
@@ -3289,7 +2804,6 @@
 						const matches = (shell === 'all') || (card.getAttribute('data-shell') === shell);
 						card.classList.toggle('is-filtered-out', !matches);
 					});
-					// Hide collections whose visible-card count is now zero.
 					document.querySelectorAll('.es-picker-collection').forEach(function (col) {
 						const visible = col.querySelectorAll('.es-picker-card:not(.is-filtered-out)').length;
 						col.classList.toggle('is-empty', visible === 0);
@@ -3301,19 +2815,10 @@
 
 })(jQuery);
 
-/* ──────────────────────────────────────────────────────────────────────
- * Concurrent-edit lock (asset editor). Identity is a per-TAB session token
- * (sessionStorage), so even a second tab of the same admin is a distinct
- * session: opening a locked asset offers Take over / View only / Cancel,
- * the editor heartbeats to hold the lock, and a booted tab is locked out of
- * saving with a named alert + "Take editing back".
- * ────────────────────────────────────────────────────────────────────── */
 (function () {
 	var L = window.EmblemStudioLock;
 	if (!L || !L.formId) return;
 
-	// Per-tab token, stable across reloads of THIS tab (so a reload re-claims
-	// its own lock instead of prompting to take over from itself).
 	var KEY = 'esLockToken:' + L.formId;
 	var myToken = '';
 	try { myToken = sessionStorage.getItem(KEY) || ''; } catch (e) {}
@@ -3326,49 +2831,33 @@
 	var tokenField = document.getElementById('es-lock-token');
 	if (tokenField) tokenField.value = myToken;
 
-	// Instant same-browser hand-off: other tabs/windows of this browser hear a
-	// take-over the moment it happens, so the booted tab pops immediately rather
-	// than on its next heartbeat. (Cross-machine still relies on the heartbeat.)
 	var bc = ('BroadcastChannel' in window) ? new BroadcastChannel('es-lock-' + L.formId) : null;
 	if (bc) bc.onmessage = function (ev) {
 		var d = (ev && ev.data) || {};
 		if (d.type === 'taken' && held && d.token !== myToken) bootedBy('', true);
 	};
 
-	var held = false;       // true once/while this session owns the lock
-	var submitting = false; // skip release during our own save round-trip
+	var held = false;
+	var submitting = false;
 	var beatTimer = null;
 	var retryTimer = null;
-	// What the banner's button does right now: 'takeover' (booted / view only)
-	// or 'retry' (a check-in failed and we cannot tell whether we still hold it).
 	var bannerMode = 'takeover';
 
-	// One check-in every 20 s against a 90 s lock (ES_Locks::TIMEOUT), so four
-	// can be missed before it lapses. It was every 3 s, which was a database
-	// write per open editor every 3 s, in hidden tabs too.
 	var BEAT_MS = 20000;
-	// After a failed check-in, try again sooner than the normal beat.
 	var RETRY_MS = 5000;
 
-	// cb(j, failure): j is the parsed reply, or null. failure is '' on a
-	// usable reply, 'nonce' when the page's security token has expired or the
-	// person was logged out, and 'network' for anything else.
 	function post(action, cb, claimIt) {
 		var body = new URLSearchParams();
 		body.append('action', action);
 		body.append('form_id', L.formId);
 		body.append('nonce', L.nonce);
 		body.append('token', myToken);
-		// Opening or returning to the editor claims a free lock outright; a plain
-		// check-in never takes back one this tab released (ES_Locks::beat).
 		if (claimIt) body.append('claim', '1');
 		fetch(L.ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
 			.then(function (r) {
 				return r.text().then(function (t) {
 					var j = null;
 					try { j = JSON.parse(t); } catch (e) {}
-					// "-1" / "0" (or a 400/403 with no JSON) is WordPress refusing
-					// the nonce or the login, not the network.
 					var expired = (j && j.data && j.data.reason === 'nonce') || t === '-1' || t === '0' ||
 						(!j && (r.status === 403 || r.status === 400));
 					if (j && j.success) {
@@ -3382,8 +2871,6 @@
 			.catch(function () { if (cb) cb(null, 'network'); });
 	}
 
-	// Each check-in hands back new nonces (lock + Save), so an editor left
-	// open past a nonce's lifetime keeps working while the person is logged in.
 	function freshNonces(d) {
 		if (!d) return;
 		if (d.nonce) L.nonce = d.nonce;
@@ -3400,10 +2887,6 @@
 	function startHeartbeat() {
 		if (beatTimer) clearInterval(beatTimer);
 		beatTimer = null;
-		// A hidden tab does not check in. It beats again the moment it is
-		// shown (onVisibility). A take-over from this browser still lands
-		// instantly through the BroadcastChannel; one from another machine is
-		// noticed within a beat, or on return to the tab.
 		if (document.hidden) return;
 		beatTimer = setInterval(beat, BEAT_MS);
 	}
@@ -3429,8 +2912,6 @@
 		hideBanner();
 		var bm = document.getElementById('es-lock-boot-modal');
 		if (bm) bm.hidden = true;
-		// Tell other tabs of THIS browser instantly (the cross-machine case still
-		// relies on the heartbeat). Same browser = same WP user, so it's "you".
 		if (bc) { try { bc.postMessage({ type: 'taken', token: myToken }); } catch (e) {} }
 		startHeartbeat();
 	}
@@ -3439,16 +2920,10 @@
 		post('es_lock_beat', function (j, failure) {
 			if (failure) { lostContact(failure); return; }
 			if (j.data && j.data.held === false) { bootedBy(j.data.by, j.data.by_is_me); return; }
-			// Back in touch after a failure: the lock is ours again.
 			if (!held || bannerMode === 'retry') claim();
 		});
 	}
 
-	// A check-in failed, so this tab cannot tell whether it still holds the
-	// lock. It used to stay quiet and keep Save enabled while the lock lapsed
-	// on the server, so someone else could open the asset. Now it says so and
-	// pauses Save until a check-in gets through. A network blip clears itself
-	// on the next try; an expired page needs a reload.
 	function lostContact(failure) {
 		held = false;
 		bannerMode = 'retry';
@@ -3482,8 +2957,6 @@
 			if (tb) { tb.textContent = 'Take editing back'; tb.hidden = false; }
 			banner.hidden = false;
 		}
-		// On-brand popup (matches the SaaS) instead of a native alert — grabs
-		// attention when you return to a backgrounded tab.
 		var bootModal = document.getElementById('es-lock-boot-modal');
 		if (bootModal) {
 			var bt = bootModal.querySelector('.es-lock-boot-text');
@@ -3491,8 +2964,6 @@
 			bootModal.hidden = false;
 		}
 	}
-	// View-only: chose not to take over. We hold nothing; saving stays disabled
-	// and a banner offers "Take over" (same handler as take-back).
 	function enterViewOnly(name, isMe) {
 		held = false;
 		bannerMode = 'takeover';
@@ -3510,8 +2981,6 @@
 
 	var reloadBtn = document.querySelector('.es-lock-reload');
 	if (reloadBtn) reloadBtn.addEventListener('click', function () { location.reload(); });
-	// Take over only when the server says it worked. claim() used to run on
-	// any reply, failure included, which showed a lock this tab did not hold.
 	function takeOver(after) {
 		post('es_lock_takeover', function (j, failure) {
 			if (failure) { lostContact(failure); return; }
@@ -3521,8 +2990,6 @@
 	}
 	var takeBackBtn = document.querySelector('.es-lock-takeback');
 	if (takeBackBtn) takeBackBtn.addEventListener('click', function () {
-		// After a failed check-in, "Try again" asks; it never takes the lock
-		// from someone who picked it up in the meantime.
 		if (bannerMode === 'retry') { claimOnOpen(); return; }
 		takeOver();
 	});
@@ -3536,14 +3003,13 @@
 		takeOver();
 	});
 	var bootDismiss = document.querySelector('.es-lock-boot-dismiss');
-	if (bootDismiss) bootDismiss.addEventListener('click', hideBootModal); // keep read-only; banner stays
+	if (bootDismiss) bootDismiss.addEventListener('click', hideBootModal);
 
 	var formEl = document.querySelector('.es-form-editor');
 	if (formEl) formEl.addEventListener('submit', function () { submitting = true; });
 
 	var lockedByOther = !!L.holderToken && L.holderToken !== myToken;
 	if (lockedByOther) {
-		// Another session holds it — offer Take over / View only / Cancel.
 		setSaveDisabled(true);
 		var modal = document.getElementById('es-lock-modal');
 		if (modal) {
@@ -3565,8 +3031,6 @@
 			});
 		}
 	} else {
-		// Free or mine — claim it. beat() acquires if free/mine, or reports a
-		// race where someone grabbed it between page render and now.
 		claimOnOpen();
 	}
 	function claimOnOpen() {
@@ -3577,14 +3041,6 @@
 		}, true);
 	}
 
-	// Release on leave so others don't wait out the stale timeout — but not
-	// during our own save submit (the reload re-claims it).
-	//
-	// `pagehide`, not `beforeunload`: beforeunload also fires when the
-	// unsaved-changes prompt then keeps you on the page, and a lock released
-	// there stayed released while you went on editing. pagehide fires only
-	// when the page really goes. The heartbeat stops first, and the server
-	// ignores a check-in that was already in flight (ES_Locks::beat).
 	var heldWhenLeft = false;
 	window.addEventListener('pagehide', function () {
 		if (!held || submitting) return;
@@ -3600,19 +3056,11 @@
 			navigator.sendBeacon(L.ajaxUrl, body);
 		} catch (e) {}
 	});
-	// Back (or Forward) can bring this page back from the browser's cache with
-	// the lock already released. Claim it again, as on a fresh open.
 	window.addEventListener('pageshow', function (e) {
 		if (e.persisted && heldWhenLeft) { heldWhenLeft = false; claimOnOpen(); }
 	});
 })();
 
-/* ============================================================
-   Cursor-following instant tooltip for [data-es-tip].
-   A single fixed-position bubble at <body> level, so it escapes any
-   overflow:hidden/auto ancestor (e.g. scrollable stats tables) and never
-   clips. Shows immediately on hover, to the right of the cursor, and tracks it.
-   ============================================================ */
 (function () {
 	if ( window.__esTipReady ) { return; }
 	window.__esTipReady = true;
@@ -3656,15 +3104,6 @@
 	window.addEventListener('scroll', function () { if ( bubble ) { bubble.style.opacity = '0'; } active = null; }, true);
 })();
 
-/**
- * Leads: expand a submission in place.
- *
- * The list only ever showed a derived display name, so every other answer a
- * visitor gave — and the consent wording they agreed to — was invisible in the
- * admin. Each row's full detail is already rendered (hidden) beside it, so this
- * only unhides: no request, and it still works if this script never loads,
- * since the panel is real markup rather than something built here.
- */
 (function () {
 	document.addEventListener('click', function (e) {
 		var btn = e.target && e.target.closest ? e.target.closest('.es-lead-toggle') : null;
@@ -3680,15 +3119,6 @@
 	});
 })();
 
-// ── Leave guard for the simple settings screens (SER-1421) ─────────────────
-// The asset screen has its own tracker (initDirtyTracker). The Design System
-// and Settings screens had nothing: edit the CSS, click another menu item, and
-// the edit was gone without a word. Any form marked data-es-leave-guard now
-// asks before the page is left with changes on it. Its own Save never asks.
-//
-// A CodeMirror editor keeps its text to itself until it is saved back into the
-// textarea, so every check flushes the editors first. The baseline is taken on
-// window load, once wp.codeEditor has mounted them, so mounting is not an edit.
 (function () {
 	var forms = document.querySelectorAll('form[data-es-leave-guard]');
 	if (!forms.length) return;

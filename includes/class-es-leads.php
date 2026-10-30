@@ -7,26 +7,11 @@ class ES_Leads {
 
 	public const PER_PAGE = 20;
 
-	/**
-	 * Parse the filter set out of a request array (typically $_GET).
-	 * Single source of truth — both the list view and the CSV export
-	 * route through this so the filter shape is identical everywhere.
-	 *
-	 * Returns: [
-	 *   'form_id' => int|null,
-	 *   'from'    => string|null  (YYYY-MM-DD),
-	 *   'to'      => string|null  (YYYY-MM-DD),
-	 *   'status'  => 'all'|'synced'|'failed'|'pending',
-	 *   'email'   => string|null  (search term, partial match),
-	 *   'kind'    => 'humans'|'bots'|'all',  (default 'humans')
-	 * ]
-	 */
 	public static function parse_filters( array $request ): array {
 		$form_id = isset( $request['form_id'] ) && (int) $request['form_id'] > 0 ? (int) $request['form_id'] : null;
 
 		$from = isset( $request['from'] ) ? trim( (string) $request['from'] ) : '';
 		$to   = isset( $request['to'] )   ? trim( (string) $request['to'] )   : '';
-		// Validate YYYY-MM-DD shape — anything else gets dropped.
 		$from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $from ) ? $from : null;
 		$to   = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $to )   ? $to   : null;
 
@@ -36,8 +21,6 @@ class ES_Leads {
 		$email_raw = isset( $request['email'] ) ? trim( (string) $request['email'] ) : '';
 		$email     = $email_raw !== '' ? sanitize_text_field( $email_raw ) : null;
 
-		// Bot / human partition. Default = humans so the page never shows
-		// honeypot rows on first load; the user has to opt in.
 		$kind_in = isset( $request['kind'] ) ? sanitize_key( (string) $request['kind'] ) : 'humans';
 		$kind    = in_array( $kind_in, [ 'humans', 'bots', 'all' ], true ) ? $kind_in : 'humans';
 
@@ -51,11 +34,6 @@ class ES_Leads {
 		];
 	}
 
-	/**
-	 * Build the WHERE clause + prepare-args for a given filter set.
-	 * Returns [ 'sql' => string, 'args' => array ] where sql is empty
-	 * or starts with "WHERE ...".
-	 */
 	private static function build_where( array $f ): array {
 		$clauses = [];
 		$args    = [];
@@ -91,8 +69,6 @@ class ES_Leads {
 			$clauses[] = 'l.email LIKE %s';
 			$args[]    = '%' . $wpdb->esc_like( strtolower( $f['email'] ) ) . '%';
 		}
-		// Bot partition. 'all' means no clause; default ('humans') hides
-		// honeypot rows. 'bots' shows only them.
 		$kind = $f['kind'] ?? 'humans';
 		if ( $kind === 'humans' ) {
 			$clauses[] = 'l.is_bot = 0';
@@ -103,17 +79,9 @@ class ES_Leads {
 		return [ 'sql' => $sql, 'args' => $args ];
 	}
 
-	/**
-	 * Per-tab counts (humans / bots / all) for the segmented control on
-	 * the leads page. Honors every other active filter so the badge
-	 * reflects "if you switched, this is what you'd see". One query so
-	 * the page render doesn't pay three round-trips.
-	 */
 	public static function counts_by_kind( array $filters ): array {
 		global $wpdb;
 		$leads = ES_Install::table( 'leads' );
-		// Build a where clause that EXCLUDES the kind filter — we want
-		// counts split out by kind, not pre-filtered to one of them.
 		$f = $filters;
 		$f['kind'] = 'all';
 		$where = self::build_where( $f );
@@ -132,11 +100,6 @@ class ES_Leads {
 		];
 	}
 
-	/**
-	 * Returns [ 'rows' => array, 'total' => int ] for the leads list.
-	 * Accepts either a filter array (preferred) or — for backward compat
-	 * with the previous signature — an int form_id as the second arg.
-	 */
 	public static function paginated( int $page = 1, $filters = null ): array {
 		global $wpdb;
 		$leads = ES_Install::table( 'leads' );
@@ -145,7 +108,6 @@ class ES_Leads {
 		$page   = max( 1, $page );
 		$offset = ( $page - 1 ) * self::PER_PAGE;
 
-		// Backward-compat: callers passing just an int form_id still work.
 		if ( is_int( $filters ) ) {
 			$filters = [ 'form_id' => $filters ];
 		}
@@ -171,24 +133,6 @@ class ES_Leads {
 		return [ 'rows' => $rows ?: [], 'total' => $total ];
 	}
 
-	/**
-	 * Narrow a list of assets to the ones that can actually appear on this
-	 * screen, for the asset filter.
-	 *
-	 * Offering a ribbon or a slide-in there is offering a filter that can only
-	 * ever return nothing: an asset with no form in its markup cannot produce a
-	 * lead. "Or already has one" is the other half, and it is not defensive
-	 * padding — an asset that captured leads and later had its form edited out
-	 * still owns those rows, and dropping it would leave real leads visible in
-	 * the list with no way to filter down to them.
-	 *
-	 * One query for the whole set, not a count per asset. Uses
-	 * ES_Form_Repo::primary_metric (core, so Lite keeps it) rather than the A/B
-	 * module's wrapper.
-	 *
-	 * @param  array<int, object> $forms
-	 * @return array<int, object>
-	 */
 	public static function lead_capable_forms( array $forms ): array {
 		if ( ! $forms ) {
 			return [];
@@ -211,13 +155,6 @@ class ES_Leads {
 		) );
 	}
 
-	/**
-	 * Decode a lead's `bot_signals` JSON. Empty array when there is nothing
-	 * recorded: a clean submission, or a row captured before we kept the
-	 * evidence.
-	 *
-	 * @return array<string, mixed>
-	 */
 	public static function bot_signals( ?string $json ): array {
 		if ( ! $json ) {
 			return [];
@@ -226,29 +163,10 @@ class ES_Leads {
 		return ( is_array( $s ) && ! empty( $s['hp_filled'] ) ) ? $s : [];
 	}
 
-	/**
-	 * Whether anything OTHER than the trap says this was a bot: a browser name
-	 * the catalog knows (Googlebot, GPTBot, a generic crawler) or a datacenter
-	 * address.
-	 *
-	 * Corroboration, never the verdict — the same two signals are deliberately
-	 * kept out of the honeypot decision in ES_Ajax::submit. A real person carries
-	 * neither, so "flagged, nothing confirms it" is the shape a false positive
-	 * takes, and that is the thing worth being able to see.
-	 *
-	 * @param array<string, mixed> $signals
-	 */
 	public static function bot_confirmed( array $signals ): bool {
 		return ! empty( $signals['ua_bot'] ) || ! empty( $signals['datacenter'] );
 	}
 
-	/**
-	 * Plain-words account of what the bot check saw: what tripped it, then
-	 * whether anything else backs that up. Empty string when there is nothing
-	 * to say.
-	 *
-	 * @param array<string, mixed> $signals
-	 */
 	public static function bot_reason( array $signals, bool $is_bot ): string {
 		if ( ! $signals ) {
 			return '';
@@ -257,16 +175,11 @@ class ES_Leads {
 		if ( empty( $signals['ts_received'] ) ) {
 			$trap = __( 'The hidden trap came back filled, and the submission carried no valid time stamp, so it never ran our script.', 'emblem-studio' );
 		} elseif ( ! empty( $signals['clock_skew'] ) ) {
-			// Skew, not speed. Only rows from before the stamp (audit S6) can
-			// carry it: the stamp is timed on our clock at both ends. Reading
-			// "sent -449.7s after it appeared" as a verdict on the visitor is the mistake this sentence has to prevent.
 			$ahead = abs( round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 ) );
 			/* translators: %s: seconds this visitor's device clock runs ahead of the server's. */
 			$trap  = sprintf( __( "The hidden trap came back filled, but this visitor's device clock runs about %ss ahead of ours, so the speed check had nothing readable to go on.", 'emblem-studio' ), $ahead );
 		} else {
 			$seconds = round( ( (int) ( $signals['elapsed_ms'] ?? 0 ) ) / 1000, 1 );
-			// Stamped rows are timed from the visitor's first touch; older ones
-			// from when the form appeared.
 			$trap = ( $signals['timing'] ?? null ) === 'stamp'
 				/* translators: %s: seconds between the visitor starting on the form and the submission. */
 				? sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after the visitor started on it.', 'emblem-studio' ), $seconds )
@@ -274,9 +187,6 @@ class ES_Leads {
 				: sprintf( __( 'The hidden trap came back filled, and the form was sent %ss after it appeared.', 'emblem-studio' ), $seconds );
 		}
 
-		// The second sentence carries the outcome too, because the first no longer
-		// implies one: the same elapsed time means different things depending on
-		// whether anything named a bot.
 		$ua = (string) ( $signals['ua_bot'] ?? '' );
 		$dc = (string) ( $signals['datacenter'] ?? '' );
 
@@ -298,9 +208,6 @@ class ES_Leads {
 		return $trap . ' ' . $backing;
 	}
 
-	/**
-	 * Extract a displayable name from a lead's extra_fields JSON. Falls back to '—'.
-	 */
 	public static function display_name( ?string $extra_json ): string {
 		if ( ! $extra_json ) {
 			return '—';
@@ -321,8 +228,6 @@ class ES_Leads {
 
 	public static function delete( int $id ): bool {
 		if ( ! ES_Measurement::storage_transactional() ) {
-			// Keep ordinary legacy deletion compatibility, without pretending
-			// nontransactional storage can erase associated measurement safely.
 			global $wpdb;
 			$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT id, form_id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d', $id ) );
 			$events = ES_Measurement::events_for_lead( $id );
@@ -337,26 +242,12 @@ class ES_Leads {
 		} ) === true;
 	}
 
-	/**
-	 * Delete the local row mirrored down from a given SaaS-native lead (matched
-	 * by saas_lead_id, not the local id — this lead never had a WordPress id of
-	 * its own until pull_leads() mirrored it here). Used by lead-deletion sync,
-	 * both the instant delete route and the periodic reconciliation pull.
-	 */
 	public static function delete_by_saas_id( int $saas_lead_id ): bool {
 		global $wpdb;
 		$id = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . ES_Install::table( 'leads' ) . ' WHERE saas_lead_id = %d', $saas_lead_id ) );
 		return $id ? self::delete( (int) $id ) : false;
 	}
 
-	/**
-	 * Reclassify a bot lead as a human (flips is_bot to 0). Optional
-	 * second arg controls whether the saved fields get pushed to
-	 * FunnelKit + per-form webhooks retroactively — that's the whole
-	 * reason for the button (deliver the freebie a real visitor missed).
-	 *
-	 * Returns: [ 'ok' => bool, 'message' => string|null ]
-	 */
 	public static function move_to_humans( int $lead_id, bool $push = true ): array {
 		global $wpdb;
 		$leads_table = ES_Install::table( 'leads' );
@@ -371,17 +262,6 @@ class ES_Leads {
 
 		$wpdb->update( $leads_table, [ 'is_bot' => 0 ], [ 'id' => $lead_id ] );
 
-		// Every stat driven by the events table (Conversions, conv. rate,
-		// "Blocked spam") needs correcting too — a real submission would
-		// have recorded a 'conversion' event and never a 'honeypot_blocked'
-		// one. Rather than delete one and insert the other (losing whatever
-		// context the original event captured, and risking the two falling
-		// out of sync), convert the SAME row in place: one UPDATE moves it
-		// out of "Blocked spam" and into "Conversions" atomically.
-		// Correlated by form_id + created_at (the event and the lead were
-		// written in the same request; no direct FK between them exists).
-		// No match (old data, second-boundary miss) leaves both stats as-is
-		// rather than blocking the rest of this.
 		$events_table = ES_Install::table( 'events' );
 		$hp_event_id  = $wpdb->get_var( $wpdb->prepare(
 			"SELECT id FROM $events_table WHERE form_id = %d AND event_type = 'honeypot_blocked' AND created_at = %s LIMIT 1",
@@ -391,10 +271,6 @@ class ES_Leads {
 		if ( $hp_event_id ) {
 			$wpdb->update( $events_table, [ 'event_type' => 'conversion' ], [ 'id' => (int) $hp_event_id ] );
 
-			// Conversion is the A/B auto-winner's success metric — a lead
-			// that now genuinely counts as one should be able to affect
-			// that result, same as it would have at submit time. Throttled
-			// / no-op when no test is running.
 			if ( class_exists( 'ES_AB' ) ) {
 				ES_AB::auto_winner_check( (int) $lead->form_id );
 			}
@@ -407,18 +283,6 @@ class ES_Leads {
 		return self::push_to_connections( $lead );
 	}
 
-	/**
-	 * Manually re-try FunnelKit + webhook delivery for a lead that's a
-	 * confirmed human but never landed — `funnelkit_pushed=0`, whether
-	 * that's a genuine error (`error` set) or the form's FK destination
-	 * was disabled at submit time and someone's since turned it on. The
-	 * plugin's push either succeeds or fails within the same request (see
-	 * `move_to_humans`'s docblock — there's no async "stuck pending" state
-	 * to safeguard against here the way the SaaS's connector needs to), so
-	 * this is a plain re-run, not a queued/backed-off retry.
-	 *
-	 * Returns: [ 'ok' => bool, 'message' => string|null ]
-	 */
 	public static function retry_push( int $lead_id ): array {
 		global $wpdb;
 		$leads_table = ES_Install::table( 'leads' );
@@ -437,17 +301,6 @@ class ES_Leads {
 		return self::push_to_connections( $lead );
 	}
 
-	/**
-	 * The actual FunnelKit + per-form-webhook delivery for one lead row —
-	 * shared by `move_to_humans`'s "Move + push" and `retry_push`, so the
-	 * two can never drift on what a "push" actually does. Best-effort: if
-	 * the form is gone, silently reports that and does nothing else; the
-	 * caller (a human who already confirmed the action) can deal with it
-	 * manually either way.
-	 *
-	 * @param object $lead A full row from the leads table.
-	 * Returns: [ 'ok' => bool, 'message' => string|null ]
-	 */
 	private static function push_to_connections( object $lead ): array {
 		global $wpdb;
 		$leads_table = ES_Install::table( 'leads' );
@@ -495,7 +348,6 @@ class ES_Leads {
 			], [ 'id' => (int) $lead->id ] );
 		}
 
-		// Per-form webhook fan-out.
 		if ( class_exists( 'ES_Webhooks' ) ) {
 			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null );
 			ES_Webhooks::send_for_form( $form, $payload );
@@ -521,11 +373,6 @@ class ES_Leads {
 		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE email = %s ORDER BY id DESC", $normalized ) );
 	}
 
-	/**
-	 * Stream a CSV of leads filtered by the same shape `paginated()` uses.
-	 * Accepts either a filter array (preferred) or an int form_id for
-	 * backward compat with the v0.x-era export handler.
-	 */
 	public static function stream_csv( $filters = null ): void {
 		global $wpdb;
 		$leads = ES_Install::table( 'leads' );
@@ -546,15 +393,8 @@ class ES_Leads {
 		exit;
 	}
 
-	/** Leads per query while exporting (audit P8). */
 	private const CSV_BATCH = 500;
 
-	/**
-	 * One page of export rows, newest first, below $before_id.
-	 *
-	 * @param array{sql:string,args:array<int,mixed>} $where
-	 * @return array<int, array<string, mixed>>
-	 */
 	private static function csv_batch( array $where, string $columns, int $before_id ): array {
 		global $wpdb;
 		$leads = ES_Install::table( 'leads' );
@@ -567,19 +407,6 @@ class ES_Leads {
 		);
 	}
 
-	/**
-	 * Write the CSV in batches (audit P8). This used to load every matching
-	 * lead at once, decode each twice and pass every id to one IN() for the
-	 * consents, so a big site's export could run out of memory. Now memory is
-	 * one batch, whatever the size.
-	 *
-	 * Two passes, because the header needs every custom question before the
-	 * first row is written: the first reads only extra_fields to collect them,
-	 * the second writes the rows.
-	 *
-	 * @param resource $out
-	 * @param array{sql:string,args:array<int,mixed>} $where
-	 */
 	public static function write_csv( $out, array $where ): void {
 		$custom_keys = [];
 		$before      = PHP_INT_MAX;
@@ -608,10 +435,6 @@ class ES_Leads {
 		$before  = PHP_INT_MAX;
 		do {
 			$batch = self::csv_batch( $where, $columns, $before );
-			// Consent proof travels with the row. An export is what a customer
-			// hands over when someone asks what a subscriber agreed to. Blank (not
-			// "no") when the form had no consent control at all — that is a
-			// different fact from someone declining, and must not read as one.
 			$consent = ES_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( $batch, 'id' ) ) );
 			foreach ( $batch as $r ) {
 				$extra = $r['extra_fields'] ? json_decode( (string) $r['extra_fields'], true ) : [];
@@ -626,9 +449,6 @@ class ES_Leads {
 					$custom_cells[] = self::custom_field_display( $extra[ $key ] ?? '' );
 				}
 
-				// A submission can carry several separate agreements. Joined rather
-				// than one column pair per consent field, which would make the header
-				// shift depending on which leads the filter happened to catch.
 				$cs = $consent[ (int) $r['id'] ] ?? [];
 
 				$row = array_merge(
@@ -648,13 +468,11 @@ class ES_Leads {
 		} while ( count( $batch ) === self::CSV_BATCH );
 	}
 
-	/** "site_role" / "site-role" → "Site Role", for a custom question's CSV header. */
 	private static function humanize_custom_key( string $key ): string {
 		$words = array_filter( preg_split( '/[_\-]+/', rtrim( $key, '[]' ) ) ?: [] );
 		return $words ? implode( ' ', array_map( 'ucfirst', $words ) ) : $key;
 	}
 
-	/** A checkbox group's answer arrives as an array — join it into one readable cell. */
 	private static function custom_field_display( $value ): string {
 		if ( $value === null || $value === '' ) {
 			return '';
@@ -662,11 +480,6 @@ class ES_Leads {
 		return is_array( $value ) ? implode( '; ', array_map( 'strval', $value ) ) : (string) $value;
 	}
 
-	/**
-	 * Build a CSV filename that reflects the active filter so the user
-	 * can tell which file is which when they've exported multiple. Falls
-	 * back to a plain dated filename when no filter is active.
-	 */
 	private static function csv_filename( array $filters ): string {
 		$parts = [ 'emblem-studio-leads' ];
 		if ( ! empty( $filters['form_id'] ) ) {
@@ -685,12 +498,6 @@ class ES_Leads {
 		return implode( '-', $parts ) . '.csv';
 	}
 
-	/**
-	 * Defend against CSV formula injection: when Excel/Sheets opens a CSV cell that
-	 * starts with =, +, -, @, tab, or CR, it interprets the cell as a formula.
-	 * A submitted name like `=cmd|'/c calc.exe'!A1` would execute on open.
-	 * Prefix any such cell with a single quote so it's treated as text.
-	 */
 	private static function neutralize_formula( $value ): string {
 		$value = (string) $value;
 		if ( $value === '' ) {
@@ -703,12 +510,6 @@ class ES_Leads {
 		return $value;
 	}
 
-	/**
-	 * Delete bot leads older than $days. They keep the IP on purpose, so an
-	 * operator can see what is attacking them, which is exactly why they must
-	 * not be kept forever. A real person filed as a bot can be moved back to
-	 * the leads list from the Bots tab well inside this window.
-	 */
 	public static function purge_bot_leads( int $days ): int {
 		global $wpdb;
 		$t       = ES_Install::table( 'leads' );

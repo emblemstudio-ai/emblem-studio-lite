@@ -3,14 +3,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Per-form HTML/CSS revision history.
- *
- * One row per save (when HTML or CSS changed). Repository surface for
- * inserting, listing, fetching, restoring, and pruning. The author runs
- * the Emblem Studio form-edit page; revisions are not a public-side
- * concern, so all reads are admin-context.
- */
 class ES_Form_Revisions {
 
 	private const KEEP_PER_FORM = 50;
@@ -19,11 +11,6 @@ class ES_Form_Revisions {
 		return ES_Install::table( 'form_revisions' );
 	}
 
-	/**
-	 * Insert a revision row. Caller decides whether to skip (e.g. when
-	 * the save didn't actually change html/css). Auto-prunes oldest rows
-	 * beyond the per-form cap. Returns the new id, or null on failure.
-	 */
 	public static function insert( int $form_id, string $html, string $css, ?string $note = null ): ?int {
 		if ( $form_id <= 0 ) {
 			return null;
@@ -57,9 +44,6 @@ class ES_Form_Revisions {
 		return $row ?: null;
 	}
 
-	/**
-	 * Newest first. Returns up to KEEP_PER_FORM rows.
-	 */
 	public static function list_for_form( int $form_id, int $limit = self::KEEP_PER_FORM ): array {
 		global $wpdb;
 		$rows = $wpdb->get_results( $wpdb->prepare(
@@ -87,20 +71,11 @@ class ES_Form_Revisions {
 		);
 	}
 
-	/**
-	 * Drop every revision attached to a form. Called by Form_Repo::delete()
-	 * when a form is permanently deleted — trash doesn't cascade, so the
-	 * history survives "Move to Trash → Restore" round-trips.
-	 */
 	public static function delete_for_form( int $form_id ): int {
 		global $wpdb;
 		return (int) $wpdb->delete( self::table(), [ 'form_id' => $form_id ] );
 	}
 
-	/**
-	 * Keep only the most recent KEEP_PER_FORM rows per form. Cheap; runs
-	 * after every insert. Filterable cap.
-	 */
 	public static function prune( int $form_id ): int {
 		$cap = (int) apply_filters( 'emblem_studio_revisions_per_form', self::KEEP_PER_FORM );
 		if ( $cap < 1 ) {

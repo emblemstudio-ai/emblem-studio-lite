@@ -9,12 +9,7 @@ class ES_Admin {
 		add_action( 'admin_menu', [ $this, 'menu' ] );
 		add_filter( 'admin_title', [ $this, 'filter_admin_title' ], 10, 2 );
 		add_action( 'admin_enqueue_scripts', [ $this, 'assets' ] );
-		// Menu icon needs styling on EVERY admin page (the sidebar shows
-		// everywhere), so this can't ride on the page-scoped asset enqueue.
 		add_action( 'admin_head', [ $this, 'menu_icon_css' ] );
-		// Suppress third-party admin notices on Emblem Studio screens.
-		// Priority 999 so it runs after every other plugin's add_action()
-		// has fired but before WP renders them via do_action('admin_notices').
 		add_action( 'in_admin_header', [ $this, 'maybe_suppress_admin_notices' ], 999 );
 		add_action( 'admin_post_es_save_form', [ $this, 'handle_save' ] );
 		add_action( 'admin_post_es_trash_form', [ $this, 'handle_trash' ] );
@@ -24,7 +19,6 @@ class ES_Admin {
 		add_action( 'admin_post_es_unarchive_form', [ $this, 'handle_unarchive' ] );
 		add_action( 'admin_post_es_bulk_forms', [ $this, 'handle_bulk' ] );
 		add_action( 'admin_post_es_save_settings', [ $this, 'handle_save_settings' ] );
-		// Design System (Pro/full only) — shared per-install CSS.
 		if ( ES_Caps::has( 'design_system' ) ) {
 			add_action( 'admin_post_es_save_design_system', [ $this, 'handle_save_design_system' ] );
 		}
@@ -34,14 +28,11 @@ class ES_Admin {
 		add_action( 'admin_post_es_move_lead_to_humans', [ $this, 'handle_move_lead_to_humans' ] );
 		add_action( 'admin_post_es_retry_lead', [ $this, 'handle_retry_lead' ] );
 		add_action( 'admin_post_es_duplicate_form', [ $this, 'handle_duplicate' ] );
-		// Revisions are account-gated (Free and up) — register handlers only
-		// when the module is present (absent in the Lite build).
 		if ( ES_Caps::has( 'revisions' ) ) {
 			add_action( 'admin_post_es_restore_revision',        [ $this, 'handle_restore_revision'        ] );
 			add_action( 'admin_post_es_revision_note',           [ $this, 'handle_revision_note'           ] );
 			add_action( 'admin_post_es_export_revision',         [ $this, 'handle_export_revision'         ] );
 			add_action( 'admin_post_es_restore_revision_as_new', [ $this, 'handle_restore_revision_as_new' ] );
-			// Scheduled content changes — the future half of the same tab (SER-1287).
 			add_action( 'admin_post_es_schedule_change',        [ $this, 'handle_schedule_change'        ] );
 			add_action( 'admin_post_es_cancel_scheduled_change', [ $this, 'handle_cancel_scheduled_change' ] );
 			add_action( 'admin_post_es_apply_scheduled_change',  [ $this, 'handle_apply_scheduled_change'  ] );
@@ -51,58 +42,30 @@ class ES_Admin {
 		add_action( 'admin_post_es_import_forms', [ $this, 'handle_import_forms' ] );
 		add_action( 'admin_post_es_install_bundle',          [ $this, 'handle_install_bundle'          ] );
 		add_action( 'admin_post_es_install_form',            [ $this, 'handle_install_form'            ] );
-		// A/B testing is account-gated (Paid). restore_revision_as_variant
-		// bridges a revision into an A/B variant, so it belongs here too.
 		if ( ES_Caps::has( 'ab' ) ) {
 			add_action( 'admin_post_es_restore_revision_as_variant', [ $this, 'handle_restore_revision_as_variant' ] );
 			add_action( 'admin_post_es_end_test',                [ $this, 'handle_end_test'                ] );
 			add_action( 'admin_post_es_restore_variant',         [ $this, 'handle_restore_variant'         ] );
 			add_action( 'admin_post_es_delete_variant',          [ $this, 'handle_delete_variant'          ] );
 		}
-		// Admin-only AJAX for drag-reorder on the Forms list.
 		add_action( 'wp_ajax_es_reorder_forms',              [ $this, 'handle_reorder_forms'          ] );
 		add_action( 'wp_ajax_es_lock_beat',                  [ $this, 'handle_lock_beat'              ] );
 		add_action( 'wp_ajax_es_lock_takeover',              [ $this, 'handle_lock_takeover'          ] );
 		add_action( 'wp_ajax_es_lock_release',               [ $this, 'handle_lock_release'           ] );
 		add_action( 'wp_ajax_es_lock_states',                [ $this, 'handle_lock_states'            ] );
-		// Live Checks list while the HTML/CSS is being edited (SER-1358).
 		add_action( 'wp_ajax_es_check_asset',                [ $this, 'handle_check_asset'            ] );
-		// Per-post form-exclusion metabox on page / post edit screens.
 		add_action( 'add_meta_boxes', [ $this, 'register_exclusion_metabox' ] );
 		add_action( 'save_post',      [ $this, 'save_exclusion_metabox' ], 10, 2 );
 	}
 
-	// ================================================================
-	// Per-post form-exclusion metabox.
-	//
-	// A panel on page / post edit screens for hiding a form from THAT
-	// content item. It is a second doorway into the form's own Display
-	// Rules hide list — single source of truth, no separate per-post
-	// store — so an exclusion made here shows up under the form's
-	// Display Rules automatically, and vice versa.
-	// ================================================================
-
-	/**
-	 * Post types the exclusion metabox supports. post + page only: those
-	 * are the display-rules hide buckets (posts / pages) that exist and
-	 * whose matcher works. Custom post types need a generalized bucket —
-	 * deferred (see docs/ARCHITECTURE.md section 9).
-	 */
 	private function exclusion_metabox_post_types(): array {
 		return [ 'post', 'page' ];
 	}
 
-	/** Which hide_filters bucket a post type's IDs live in. */
 	private function exclusion_bucket( string $post_type ): string {
 		return $post_type === 'page' ? 'pages' : 'posts';
 	}
 
-	/**
-	 * Forms eligible for per-post exclusion: non-trashed forms using at
-	 * least one auto-injected shell (popup-auto / ribbon / slide-in).
-	 * Inline + click-popup forms render only where their shortcode sits,
-	 * so there is nothing to exclude.
-	 */
 	private function exclusion_forms(): array {
 		$out = [];
 		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
@@ -113,7 +76,6 @@ class ES_Admin {
 		return $out;
 	}
 
-	/** True when $post_id sits in the form's hide list for EVERY auto shell. */
 	private function form_excludes_post( object $form, int $post_id, string $bucket ): bool {
 		$rules = ES_Display_Rules::get_all_for_form( $form );
 		foreach ( ES_Form_Repo::auto_shells() as $shell ) {
@@ -125,12 +87,6 @@ class ES_Admin {
 		return true;
 	}
 
-	/**
-	 * Add or remove $post_id from a form's hide list across ALL auto
-	 * shells — the "whole form" exclusion model. Adding to every shell
-	 * (not just the ones currently enabled) keeps the exclusion durable
-	 * if the form gains another shell later.
-	 */
 	private function set_form_exclusion( object $form, int $post_id, string $bucket, bool $exclude ): void {
 		$rules = ES_Display_Rules::get_all_for_form( $form );
 		foreach ( ES_Form_Repo::auto_shells() as $shell ) {
@@ -149,7 +105,6 @@ class ES_Admin {
 		ES_Form_Repo::update_display_rules( (int) $form->id, $rules );
 	}
 
-	/** Register the metabox on every supported post type's edit screen. */
 	public function register_exclusion_metabox(): void {
 		foreach ( $this->exclusion_metabox_post_types() as $post_type ) {
 			add_meta_box(
@@ -163,7 +118,6 @@ class ES_Admin {
 		}
 	}
 
-	/** Render the metabox — one checkbox per auto-displaying form. */
 	public function render_exclusion_metabox( WP_Post $post ): void {
 		$forms   = $this->exclusion_forms();
 		$bucket  = $this->exclusion_bucket( (string) $post->post_type );
@@ -201,13 +155,6 @@ class ES_Admin {
 		echo '<p class="description">' . esc_html__( 'A ticked form is hidden here. This is the same exclusion list shown under the form\'s Display Rules.', 'emblem-studio' ) . '</p>';
 	}
 
-	/**
-	 * Persist metabox changes on post save. Non-destructive: a form's
-	 * hide list is only touched when the checkbox state actually changed
-	 * from what was rendered. So a plain post save — or a granular
-	 * per-shell exclusion set from the form's own Display Rules — is
-	 * never clobbered by an untouched metabox.
-	 */
 	public function save_exclusion_metabox( int $post_id, WP_Post $post ): void {
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
 			return;
@@ -218,8 +165,6 @@ class ES_Admin {
 		if ( ! in_array( $post->post_type, $this->exclusion_metabox_post_types(), true ) ) {
 			return;
 		}
-		// No nonce → this save isn't the metabox form (REST content save,
-		// quick edit, programmatic save). Leave exclusions untouched.
 		if ( empty( $_POST['es_exclusion_nonce'] )
 			|| ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['es_exclusion_nonce'] ) ), 'es_exclusion_metabox' ) ) {
 			return;
@@ -265,14 +210,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Where a lead action returns to: the Leads page the user was on, with
-	 * its filters. The browser's referrer is only trusted when it IS the
-	 * Leads page. A site whose Referrer-Policy sends only the origin
-	 * ("origin" / "strict-origin") reports "http://site.local/", which is
-	 * same-host and passed wp_get_referer(), so deleting a lead landed on the
-	 * site's front page at "/?lead_deleted=1".
-	 */
 	private static function leads_back_url(): string {
 		$fallback = admin_url( 'admin.php?page=emblem-studio-leads' );
 		$ref      = (string) wp_get_referer();
@@ -283,7 +220,6 @@ class ES_Admin {
 		if ( ( $query['page'] ?? '' ) !== 'emblem-studio-leads' ) {
 			return $fallback;
 		}
-		// Drop the previous action's notice so only this one shows.
 		return remove_query_arg( [ 'lead_deleted', 'lead_moved', 'lead_move_failed', 'lead_retried', 'lead_retry_failed' ], $ref );
 	}
 
@@ -307,8 +243,6 @@ class ES_Admin {
 		}
 		$id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
 		check_admin_referer( 'es_move_lead_to_humans_' . $id );
-		// Push toggle comes through as ?push=1|0. Default to push so the
-		// freebie use case (the whole reason the button exists) just works.
 		$push = ! isset( $_GET['push'] ) || (int) $_GET['push'] === 1;
 		$result = $id ? ES_Leads::move_to_humans( $id, $push ) : [ 'ok' => false ];
 		$back = self::leads_back_url();
@@ -317,10 +251,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * A human asking, right now, for one more try on a confirmed-human
-	 * lead whose FunnelKit push never landed — see ES_Leads::retry_push.
-	 */
 	public function handle_retry_lead(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -334,27 +264,12 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Brand emblem for the admin menu: the approved sunset logo, at the size WP
-	 * expects for `add_menu_page()`'s icon. Returned as a base64 PNG data URI so
-	 * it ships in the plugin (no extra HTTP request) and needs no enqueue.
-	 */
 	private function menu_icon(): string {
 		$png = (string) file_get_contents( EMBLEM_STUDIO_PATH . 'assets/images/wp-admin-menu-icon-20x20.png' );
 
 		return 'data:image/png;base64,' . base64_encode( $png );
 	}
 
-	/**
-	 * Force the menu emblem to full opacity (WP dims icons to ~60%) on every
-	 * admin page, and swap in the retina (40x40@2x) export so it stays crisp on
-	 * HiDPI screens — WP's own background-image (set from menu_icon() above)
-	 * only ever uses the 20x20 file. Also sets the sidebar label itself
-	 * ("Emblem Studio") to the brand display font — it sits right next to the
-	 * logo, so it needs the same styling everywhere the icon does, not just on
-	 * our own screens (`.emblem-studio-wrap h1` in admin.css only covers our
-	 * own pages' headings, never the sidebar). Tiny inline style — no enqueue.
-	 */
 	public function menu_icon_css(): void {
 		$png = (string) file_get_contents( EMBLEM_STUDIO_PATH . 'assets/images/wp-admin-menu-icon-40x40@2x.png' );
 		$icon_uri = 'data:image/png;base64,' . base64_encode( $png );
@@ -372,7 +287,6 @@ class ES_Admin {
 			. 'background-repeat:no-repeat !important;'
 			. 'background-position:center !important;'
 			. 'background-size:20px auto !important;'
-			// Faint lift on both the dark sidebar and the blue active bar.
 			. 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)) !important;';
 
 		$font_decl = "font-family:'Titillium Web','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif !important;";
@@ -384,15 +298,9 @@ class ES_Admin {
 	}
 
 	public function menu(): void {
-		// P5 thin client: when connected to a free Emblem Studio account, the
-		// sidebar mirrors the SaaS site sections (each page embeds its SaaS twin),
-		// including ones the standalone Lite plugin doesn't have (Overview, A/B,
-		// Integrations). Inert in the Full plugin (no connector class).
 		$connector = class_exists( 'Emblem_Studio_SaaS_Connector' );
 		$connected = $connector && Emblem_Studio_SaaS_Connector::is_connected();
 
-		// Sidebar name reflects the edition/tier: Lite (standalone) → Free → Pro
-		// (connected). The Full plugin has no connector, so it stays "Emblem Studio".
 		$title = $connector
 			? Emblem_Studio_SaaS_Connector::edition_label()
 			: __( 'Emblem Studio', 'emblem-studio' );
@@ -422,16 +330,10 @@ class ES_Admin {
 			'emblem-studio-new',
 			[ $this, 'route_new' ]
 		);
-		// Surveys and Sales notifications (SER-1691): each asset type has its own
-		// list in the web app, so a connected site gets the same two entries, in
-		// the same place. Connected only: a standalone install has no types.
 		if ( $connected ) {
 			add_submenu_page( 'emblem-studio', __( 'Surveys', 'emblem-studio' ), __( 'Surveys', 'emblem-studio' ), 'manage_options', 'emblem-studio-surveys', [ $this, 'route_surveys' ] );
 			add_submenu_page( 'emblem-studio', __( 'Sales notifications', 'emblem-studio' ), __( 'Sales notifications', 'emblem-studio' ), 'manage_options', 'emblem-studio-sales-notifications', [ $this, 'route_sales_notifications' ] );
 		}
-		// Schedule (SER-1328) — connected only, and placed where the SaaS sidebar
-		// puts it, straight after the asset list. It has no local twin: the board
-		// reads every asset's periods and queued changes from the account.
 		if ( $connected ) {
 			add_submenu_page(
 				'emblem-studio',
@@ -442,9 +344,6 @@ class ES_Admin {
 				[ $this, 'route_schedule' ]
 			);
 		}
-		// Design System — the full edition has the local CSS editor; a connected
-		// Lite site embeds the account's (SaaS) Design System page. Mirrors how A/B
-		// Tests shows when the cap is on OR the site is connected.
 		if ( ES_Caps::has( 'design_system' ) || $connected ) {
 			add_submenu_page(
 				'emblem-studio',
@@ -455,9 +354,6 @@ class ES_Admin {
 				[ $this, 'route_design_system' ]
 			);
 		}
-		// A/B Tests: the standalone Lite build omits it (Paid, gated off); when
-		// connected the account's tier decides, so the SaaS page is embedded and
-		// the menu always shows (the SaaS handles any upsell).
 		if ( ES_Caps::has( 'ab' ) || $connected ) {
 			add_submenu_page(
 				'emblem-studio',
@@ -476,8 +372,6 @@ class ES_Admin {
 			'emblem-studio-leads',
 			[ $this, 'route_leads' ]
 		);
-		// Survey answers, beside Leads as in the web app. Connected only: surveys
-		// exist only there.
 		if ( $connected ) {
 			add_submenu_page( 'emblem-studio', __( 'Survey results', 'emblem-studio' ), __( 'Survey results', 'emblem-studio' ), 'manage_options', 'emblem-studio-survey-results', [ $this, 'route_survey_results' ] );
 		}
@@ -499,9 +393,6 @@ class ES_Admin {
 				[ $this, 'route_integrations' ]
 			);
 		}
-		// Support & feedback (SER-1049) — SaaS-only, account-scoped (not
-		// per-site), so it only appears once the site is actually paired; a
-		// standalone Lite install has no local ticket data to show at all.
 		if ( $connected ) {
 			add_submenu_page(
 				'emblem-studio',
@@ -511,7 +402,6 @@ class ES_Admin {
 				'emblem-studio-tickets',
 				[ $this, 'route_tickets' ]
 			);
-			// Team (who can work on this website), as in the web app's sidebar.
 			add_submenu_page( 'emblem-studio', __( 'Team', 'emblem-studio' ), __( 'Team', 'emblem-studio' ), 'manage_options', 'emblem-studio-team', [ $this, 'route_team' ] );
 		}
 		add_submenu_page(
@@ -522,9 +412,6 @@ class ES_Admin {
 			'emblem-studio-settings',
 			[ $this, 'route_settings' ]
 		);
-		// Plugin-local explainer, deliberately NEVER routed through maybe_embed()
-		// (see route_privacy()) — it has no SaaS twin, so it renders identically
-		// whether the site is standalone, Lite, or connected.
 		add_submenu_page(
 			'emblem-studio',
 			__( 'Privacy & Cookies', 'emblem-studio' ),
@@ -533,8 +420,6 @@ class ES_Admin {
 			'emblem-studio-privacy',
 			[ $this, 'route_privacy' ]
 		);
-		// The Connect / Account screen (Lite + connector only). Label reflects
-		// state — "Connect" when not yet paired, "Account" once connected.
 		if ( $connector ) {
 			add_submenu_page(
 				'emblem-studio',
@@ -547,11 +432,6 @@ class ES_Admin {
 		}
 	}
 
-	/**
-	 * Pages that exist only in the web app (SER-1691). Each embeds its SaaS twin;
-	 * if the site is not connected after all, the asset list is the honest
-	 * fallback, because there is nothing local to show.
-	 */
 	public function route_surveys(): void {
 		if ( ! $this->maybe_embed( 'emblem-studio-surveys' ) ) {
 			$this->route();
@@ -603,12 +483,6 @@ class ES_Admin {
 		include EMBLEM_STUDIO_PATH . 'admin/views/tests-list.php';
 	}
 
-	/**
-	 * Install one template from a bundle as a single new form. Used by
-	 * each thumbnail card in the picker. Redirects to the new form's
-	 * editor with a `from_template=1` query so the editor can show a
-	 * one-line "you came from a template" callout (future polish).
-	 */
 	public function handle_install_form(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -629,19 +503,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Install one industry bundle as N new forms. Each form lands as
-	 * status='inactive' via the existing ES_Form_Repo::from_import_array
-	 * pipeline, so all the import safety (slug collisions, sanitizer,
-	 * status forcing) runs untouched. Redirects to the gallery with a
-	 * success notice; if the bundle had zero installable forms, falls
-	 * back to a warning.
-	 */
-	/**
-	 * Admin-only AJAX — apply a new manual order to the Forms list.
-	 * jQuery UI Sortable on the tbody fires this after every drop.
-	 * Expects POST { nonce, ids: [int,int,...] } in top-to-bottom order.
-	 */
 	public function handle_reorder_forms(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
@@ -660,15 +521,6 @@ class ES_Admin {
 		wp_send_json_success( [ 'updated' => $updated ] );
 	}
 
-	/**
-	 * Admin-only AJAX: run the Checks list (ES_Asset_Checks) on HTML/CSS that has
-	 * not been saved yet, so the editor can warn while someone types. Saves nothing.
-	 *
-	 * Same capability as saving an asset. The HTML is deliberately NOT sanitized
-	 * first: the stripped_code rule exists to warn that a save will throw away a
-	 * <script> or an onclick, and sanitizing would remove the very thing it looks for.
-	 * Nothing here is stored or echoed back as markup; the reply is the check items.
-	 */
 	public function handle_check_asset(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
@@ -681,15 +533,10 @@ class ES_Admin {
 		wp_send_json_success( [ 'checks' => ES_Asset_Checks::run( $html, $css ) ] );
 	}
 
-	// ── Concurrent-edit lock (AJAX) ───────────────────────────────
 	private function lock_request(): array {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
 		}
-		// A stale nonce answers in JSON rather than WordPress's bare "-1", so
-		// the editor can tell "reload the page" apart from "the network
-		// blinked". It used to swallow both, and went on showing a lock it no
-		// longer held.
 		if ( ! check_ajax_referer( 'es_lock', 'nonce', false ) ) {
 			wp_send_json_error( [ 'reason' => 'nonce' ], 403 );
 		}
@@ -701,27 +548,17 @@ class ES_Admin {
 		return [ $form_id, get_current_user_id(), $token ];
 	}
 
-	/** Heartbeat: refresh my lock, or report who took it over (by name). */
 	public function handle_lock_beat(): void {
 		list( $form_id, $me, $token ) = $this->lock_request();
-		// `claim` is sent when the editor opens or comes back (reload, Back);
-		// a plain check-in never takes back a lock this tab released.
 		$held = ES_Locks::beat( $form_id, $me, $token, ! empty( $_POST['claim'] ) );
 		$holder = $held ? 0 : ES_Locks::holder( $form_id );
 		wp_send_json_success( array_merge( [
 			'held'    => $held,
 			'by'      => $held ? '' : ES_Locks::user_label( $holder ),
-			// Same WP user, different tab — so the booted tab can say "you" not a name.
 			'by_is_me' => ( ! $held && $holder === $me ),
 		], $this->lock_fresh_nonces() ) );
 	}
 
-	/**
-	 * New nonces for the lock check-ins and for the Save button, handed back
-	 * with every check-in. A nonce lives a day at most, so an editor left open
-	 * overnight used to start failing its check-ins (silently) and then its
-	 * save. While the person is still logged in, these keep both working.
-	 */
 	private function lock_fresh_nonces(): array {
 		return [
 			'nonce'      => wp_create_nonce( 'es_lock' ),
@@ -729,19 +566,12 @@ class ES_Admin {
 		];
 	}
 
-	/** Take over editing — become the lock holder for this session token. */
 	public function handle_lock_takeover(): void {
 		list( $form_id, $me, $token ) = $this->lock_request();
 		ES_Locks::take_over( $form_id, $me, $token );
 		wp_send_json_success( $this->lock_fresh_nonces() );
 	}
 
-	/**
-	 * Who is editing which asset right now, for the asset list's labels. The
-	 * list drew them once, at page load, so "You're editing" stayed after you
-	 * had left the editor (item 7 of Catalina's Lite test pass). The list now
-	 * asks again shortly after loading, every 15 seconds, and on Back.
-	 */
 	public function handle_lock_states(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
@@ -757,7 +587,6 @@ class ES_Admin {
 		wp_send_json_success( (object) $out );
 	}
 
-	/** Release the lock on leaving (fired from beforeunload / sendBeacon). */
 	public function handle_lock_release(): void {
 		list( $form_id, $me, $token ) = $this->lock_request();
 		ES_Locks::release( $form_id, $token );
@@ -779,8 +608,6 @@ class ES_Admin {
 			wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio-templates&install_failed=1' ) );
 			exit;
 		}
-		// Land back on the gallery with a count notice. The user can then
-		// click any of the newly-created forms from the main Forms list.
 		wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio-templates&installed=' . count( $ids ) ) );
 		exit;
 	}
@@ -805,12 +632,6 @@ class ES_Admin {
 		include EMBLEM_STUDIO_PATH . 'admin/views/settings.php';
 	}
 
-	/** Support & feedback (SER-1049) — SaaS-only, no local Lite equivalent.
-	 *  The submenu only registers when connected, so reaching this unconnected
-	 *  is a rare direct-URL edge case, not the normal path. */
-	/** The Schedule board. Embedded when connected; otherwise it says what it
-	 *  needs, the same way Support does, because a stale link to it can still
-	 *  land here after the site is disconnected. */
 	public function route_schedule(): void {
 		if ( $this->maybe_embed( 'emblem-studio-schedule' ) ) {
 			return;
@@ -855,9 +676,6 @@ class ES_Admin {
 		<?php
 	}
 
-	/** Plugin-local — deliberately skips maybe_embed(). This is static explainer
-	 *  copy with no SaaS twin; an unmapped slug through maybe_embed() would
-	 *  silently fall back to embedding the Assets page on a connected site. */
 	public function route_privacy(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
@@ -865,8 +683,6 @@ class ES_Admin {
 		include EMBLEM_STUDIO_PATH . 'admin/views/privacy.php';
 	}
 
-	/** Design System editor: connected Lite embeds the account's (SaaS) page; the
-	 *  full edition renders the local CSS editor. */
 	public function route_design_system(): void {
 		if ( $this->maybe_embed( 'emblem-studio-design-system' ) ) {
 			return;
@@ -877,7 +693,6 @@ class ES_Admin {
 		include EMBLEM_STUDIO_PATH . 'admin/views/design-system.php';
 	}
 
-	/** Save the shared Design System CSS (snapshots a revision on change). */
 	public function handle_save_design_system(): void {
 		if ( ! ES_Caps::has( 'design_system' ) || ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -896,8 +711,6 @@ class ES_Admin {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
 		}
 		check_admin_referer( 'es_export_leads' );
-		// Hand the full filter set through to the CSV so the export
-		// matches what's on screen. Same parse path the list view uses.
 		$filters = ES_Leads::parse_filters( $_GET );
 		ES_Leads::stream_csv( $filters );
 	}
@@ -925,10 +738,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Single-form export — streams a JSON file as a download.
-	 * URL: admin-post.php?action=es_export_form&id=N&_wpnonce=...
-	 */
 	public function handle_export_form(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -960,10 +769,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Bulk export — every non-trashed form, packaged in one JSON file.
-	 * URL: admin-post.php?action=es_export_all&_wpnonce=...
-	 */
 	public function handle_export_all(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -992,17 +797,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Files exported from the web app have no `emblem_studio_export_version`
-	 * key: one asset is `{schema: "emblem-studio/form", html, css, ...}` at the
-	 * top level, and "Export all" is `{schema: "emblem-studio/forms", forms}`.
-	 * The per-asset fields are the same as ours, so wrap either shape in our
-	 * envelope rather than reject it. Before this, every web-app export failed
-	 * here with "does not look like an Emblem Studio export".
-	 *
-	 * @param mixed $decoded
-	 * @return mixed
-	 */
 	public static function normalize_import_envelope( $decoded ) {
 		if ( ! is_array( $decoded ) || ! empty( $decoded['emblem_studio_export_version'] ) ) {
 			return $decoded;
@@ -1017,11 +811,6 @@ class ES_Admin {
 		return $decoded;
 	}
 
-	/**
-	 * Multi-form import from an uploaded JSON file. Decodes the file,
-	 * validates the export-version envelope, runs each form through
-	 * Form_Repo::from_import_array, redirects back with a count.
-	 */
 	public function handle_import_forms(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1068,14 +857,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Export one revision as a JSON file. Hybrid payload: the revision's
-	 * stored HTML/CSS plus the form's CURRENT settings for everything else
-	 * (shells, FunnelKit, display rules, schedule, etc.) — revisions don't
-	 * snapshot those, so "now" is the only honest source. Name gets a
-	 * "(<timestamp>)" suffix so the user can tell which revision the file
-	 * came from when they look at it later.
-	 */
 	public function handle_export_revision(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1098,7 +879,6 @@ class ES_Admin {
 		$export['html'] = (string) $rev->html;
 		$export['css']  = (string) $rev->css;
 		$export['name'] = $export['name'] . ' (' . $timestamp . ')';
-		// Override slug so the import doesn't derive it from the timestamped name (which produces ugly date-slug strings).
 		$export['slug'] = ( $form->slug ?: 'form' ) . '-rev-' . (int) $rev->id;
 
 		$payload = [
@@ -1117,13 +897,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Restore a revision as a NEW form (in addition to keeping the
-	 * original). The new form gets the revision's HTML/CSS plus the
-	 * source form's current settings for everything else. Status forced
-	 * to 'inactive' on the new form so the user can review before going
-	 * live. Redirects to the new form's edit page.
-	 */
 	public function handle_restore_revision_as_new(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1146,7 +919,6 @@ class ES_Admin {
 		$payload['html'] = (string) $rev->html;
 		$payload['css']  = (string) $rev->css;
 		$payload['name'] = $payload['name'] . ' (' . $timestamp . ')';
-		// Override slug so the import doesn't derive it from the timestamped name (which produces ugly date-slug strings).
 		$payload['slug'] = ( $form->slug ?: 'form' ) . '-rev-' . (int) $rev->id;
 
 		$new_id = ES_Form_Repo::from_import_array( $payload );
@@ -1158,12 +930,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Start a new A/B test seeded with a revision's html/css in slot B
-	 * (current form design becomes slot A). Refuses if a test is already
-	 * running on the form — the variant strip's archive lookup gates
-	 * this in the UI too, but the server check is the actual contract.
-	 */
 	public function handle_restore_revision_as_variant(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1207,11 +973,6 @@ class ES_Admin {
 			wp_die( esc_html__( 'Revision not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
 		}
 
-		// Save with ONLY html/css present — opt-in column update pattern
-		// means no other settings get clobbered. The pre-save state (i.e.
-		// the version we're overwriting) is captured as a new revision
-		// with a note explaining what triggered the overwrite, so the user
-		// can undo the restore one click later.
 		$timestamp = mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $rev->created_at );
 		ES_Form_Repo::save(
 			[
@@ -1226,18 +987,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/* ── Scheduled content changes (SER-1287) ──────────────────────────────
-	 *
-	 * The future half of the Revisions tab. A queued change carries HTML, CSS
-	 * and a time, and nothing about settings: a form already owns its own start
-	 * and end dates, so "stop showing this on the 8th" is something the form
-	 * does rather than something a change to its content does.
-	 */
-
-	/**
-	 * Queue a change for a date: either the form's current content, or a past
-	 * revision put back later instead of now.
-	 */
 	public function handle_schedule_change(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1253,8 +1002,6 @@ class ES_Admin {
 			wp_die( esc_html__( 'Form not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
 		}
 
-		// Refused rather than queued. A change set now would be SKIPPED when its
-		// time came, and a fortnight is a long way to find that out.
 		if ( class_exists( 'ES_AB' ) && ES_AB::running_test_for_form( $form_id ) ) {
 			$this->back_to_scheduled( $form_id, 'ab' );
 		}
@@ -1263,7 +1010,6 @@ class ES_Admin {
 		$name        = isset( $_POST['change_name'] ) ? sanitize_text_field( wp_unslash( $_POST['change_name'] ) ) : '';
 		$revision_id = isset( $_POST['revision_id'] ) ? (int) $_POST['revision_id'] : 0;
 
-		// From a past revision, or from what the form says right now.
 		if ( $revision_id ) {
 			$rev = ES_Form_Revisions::find( $revision_id );
 			if ( ! $rev || (int) $rev->form_id !== $form_id ) {
@@ -1301,11 +1047,6 @@ class ES_Admin {
 		$this->back_to_scheduled( $form_id, 'cancelled' );
 	}
 
-	/**
-	 * Apply a queued change now instead of waiting for its date. Goes through
-	 * exactly the same gates as the cron run, so it cannot be used to get past
-	 * a running A/B test.
-	 */
 	public function handle_apply_scheduled_change(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -1326,7 +1067,6 @@ class ES_Admin {
 		$this->back_to_scheduled( $form_id, ES_Form_Scheduled_Revisions::APPLIED === $status ? 'applied' : $status );
 	}
 
-	/** Back to the Scheduled half of the Revisions tab, with a word about what happened. */
 	private function back_to_scheduled( int $form_id, string $result ): void {
 		wp_safe_redirect( admin_url(
 			'admin.php?page=emblem-studio&action=edit&id=' . $form_id . '&es_sched=' . rawurlencode( $result ) . '#revisions'
@@ -1360,13 +1100,9 @@ class ES_Admin {
 			update_option( ES_FunnelKit::OPT_API_SECRET, $fk_secret );
 		}
 		update_option( ES_FunnelKit::OPT_API_BASE,   esc_url_raw( wp_unslash( $_POST['fk_api_base'] ?? home_url() ) ) );
-		// Bot filtering is always on (no toggle) — known bots are always counted
-		// separately so they never pollute real visitor metrics. Checkbox arrives
-		// only when ticked; absence means "off."
 		update_option( ES_Event_Recorder::OPT_DETECT_DATACENTER, ! empty( $_POST['detect_datacenter'] ) ? '1' : '0' );
 		update_option( ES_Event_Recorder::OPT_TRUST_PROXY, ! empty( $_POST['trust_proxy'] ) ? '1' : '0' );
 
-		// IP exclusion list: one per line, keep only valid IPs.
 		$raw_ips = isset( $_POST['exclude_ips'] ) ? (string) wp_unslash( $_POST['exclude_ips'] ) : '';
 		$ips     = [];
 		foreach ( preg_split( '/[\r\n,]+/', $raw_ips ) as $line ) {
@@ -1377,23 +1113,12 @@ class ES_Admin {
 		}
 		update_option( ES_Event_Recorder::OPT_EXCLUDE_IPS, array_values( array_unique( $ips ) ) );
 
-		// The purchase switch is no longer on this page (SER-1747). It lives in the
-		// web app's Site settings and the connector applies it, so this save must
-		// never touch it: a missing checkbox would read as "off".
-
-		// Uninstall data policy. Default OFF (keep data) — checkbox arrives only
-		// when ticked. Read in uninstall.php (kept in sync there by key name).
 		update_option( 'emblem_studio_delete_data_on_uninstall', ! empty( $_POST['delete_data_on_uninstall'] ) ? '1' : '0' );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio-settings&saved=1' ) );
 		exit;
 	}
 
-	/**
-	 * WordPress's own notices that stay on Emblem Studio screens: updates,
-	 * maintenance, recovery mode and paused plugins or themes. They warn about
-	 * the site's safety, not about another product.
-	 */
 	public const CORE_NOTICES = [
 		'update_nag',
 		'maintenance_nag',
@@ -1404,22 +1129,11 @@ class ES_Admin {
 		'paused_themes_notice',
 	];
 
-	/**
-	 * Strip third-party notices from Emblem Studio screens so the admin
-	 * doesn't read as "shared WordPress backend": the action-hook notices other
-	 * plugins use to advertise, nag or upsell.
-	 *
-	 * This used to remove every notice (audit B6), which also hid WordPress's
-	 * own update and security warnings while someone was on our screens. Those
-	 * stay now (CORE_NOTICES), and so do our own (ES_* and the connector).
-	 */
 	public function maybe_suppress_admin_notices(): void {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( ! $screen ) {
 			return;
 		}
-		// Only suppress on screens whose ID is namespaced to our menu.
-		// Covers: toplevel_page_emblem-studio + every submenu_page_*.
 		if ( strpos( $screen->id, 'emblem-studio' ) === false ) {
 			return;
 		}
@@ -1438,7 +1152,6 @@ class ES_Admin {
 		}
 	}
 
-	/** Is this notice callback WordPress's own, or ours? @param mixed $fn */
 	public static function keeps_notice( $fn ): bool {
 		if ( is_string( $fn ) ) {
 			return in_array( $fn, self::CORE_NOTICES, true );
@@ -1454,10 +1167,6 @@ class ES_Admin {
 		if ( ! str_contains( $hook, 'emblem-studio' ) ) {
 			return;
 		}
-		// Brand fonts (Inter + Titillium Web) are self-hosted in
-		// assets/fonts/ and declared via @font-face at the top of admin.css
-		// — no Google Fonts dependency, so they render even offline and
-		// the admin never phones a third party on load.
 		wp_enqueue_style( 'emblem-studio-admin', EMBLEM_STUDIO_URL . 'assets/admin.css', [], $this->asset_ver( 'assets/admin.css' ) );
 
 		$action = $_GET['action'] ?? '';
@@ -1467,11 +1176,6 @@ class ES_Admin {
 			$html_editor = wp_enqueue_code_editor( [ 'type' => 'text/html' ] );
 			$css_editor  = wp_enqueue_code_editor( [ 'type' => 'text/css' ] );
 			wp_enqueue_script( 'emblem-studio-admin', EMBLEM_STUDIO_URL . 'assets/admin.js', [ 'jquery', 'wp-theme-plugin-editor' ], $this->asset_ver( 'assets/admin.js' ), true );
-			// Display-rule presets (SER-899 phase 2) — the site's real post types
-			// + special-page labels + WooCommerce state, so the Manage Presets
-			// modal can render the SAME filter checkboxes/chip pickers the
-			// per-shell panel does, not a cut-down editor. Mirrors form-edit.php's
-			// $dr_post_types / $dr_special_labels.
 			$preset_post_types = [];
 			if ( class_exists( 'ES_Preset_Repo' ) ) {
 				$wp_post_types = get_post_types( [ 'public' => true ], 'objects' );
@@ -1485,14 +1189,8 @@ class ES_Admin {
 				'cssEditor'  => $css_editor,
 				'restUrl'    => esc_url_raw( rest_url() ),
 				'restNonce'  => wp_create_nonce( 'wp_rest' ),
-				// Display-rule presets (SER-899 phase 2) — the "Manage presets"
-				// modal + "Save current as preset" are the only preset actions
-				// that hit the server immediately; applying/changing/un-linking
-				// a shell's coupling is client-side only until the page's own Save.
 				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
 				'presetNonce'   => wp_create_nonce( 'es_preset_ajax' ),
-				// Live Checks list (SER-1358): the Design tab box and the
-				// full-screen editor both ask es_check_asset while editing.
 				'checkNonce'    => wp_create_nonce( 'es_check_asset' ),
 				'checkLabels'   => [
 					'error'   => __( 'Will break', 'emblem-studio' ),
@@ -1521,27 +1219,19 @@ class ES_Admin {
 					ES_Display_Rules::WC_PAGES
 				) : [],
 			] );
-			// Inspector (semi-builder) takeover — its own JS/CSS so it can
-			// grow without bloating admin.js. Loads after admin.js so the
-			// CodeMirror editors it bridges to are already mounted.
 			wp_enqueue_style( 'emblem-studio-inspector', EMBLEM_STUDIO_URL . 'assets/inspector.css', [ 'emblem-studio-admin' ], $this->asset_ver( 'assets/inspector.css' ) );
 			wp_enqueue_script( 'emblem-studio-inspector-color', EMBLEM_STUDIO_URL . 'assets/inspector-color.js', [], $this->asset_ver( 'assets/inspector-color.js' ), true );
 			wp_enqueue_script( 'emblem-studio-inspector', EMBLEM_STUDIO_URL . 'assets/inspector.js', [ 'emblem-studio-admin', 'emblem-studio-inspector-color' ], $this->asset_ver( 'assets/inspector.js' ), true );
 		} elseif ( $page === 'emblem-studio-design-system' && ES_Caps::has( 'design_system' ) ) {
-			// Design System page — just a CSS code editor (mounted inline by the view).
 			$css_editor = wp_enqueue_code_editor( [ 'type' => 'text/css' ] );
 			wp_enqueue_script( 'emblem-studio-admin', EMBLEM_STUDIO_URL . 'assets/admin.js', [ 'jquery' ], $this->asset_ver( 'assets/admin.js' ), true );
 			wp_localize_script( 'emblem-studio-admin', 'EmblemStudioDS', [ 'cssEditor' => $css_editor ?: null ] );
 		} else {
-			// All other Emblem Studio admin pages still need admin.js for shared
-			// helpers (e.g., click-to-copy on shortcodes in the Forms list).
-			// Forms list also needs jQuery UI Sortable for drag-reorder.
 			wp_enqueue_script( 'emblem-studio-admin', EMBLEM_STUDIO_URL . 'assets/admin.js', [ 'jquery', 'jquery-ui-sortable' ], $this->asset_ver( 'assets/admin.js' ), true );
 		}
 		if ( $page === 'emblem-studio-reports' ) {
 			wp_enqueue_script( 'emblem-studio-reports', EMBLEM_STUDIO_URL . 'assets/reports.js', [], $this->asset_ver( 'assets/reports.js' ), true );
 		}
-		// Forms & Assets list — live hover thumbnail of each asset.
 		if ( $page === 'emblem-studio' && $action !== 'edit' ) {
 			wp_enqueue_script( 'emblem-studio-asset-preview', EMBLEM_STUDIO_URL . 'assets/asset-preview.js', [], $this->asset_ver( 'assets/asset-preview.js' ), true );
 			wp_localize_script( 'emblem-studio-asset-preview', 'EmblemStudioPreview', [
@@ -1551,23 +1241,11 @@ class ES_Admin {
 		}
 	}
 
-	/**
-	 * Cache-busting version for a bundled asset: the file's modified time,
-	 * so a saved CSS/JS edit busts the browser cache without bumping the
-	 * plugin version. Falls back to EMBLEM_STUDIO_VERSION if the file
-	 * can't be stat'd. (filemtime is a standard, production-safe strategy.)
-	 */
 	private function asset_ver( string $rel ): string {
 		$mtime = @filemtime( EMBLEM_STUDIO_PATH . $rel );
 		return $mtime ? (string) $mtime : EMBLEM_STUDIO_VERSION;
 	}
 
-	/**
-	 * Browser-tab title for the asset editor. WordPress otherwise shows the
-	 * menu label ("Forms & Assets") for every screen under this page, so open
-	 * editor tabs are indistinguishable. On the edit screen we swap in
-	 * "ES <id> - <name>" while keeping WP's " ‹ Site — WordPress" suffix.
-	 */
 	public function filter_admin_title( string $admin_title, string $title ): string {
 		if ( ( $_GET['page'] ?? '' ) !== 'emblem-studio' || ( $_GET['action'] ?? '' ) !== 'edit' ) {
 			return $admin_title;
@@ -1580,18 +1258,10 @@ class ES_Admin {
 		if ( ! $form || ! isset( $form->name ) ) {
 			return $admin_title;
 		}
-		// The name as typed; WordPress escapes the whole title when it prints it.
 		$custom = sprintf( 'ES %d - %s', $id, (string) $form->name );
 		return str_replace( $title, $custom, $admin_title );
 	}
 
-	/**
-	 * P5 thin client: when the site is connected to a free Emblem Studio account
-	 * (Lite + the bundled connector), each sidebar page shows the embedded SaaS
-	 * dashboard instead of the built-in Lite screen. Returns true if the connector
-	 * handled output for this page (connected → embed, or "disconnected" screen),
-	 * so the caller skips its own view. Inert in the Full plugin (no connector).
-	 */
 	private function maybe_embed( string $slug ): bool {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return false;
@@ -1602,7 +1272,6 @@ class ES_Admin {
 		return Emblem_Studio_SaaS_Connector::maybe_render_page( $slug );
 	}
 
-	/** The Connect / Account screen (Lite-only submenu). */
 	public function route_account(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
@@ -1628,13 +1297,10 @@ class ES_Admin {
 		if ( $this->maybe_embed( 'emblem-studio-new' ) ) {
 			return;
 		}
-		// ?blank=1 routes through the picker's "Blank form" card directly
-		// to the editor without showing the picker. Power-user shortcut.
 		if ( ! empty( $_GET['blank'] ) ) {
 			$this->render_edit();
 			return;
 		}
-		// Default: show the picker (blank card + template thumbnails).
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
@@ -1662,10 +1328,6 @@ class ES_Admin {
 		$id   = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
 		$form = $id ? ES_Form_Repo::find( $id ) : null;
 
-		// Concurrent-edit lock. Identity is the per-tab session token, which is
-		// only known client-side, so we don't claim here — we hand the view the
-		// current holder (token + name) and the browser decides: claim if free
-		// or mine, otherwise show the take-over modal. (See admin.js + ES_Locks.)
 		$lock_nonce        = wp_create_nonce( 'es_lock' );
 		$lock_me           = get_current_user_id();
 		$lock_holder_token = '';
@@ -1677,9 +1339,6 @@ class ES_Admin {
 				$holder            = ES_Locks::holder( $id );
 				$lock_holder_name  = ES_Locks::user_label( $holder );
 				$lock_holder_is_me = ( $holder === $lock_me );
-				// Another user's session token never reaches this page. The
-				// browser only needs to know the lock is held by a token that
-				// isn't its own, so a stand-in does the same job.
 				if ( ! $lock_holder_is_me ) {
 					$lock_holder_token = 'held-by-another-user';
 				}
@@ -1696,11 +1355,6 @@ class ES_Admin {
 
 		$id   = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
 
-		// Concurrent-edit guard (hard lock): refuse to save an existing asset
-		// that another SESSION has taken over, so a booted editor (even another
-		// tab of the same admin) can't clobber the current one. The editor posts
-		// its session token; new assets (id = 0) have no lock. The token alone
-		// is not enough: the live lock must also belong to this user.
 		$posted_token = isset( $_POST['lock_token'] ) ? sanitize_text_field( wp_unslash( $_POST['lock_token'] ) ) : '';
 		if ( $id && ES_Locks::blocks_save( $id, get_current_user_id(), $posted_token ) ) {
 			$who = ES_Locks::user_label( ES_Locks::holder( $id ) );
@@ -1720,8 +1374,6 @@ class ES_Admin {
 			$name = 'Untitled form';
 		}
 
-		// Slug is internal-only since v0.9.0 (no UI). Auto-derived from name,
-		// deduped via unique_slug — purely for the DB column's UNIQUE constraint.
 		$slug = ES_Form_Repo::unique_slug( sanitize_title( $name ), $id );
 
 		$lists = isset( $_POST['funnelkit_lists'] ) && is_array( $_POST['funnelkit_lists'] )
@@ -1730,21 +1382,10 @@ class ES_Admin {
 		$tags_csv = wp_unslash( $_POST['funnelkit_tags_csv'] ?? '' );
 		$tags     = array_values( array_filter( array_map( 'trim', preg_split( '/,/', $tags_csv ) ?: [] ) ) );
 
-		// Shell types the form is enabled in.
 		$types = isset( $_POST['form_types'] ) && is_array( $_POST['form_types'] )
 			? array_map( 'sanitize_text_field', wp_unslash( $_POST['form_types'] ) )
 			: [];
 
-		// ---- Per-shell trigger config + display rules ----
-		// Field-name convention:  <shell-key>_trigger_type, <shell-key>_delay_seconds, ...
-		//                         display_<shell-key>_show_mode, display_<shell-key>_show_specials[]
-		// where <shell-key> is the shell slug with hyphens → underscores
-		// (e.g. popup-auto → popup_auto, slide-in → slide_in).
-		//
-		// Backwards-compat: the pre-v0.17 form-edit emitted unprefixed field
-		// names (auto_trigger_type, display_show_specials[], etc.) — those are
-		// still accepted and routed to popup-auto. Both reads to keep PR 1
-		// migrations smooth.
 		$shell_to_key = function ( string $shell ): string {
 			return str_replace( '-', '_', $shell );
 		};
@@ -1786,7 +1427,6 @@ class ES_Admin {
 			if ( $shell === 'slide-in' ) {
 				$out['corner'] = sanitize_key( (string) ( $_POST['slide_in_corner'] ?? 'bottom-right' ) );
 			}
-			// Close + dismiss config — applies to every auto shell uniformly.
 			$out['close_button']       = ! empty( $pick( 'close_button', null ) );
 			$out['dismiss_behavior']   = sanitize_key( (string) $pick( 'dismiss_behavior', 'show_again' ) );
 			$out['dismiss_hide_hours'] = $pick( 'dismiss_hide_hours', 24 );
@@ -1816,7 +1456,6 @@ class ES_Admin {
 			$schedule_days         = $pick_array( 'display_' . $k . '_schedule_days', 'int' );
 			$schedule_start        = isset( $_POST[ 'display_' . $k . '_schedule_start_time' ] ) ? sanitize_text_field( wp_unslash( $_POST[ 'display_' . $k . '_schedule_start_time' ] ) ) : '';
 			$schedule_end          = isset( $_POST[ 'display_' . $k . '_schedule_end_time' ] )   ? sanitize_text_field( wp_unslash( $_POST[ 'display_' . $k . '_schedule_end_time' ] ) )   : '';
-			// URL patterns arrive as one textarea string per side ("\n"-separated).
 			$urls_for = function ( string $side ) use ( $name ) {
 				$field = $name( $side, 'urls' );
 				if ( ! isset( $_POST[ $field ] ) ) {
@@ -1859,17 +1498,6 @@ class ES_Admin {
 			];
 		};
 
-		/**
-		 * Preserve a shell's display-rule preset coupling across a normal page
-		 * save (SER-899 phase 2). Applying/changing/un-linking/saving-as-preset
-		 * happen instantly over AJAX (ES_Preset_Ajax) the moment the picker is
-		 * used — same interaction model as the SaaS's picker, not a separate
-		 * "click Save to take effect" step. So by the time this runs, a coupled
-		 * shell's `preset_id` hidden field already reflects the true state; this
-		 * only needs to re-resolve show_mode/filters from that preset's CURRENT
-		 * values, because the WHERE fields render `disabled` while coupled and
-		 * so never post anything for $collect_shell_rules to have read.
-		 */
 		$resync_preset_coupling = function ( string $shell, array $rules ) use ( $shell_to_key ) {
 			if ( ! class_exists( 'ES_Preset_Repo' ) ) {
 				return $rules;
@@ -1894,7 +1522,6 @@ class ES_Admin {
 			$display_rules[ $shell ]       = $resync_preset_coupling( $shell, $collect_shell_rules( $shell ) );
 		}
 
-		// Field mapping arrives as a JSON-encoded object in `field_mapping_json`.
 		$mapping = [];
 		if ( ! empty( $_POST['field_mapping_json'] ) ) {
 			$decoded = json_decode( wp_unslash( (string) $_POST['field_mapping_json'] ), true );
@@ -1903,12 +1530,6 @@ class ES_Admin {
 			}
 		}
 
-		// When an A/B test is running, the form-level html/css stay frozen
-		// at the pre-test snapshot. The visible editor only ever shows the
-		// active variant (its name="html"/"css" attrs are stripped), and
-		// the variants[A|B][html|css] hidden stores carry the real data.
-		// We pin html/css to the existing DB values so ES_Form_Repo::save
-		// updates them to themselves (no spurious revisions either).
 		$ab_running   = ! empty( $_POST['ab_test_running'] );
 		$frozen_html  = null;
 		$frozen_css   = null;
@@ -1936,8 +1557,6 @@ class ES_Admin {
 			'auto_trigger_config'  => $auto_trigger_config,
 			'display_rules'        => $display_rules,
 			'use_shadow_dom'       => ! empty( $_POST['use_shadow_dom'] ) ? 1 : 0,
-			// Design System opt-out (Pro/full only). Absent the toggle (Lite), keep
-			// the column at its inherit-by-default value so it's a no-op there.
 			'use_design_system'    => ES_Caps::has( 'design_system' ) ? ( ! empty( $_POST['use_design_system'] ) ? 1 : 0 ) : 1,
 			'popup_max_width'      => isset( $_POST['popup_max_width'] ) ? (int) $_POST['popup_max_width'] : 720,
 			'popup_fullscreen'     => ! empty( $_POST['popup_fullscreen'] ) ? 1 : 0,
@@ -1946,10 +1565,6 @@ class ES_Admin {
 			'active_until'         => isset( $_POST['active_until'] ) ? wp_unslash( $_POST['active_until'] ) : '',
 		];
 
-		// Archived and Trash are states the form is IN, so the status field on
-		// the edit screen is not a way out of either. Unarchive or restore the
-		// form first. Without this, an archived form saved as Active reads
-		// Active and Archived at once, which is the state SER-1234 ended.
 		if ( $id && $data['status'] === 'active' ) {
 			$current = ES_Form_Repo::find( $id );
 			if ( $current && ( ! empty( $current->archived_at ) || ! empty( $current->trashed_at ) ) ) {
@@ -1957,36 +1572,17 @@ class ES_Admin {
 			}
 		}
 
-		// Click tracking toggle only lives on the Stats tab, which is hidden
-		// on brand-new forms. Only propagate when we know the form was the one
-		// that rendered the toggle (i.e. we're editing an existing form);
-		// otherwise let the DB default (1) win on initial create.
 		if ( $id ) {
 			$data['track_clicks'] = ! empty( $_POST['track_clicks'] ) ? 1 : 0;
-			// The purchase switch is not on this screen any more (SER-1747): it is set
-			// in the web app and copied down, so it is left as it is.
 			delete_transient( 'emblem_studio_buy_assets' );
 		}
 
-		// FunnelKit destination toggle (same per-form pattern as webhooks).
-		// Always computed as an explicit 0/1 — an unchecked box sends no
-		// `funnelkit_enabled` key at all (standard HTML checkbox behavior),
-		// so `! empty($_POST[…])` alone would leave the column untouched on
-		// an UPDATE and fall through to the DB column default on an INSERT.
-		// Sending it explicitly every save is what makes "uncheck and save"
-		// actually turn it off, and is why the column's own default (now 0,
-		// see class-es-install.php's v34 migration) never actually matters.
 		$data['funnelkit_enabled'] = ! empty( $_POST['funnelkit_enabled'] ) ? 1 : 0;
 
-		// How a NEW FunnelKit contact starts. Only sent when the field is on
-		// the page, so a save from a screen without it leaves the stored
-		// choice alone. Anything but 'unsubscribed' means 'subscribed'.
 		if ( isset( $_POST['funnelkit_contact_status'] ) ) {
 			$data['funnelkit_contact_status'] = ES_FunnelKit_Upsert::contact_status( sanitize_key( wp_unslash( (string) $_POST['funnelkit_contact_status'] ) ) );
 		}
 
-		// Webhooks — array of rows from the Connect tab repeater. Empty
-		// rows (no URL) are stripped in ES_Webhooks::sanitize_array.
 		if ( isset( $_POST['webhooks'] ) && is_array( $_POST['webhooks'] ) ) {
 			$raw_hooks = [];
 			foreach ( $_POST['webhooks'] as $row ) {
@@ -2002,11 +1598,9 @@ class ES_Admin {
 			}
 			$data['webhooks'] = $raw_hooks;
 		} else {
-			$data['webhooks'] = []; // explicit empty so save() persists "no webhooks"
+			$data['webhooks'] = [];
 		}
 
-		// Connections — "already subscribed" suppression. Sanitized in
-		// ES_Connections::sanitize via ES_Form_Repo::save.
 		if ( class_exists( 'ES_Connections' ) && isset( $_POST['connections'] ) && is_array( $_POST['connections'] ) ) {
 			$conn = wp_unslash( $_POST['connections'] );
 			$data['connections'] = [
@@ -2016,19 +1610,11 @@ class ES_Admin {
 				'behavior'      => in_array( ( $conn['behavior'] ?? 'nothing' ), [ 'hide', 'replace', 'nothing' ], true ) ? $conn['behavior'] : 'nothing',
 			];
 		} else {
-			$data['connections'] = []; // explicit empty → stored as NULL (no-op)
+			$data['connections'] = [];
 		}
 
 		$new_id = ES_Form_Repo::save( $data, $id ?: null );
 
-		// The periods this form runs for (SER-1292). AFTER the save, because the
-		// stored status is derived from them and a brand-new form has no id
-		// until the line above returns one.
-		//
-		// Saved as a whole list rather than a row at a time: every rule is about
-		// the list, so ES_Form_Schedule::replace() judges it in one go and hands
-		// back the reason when it refuses. Re-saved afterwards so the derived
-		// status catches up with the list that just moved.
 		if ( $new_id > 0 && class_exists( 'ES_Form_Schedule' ) && ES_Caps::has( 'schedule_window' ) && isset( $_POST['periods'] ) && is_array( $_POST['periods'] ) ) {
 			$periods_in = [];
 			foreach ( wp_unslash( $_POST['periods'] ) as $row ) {
@@ -2043,27 +1629,18 @@ class ES_Admin {
 
 			$periods_result = ES_Form_Schedule::replace( $new_id, $periods_in );
 			if ( true !== $periods_result ) {
-				// A refusal is the person's answer, not a silent no-op. It comes
-				// back as the reason, carried in the redirect so the screen can
-				// say which rule stopped it.
 				$periods_error = $periods_result;
 			} else {
-				ES_Form_Repo::save( [], $new_id ); // recompute the derived status
+				ES_Form_Repo::save( [], $new_id );
 			}
 		}
 
-		// A/B testing — per-form variant + test-lifecycle actions.
 		$ab_action     = isset( $_POST['ab_action'] ) ? sanitize_key( (string) $_POST['ab_action'] ) : '';
 		$started_test  = false;
 		if ( $ab_action === 'start' && $new_id > 0 && class_exists( 'ES_AB' ) ) {
 			$test_id = ES_AB::start_test( $new_id );
 			$started_test = ( $test_id > 0 );
 		}
-		// Persist edits to the live variants when a test was already
-		// running before this save. We deliberately skip this on the
-		// same request that STARTED the test — start_test just seeded
-		// both slots from the form's html/css snapshot, no point
-		// overwriting them with the same POST values.
 		if ( $new_id > 0 && ! $started_test && $ab_running && isset( $_POST['variants'] ) && is_array( $_POST['variants'] ) ) {
 			$variants_in = [];
 			foreach ( [ 'A', 'B' ] as $slot ) {
@@ -2081,18 +1658,11 @@ class ES_Admin {
 			}
 		}
 
-		// Test config (auto-winner toggle + per-condition thresholds +
-		// traffic split). Runs on the request that started the test too
-		// — so if the user customized thresholds before clicking Start,
-		// the customizations stick. NULL-ing a threshold disables the
-		// condition entirely in auto_winner_check.
 		if ( $new_id > 0 && $ab_running && isset( $_POST['test_config'] ) && is_array( $_POST['test_config'] ) ) {
 			$tc = $_POST['test_config'];
 			$test_data = [
 				'auto_declare' => ! empty( $tc['auto_declare'] ),
 			];
-			// Each enable_<name> checkbox gates its threshold. Checked +
-			// non-empty value = active. Unchecked / empty = NULL (off).
 			$conditions = [
 				'min_runtime_days',
 				'min_conversions_per_variant',
@@ -2119,14 +1689,9 @@ class ES_Admin {
 		if ( $started_test ) {
 			$redirect_args['test_started'] = 1;
 		}
-		// A refused period list is the person's answer, not a silent no-op
-		// (SER-1292). The rest of the save still stands; only the periods did
-		// not take, and the screen says which rule stopped them.
 		if ( ! empty( $periods_error ) ) {
 			$redirect_args['periods_error'] = rawurlencode( $periods_error );
 		}
-		// "Open editor" on a brand-new asset saves first, then re-opens into
-		// the takeover editor on the reloaded (now-saved) edit screen.
 		if ( ! empty( $_POST['es_open_editor'] ) ) {
 			$redirect_args['es-inspect'] = 'open';
 		}
@@ -2147,17 +1712,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * End a running A/B test on a form. Two flavors via GET param:
-	 *   ?winner=A or ?winner=B → declare that variant the winner. Its
-	 *     html/css is copied into the form-level snapshot; both
-	 *     variants are archived; the test row is marked completed.
-	 *   ?winner=  (empty) → end without a winner. Form-level html/css
-	 *     stays at the pre-test snapshot (so the form reverts cleanly);
-	 *     both variants are archived; test row is marked completed
-	 *     with winner_slot=NULL.
-	 * Nonce scoped per-form so a stale link can't end someone else's test.
-	 */
 	public function handle_end_test(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -2167,11 +1721,6 @@ class ES_Admin {
 		if ( $form_id <= 0 ) {
 			wp_die( esc_html__( 'Missing form_id.', 'emblem-studio' ), '', [ 'response' => 400 ] );
 		}
-		// Through ES_AB::normalize_slot, which uppercases. This used to compare
-		// sanitize_key()'s output against 'A'/'B' directly, and sanitize_key()
-		// LOWERCASES, so the winner always read as null and every "Declare
-		// winner" click ended the test with NO winner. See the note on that
-		// method.
 		$winner_raw  = isset( $_GET['winner'] ) ? sanitize_key( (string) wp_unslash( $_GET['winner'] ) ) : '';
 		$winner_slot = ES_AB::normalize_slot( $winner_raw );
 		$ok = ES_AB::end_test( $form_id, $winner_slot, 'manual' );
@@ -2188,11 +1737,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Restore an archived A/B variant — starts a new test with the
-	 * archived content seeded into slot B and the current form design
-	 * in slot A. Per-variant nonce so links don't survive being copied.
-	 */
 	public function handle_restore_variant(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -2207,10 +1751,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Hard-delete an archived A/B variant. Live variants can't be
-	 * deleted via this — the underlying repo method enforces that.
-	 */
 	public function handle_delete_variant(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -2251,13 +1791,6 @@ class ES_Admin {
 		exit;
 	}
 
-	/**
-	 * Archive an asset — hides it from the normal lists and stops it
-	 * rendering, without deleting it (kept for history/comparison against
-	 * newer assets; never auto-deleted). Not to be confused with the
-	 * separate A/B-test "variant archive" (ES_AB) — this archives the
-	 * whole asset.
-	 */
 	public function handle_archive(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'emblem-studio' ), '', [ 'response' => 403 ] );
@@ -2302,14 +1835,6 @@ class ES_Admin {
 				switch ( $action ) {
 					case 'activate':
 					case 'inactive':
-						// Through the repo, which writes the switch (`enabled`)
-						// and the stored status together and flushes the render
-						// caches. Writing `status` alone here made the list and
-						// the page disagree. set_enabled() also skips archived
-						// and trashed forms on Activate, rather than switching
-						// them on behind their own state. Selecting a whole page
-						// and pressing Activate is the likeliest way to create a
-						// pile of Active-and-Archived forms at once.
 						if ( ES_Form_Repo::set_enabled( $id, $action === 'activate' ) ) {
 							$applied++;
 						}

@@ -1,12 +1,3 @@
-/**
- * Forms & Assets — live hover thumbnail.
- *
- * On hover over an asset name, lazily fetch its render payload (html +
- * Design-System-composed css, via admin-ajax) and mount it into a Shadow DOM
- * node IN the page — no iframe, no front-end bootstrap — scaled into a small
- * popover. Skips the slow part of the real previewer, so the peek is instant;
- * re-hovering is cached. Mirrors the SaaS AssetHoverPreview + embed.js mount.
- */
 ( function () {
 	'use strict';
 	var CFG = window.EmblemStudioPreview;
@@ -14,29 +5,16 @@
 		return;
 	}
 
-	var SCALE    = 450 / 690; // = original 300/460; widen the render VIEWPORT (not the zoom) so the preview gets wider, not taller. Ribbons double both widths (below).
-	// pointer-events:none matters: all:initial resets pointer-events back to auto
-	// on the host, and the host is the full render-width — so for a narrow, centred
-	// asset (e.g. a slide-in) the empty space around it would otherwise capture
-	// clicks/hovers, an invisible dead layer over the page. This hover card is
-	// display-only; the live frontend keeps its own (interactive) reset.
+	var SCALE    = 450 / 690;
 	var BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;pointer-events:none!important;}';
 
-	// A card narrower than the space it is given sits in the MIDDLE of that space.
-	// Zero specificity, so any author margin rule wins without !important. TWIN of
-	// CENTER_CSS in frontend.js and the SaaS prepareCss.ts: what this preview shows
-	// and what a visitor gets have to be the same picture.
 	var CENTER_CSS = ':where(.esf-form){margin-inline:auto;}';
 
-	// The asset's full name, as a dark strip across the top of the card. The
-	// name link used to carry a title attribute too, so hovering a cut-off name
-	// opened the browser's own tooltip right on top of this card. The name now
-	// lives here instead, and the card is this much taller.
 	var STRIP_H = 26;
 
-	var cache       = {}; // id -> Promise<{html, css}>
+	var cache       = {};
 	var fontsLoaded = {};
-	var current     = null; // active popover element
+	var current     = null;
 
 	function loadFontImport( rule ) {
 		if ( /^\s*@charset/i.test( rule ) ) {
@@ -51,26 +29,11 @@
 		var link = document.createElement( 'link' );
 		link.rel = 'stylesheet';
 		link.href = href;
-		link.media = 'print'; // non-blocking; flipped to all once loaded
+		link.media = 'print';
 		link.onload = function () { link.media = 'all'; };
 		( document.head || document.documentElement ).appendChild( link );
 	}
 
-	// A shadow-root <style> that declares @font-face registers that font for
-	// the WHOLE document per spec, not just its own tree — so an unscoped name
-	// is a shared global slot. Two renders with different CSS (e.g. the live
-	// "current" asset vs. an older revision that references the same font
-	// NAME but never carried its own @font-face) would then either borrow
-	// each other's registration or stomp on it depending on mount/unmount
-	// order — a revision with no font of its own should consistently show the
-	// fallback, not sometimes-right depending on which sibling preview
-	// happens to be open. So instead of lifting @font-face rules as-written,
-	// we scope each one to a name unique to ITS OWN content (family + a hash
-	// of its own rule text), rewrite every font-family reference to that name
-	// within this SAME css string, then lift the renamed rules into one
-	// shared, persistent <style> (deduped by exact rule text). Only a render
-	// that carries the identical @font-face rule(s) can ever resolve to that
-	// scoped name.
 	var liftedFontFaceRules = {};
 	var fontFaceStyleEl = null;
 	function hashStr( s ) {
@@ -141,11 +104,6 @@
 				}
 				return { html: j.data.html || '', css: j.data.css || '', shadow: j.data.shadow !== false };
 			} )
-			// A FAILURE MUST NOT STAY CACHED. The rejected promise used to sit in
-			// the cache for the life of the page, so one failed hover (an expired
-			// nonce, a slow admin-ajax) broke that asset's preview until reload.
-			// The background prefetch below would have made it worse: a failure
-			// nobody saw would have broken the hover they tried next.
 			.catch( function ( e ) {
 				delete cache[ id ];
 				throw e;
@@ -153,17 +111,6 @@
 		return cache[ id ];
 	}
 
-	/**
-	 * Warm the cache for the assets on the page, so the first hover is instant.
-	 *
-	 * The first hover used to wait for a whole admin-ajax round trip, which
-	 * boots WordPress for every call and is the slow part of this peek. This
-	 * does those trips ahead of time, after the page has settled. Same shape
-	 * as the SaaS asset list: idle time, two at a time, thirty at most, and
-	 * silent on failure, because a failed prefetch only means that asset loads
-	 * on hover the way it always did. A hover that lands while its prefetch is
-	 * in flight joins the same request, because they share the cache.
-	 */
 	function prefetch( names ) {
 		var MAX     = 30;
 		var AT_ONCE = 2;
@@ -195,10 +142,6 @@
 		}
 	}
 
-	// A form with Shadow DOM OFF takes its font from the page around it. The
-	// card's shadow root resets everything, so it drew such a form in Times New
-	// Roman while the Design tab and the editor showed the system font. Hand it
-	// the same page those previews give it (class-es-preview.php's body stack).
 	var LIGHT_DOM_HOST_CSS = ':host{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif!important;color:#1d2327!important;}';
 
 	function mount( container, html, css, shadowDom ) {
@@ -223,10 +166,6 @@
 		current = null;
 	}
 
-	// The asset's real rendered box (union of the shadow root's top-level elements),
-	// in VISIBLE (already-scaled) px, as an offset + size relative to the host's
-	// top-left. Lets the card hug the actual content — no empty min-width/height
-	// padding around a narrow or short asset.
 	function contentBox( host ) {
 		var hostRect = host.getBoundingClientRect();
 		var sr = host.shadowRoot;
@@ -260,23 +199,14 @@
 		if ( ! id ) {
 			return;
 		}
-		// Render in a realistic viewport (ribbons are full-width → double it), then
-		// hug the card to the asset's actual rendered box (measure below), no min.
 		var wide     = anchor.getAttribute( 'data-es-preview-wide' ) === '1';
-		var RENDER_W = wide ? 1380 : 690; // 1.5× the original 920 / 460 (wider layout, same zoom)
-		var MAX_W    = wide ? 900 : 450;  // 1.5× the original 600 / 300 — the width cap
+		var RENDER_W = wide ? 1380 : 690;
+		var MAX_W    = wide ? 900 : 450;
 		var rect = anchor.getBoundingClientRect();
 
 		var card = document.createElement( 'div' );
-		// Transparent, un-rounded, un-clipped viewport — the asset's own box (its real
-		// corners, background, shadow) is what shows, so the peek is accurate. A
-		// container radius/clip would paint fake corners on a square asset and clip a
-		// rounded/shadowed one. (Loading/"No preview" overlay below keeps its own bg.)
 		card.style.cssText = 'position:fixed;z-index:99999;width:' + MAX_W + 'px;height:' + ( 170 + STRIP_H ) + 'px;' +
 			'pointer-events:none;opacity:0;transition:opacity .12s ease;';
-		// offWrap translates the scaled content so its top-left sits at the card corner.
-		// Shape-accurate float: drop-shadow follows the asset's real painted outline
-		// (rounded where rounded, square where square) — a float without imposing a box.
 		var offWrap = document.createElement( 'div' );
 		offWrap.style.filter = 'drop-shadow(0 12px 30px rgba(20,16,30,.20))';
 		offWrap.style.marginTop = STRIP_H + 'px';
@@ -296,8 +226,6 @@
 		strip.textContent = assetName;
 		card.appendChild( strip );
 
-		// The loading / "No preview" note sits below the strip, so the name
-		// shows from the first frame.
 		var note = document.createElement( 'div' );
 		note.style.cssText = 'position:absolute;top:' + STRIP_H + 'px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;' +
 			'background:#fff;color:#94a3b8;font:13px system-ui,sans-serif;';
@@ -335,15 +263,8 @@
 				if ( current !== card ) {
 					return;
 				}
-				// Hug the asset's real (scaled) rendered box — no min — and offset so
-				// its top-left sits at the card corner. So a ribbon isn't padded below,
-				// and a narrow popup isn't padded at the sides.
 				var box = contentBox( host );
-				// Ribbons (wide) are full-bleed bars — always show the full frame width
-				// so they don't get cramped; only narrow popups hug their content width.
 				var w  = wide ? MAX_W : Math.min( box.w || MAX_W, MAX_W );
-				// The strip is part of the card's height, so it counts when keeping
-				// the card inside the window.
 				var h  = Math.min( box.h || 200, window.innerHeight - 24 - STRIP_H );
 				var ox = wide ? 0 : box.x;
 				card.style.width = w + 'px';
@@ -352,7 +273,7 @@
 				position( w, h + STRIP_H );
 			};
 			requestAnimationFrame( measure );
-			setTimeout( measure, 240 ); // re-measure once fonts settle
+			setTimeout( measure, 240 );
 		} ).catch( function () {
 			if ( current === card ) {
 				note.textContent = 'No preview';
@@ -366,7 +287,6 @@
 			names[ i ].addEventListener( 'mouseenter', function ( e ) { show( e.currentTarget ); } );
 			names[ i ].addEventListener( 'mouseleave', remove );
 		}
-		// The popover is anchored at hover time, so close it if the page scrolls.
 		window.addEventListener( 'scroll', remove, true );
 		prefetch( names );
 	}

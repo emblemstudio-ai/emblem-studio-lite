@@ -3,53 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Per-form display targeting for auto-injected shells (popup-auto today;
- * ribbon / slide-in / etc. will reuse the same rules when they ship).
- *
- * Storage shape (JSON in emblemstudio_forms.display_rules):
- *
- *   {
- *     "show_mode": "all" | "selected",
- *     "show_filters": {
- *       "specials":   ["front_page" | "blog" | "404" | "search" | "archive"],
- *       "post_types": ["post", "page", "<cpt>"],
- *       "categories": [int],
- *       "tags":       [int]
- *     },
- *     "hide_filters": { ...same shape... }
- *   }
- *
- * Decision at render time:
- *   show_candidate = show_mode === 'all' OR any show_filter matches
- *   vetoed         = any hide_filter matches
- *   render         = show_candidate && !vetoed
- *
- * Within each filter set, matches are OR — selecting "Front page" plus
- * "Category: Recipes" means show on the front page OR on Recipes posts.
- */
 class ES_Display_Rules {
 
-	/**
-	 * Is this front-end request being rendered INSIDE a wp-admin screen?
-	 *
-	 * A page builder's canvas is not an admin URL, which is why is_admin() never
-	 * catches it. Elementor's editor lives at wp-admin/post.php?action=elementor,
-	 * but the canvas you design in is an <iframe> pointing at the post's own
-	 * permalink. That inner request is an ordinary front-end request: is_admin()
-	 * is false, wp_footer fires, and every self-placing shell on the site drops
-	 * itself over the widgets the author is trying to click.
-	 *
-	 * So the question to ask is not "which builder is this", it is "who opened
-	 * me". The browser answers both halves of that: Sec-Fetch-Dest says the
-	 * request is for a frame, and the referrer says the frame lives in wp-admin.
-	 * One check, and it covers every builder, the Customizer, and whatever ships
-	 * next, with no list to keep current.
-	 *
-	 * BOTH halves are required. A logged-in admin who clicks from wp-admin
-	 * through to the site also arrives carrying an admin referrer, and that is a
-	 * real page view we must not suppress.
-	 */
 	public static function is_admin_frame(): bool {
 		if ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) {
 			return true;
@@ -71,32 +26,25 @@ class ES_Display_Rules {
 		return self::has_builder_canvas_arg();
 	}
 
-	/**
-	 * Fallback for the check above, used when the browser is too old to send
-	 * Sec-Fetch-Dest or a referrer policy stripped the URL. These are the query
-	 * args a builder puts on the front-end URL when it opens its canvas. Only
-	 * presence is tested, never the value, so a builder that renames et_fb=1 to
-	 * something else next year is still caught.
-	 */
 	private static function has_builder_canvas_arg(): bool {
 		$args = [
-			'elementor-preview',             // Elementor
-			'fl_builder',                    // Beaver Builder
+			'elementor-preview',
+			'fl_builder',
 			'fl_builder_preview',
-			'et_fb',                         // Divi
+			'et_fb',
 			'et_pb_preview',
-			'ct_builder',                    // Oxygen
+			'ct_builder',
 			'oxygen_iframe',
-			'bricks',                        // Bricks
-			'brizy-edit',                    // Brizy
+			'bricks',
+			'brizy-edit',
 			'brizy-edit-iframe',
-			'vc_editable',                   // WPBakery Page Builder
-			'vcv-editable',                  // Visual Composer Website Builder
-			'tve',                           // Thrive Architect
-			'siteorigin_panels_live_editor', // SiteOrigin Page Builder
-			'zionbuilder-preview',           // Zion Builder
-			'breakdance',                    // Breakdance
-			'cs_preview_state',              // Cornerstone
+			'vc_editable',
+			'vcv-editable',
+			'tve',
+			'siteorigin_panels_live_editor',
+			'zionbuilder-preview',
+			'breakdance',
+			'cs_preview_state',
 		];
 
 		foreach ( $args as $arg ) {
@@ -110,20 +58,12 @@ class ES_Display_Rules {
 
 	public const SPECIALS = [ 'front_page', 'blog', '404', 'search', 'archive' ];
 
-	/**
-	 * WooCommerce page keys we can target. Only meaningful when WC is active;
-	 * sanitize accepts them regardless so toggling WC off doesn't drop the
-	 * saved rules, and toggling it back on resumes targeting.
-	 */
 	public const WC_PAGES = [
 		'cart', 'checkout', 'account', 'shop',
 		'product', 'product_archive',
 		'product_category', 'product_tag',
 	];
 
-	/**
-	 * Localised labels for the WC page keys — used by the admin UI.
-	 */
 	public static function wc_page_labels(): array {
 		return [
 			'cart'             => __( 'Cart',             'emblem-studio' ),
@@ -141,10 +81,6 @@ class ES_Display_Rules {
 		return class_exists( 'WooCommerce' );
 	}
 
-	/**
-	 * Defaults: show on every front-end page, hide nothing. Equivalent to
-	 * the pre-v0.15.0 behavior — so existing forms keep firing everywhere.
-	 */
 	public static function defaults(): array {
 		return [
 			'show_mode'         => 'all',
@@ -158,18 +94,8 @@ class ES_Display_Rules {
 		];
 	}
 
-	/**
-	 * Cookie name used by the visitor-state gate. Set on the first AJAX
-	 * event (page_view / view / trigger_view / submit) and re-read on
-	 * subsequent page renders to decide "new vs returning."
-	 */
 	public const VISITOR_COOKIE = 'esf_visitor';
 
-	/**
-	 * Empty schedule: no day-of-week constraint, no time-of-day constraint.
-	 * Each piece is independently empty so admins can constrain by day only,
-	 * by hours only, or both. days[] uses 0=Sun … 6=Sat (PHP date('w') shape).
-	 */
 	private static function empty_schedule(): array {
 		return [
 			'days'       => [],
@@ -191,12 +117,6 @@ class ES_Display_Rules {
 		];
 	}
 
-	/**
-	 * Sanitize just the WHERE fields — show_mode + show_filters + hide_filters.
-	 * Shared by sanitize() (a shell's full rule set) and ES_Preset_Repo (SER-899),
-	 * since a preset is exactly this subset. Never touches schedule or visitor
-	 * targeting. Mirrors the SaaS port's DisplayRules::sanitizeWhere().
-	 */
 	public static function sanitize_where( array $raw ): array {
 		$show_mode = ( ( $raw['show_mode'] ?? '' ) === 'selected' ) ? 'selected' : 'all';
 		return [
@@ -211,7 +131,6 @@ class ES_Display_Rules {
 		if ( ! in_array( $logged_in, [ 'any', 'in', 'out' ], true ) ) {
 			$logged_in = 'any';
 		}
-		// Roles only have meaning when targeting logged-in visitors.
 		$role_keys = ( $logged_in === 'in' && isset( $raw['visitor_roles'] ) && is_array( $raw['visitor_roles'] ) )
 			? self::sanitize_roles( $raw['visitor_roles'] )
 			: [];
@@ -219,10 +138,6 @@ class ES_Display_Rules {
 		if ( ! in_array( $visitor_state, [ 'any', 'new', 'returning' ], true ) ) {
 			$visitor_state = 'any';
 		}
-		// A shell "following" a preset (SER-899) — a UI/authoring pointer only. The
-		// show_mode/show_filters/hide_filters below are always the resolved values
-		// (kept in sync with the preset on save); enforcement never reads
-		// preset_id, so nothing downstream (rendering, mirroring) needs to change.
 		$preset_id = isset( $raw['preset_id'] ) && is_numeric( $raw['preset_id'] ) ? (int) $raw['preset_id'] : null;
 		return [
 			...self::sanitize_where( $raw ),
@@ -254,7 +169,6 @@ class ES_Display_Rules {
 		if ( $s === '' ) {
 			return '';
 		}
-		// Accept HH:MM (HTML5 time input) and HH:MM:SS.
 		if ( preg_match( '/^(\d{2}):(\d{2})(?::\d{2})?$/', $s, $m ) ) {
 			$h = (int) $m[1];
 			$mn = (int) $m[2];
@@ -269,7 +183,7 @@ class ES_Display_Rules {
 		$known = function_exists( 'wp_roles' ) ? array_keys( wp_roles()->get_names() ) : [];
 		$keys  = array_values( array_map( 'sanitize_key', $raw ) );
 		if ( empty( $known ) ) {
-			return $keys; // No role registry available — fall back to sanitised keys.
+			return $keys;
 		}
 		return array_values( array_intersect( $keys, $known ) );
 	}
@@ -312,17 +226,11 @@ class ES_Display_Rules {
 		];
 	}
 
-	/**
-	 * Normalize one URL pattern entry. Trims, drops query/fragment, leading
-	 * slash kept optional (caller-friendly), trailing slash dropped, lowercased.
-	 * Returns empty string for nothing-meaningful — caller filters those.
-	 */
 	private static function normalize_url_pattern( $raw ): string {
 		$s = trim( (string) $raw );
 		if ( $s === '' ) {
 			return '';
 		}
-		// Drop everything from a '?' or '#' onward.
 		$q = strpos( $s, '?' );
 		if ( $q !== false ) {
 			$s = substr( $s, 0, $q );
@@ -331,68 +239,39 @@ class ES_Display_Rules {
 		if ( $h !== false ) {
 			$s = substr( $s, 0, $h );
 		}
-		// Strip protocol + host if the admin pasted a full URL.
 		$s = preg_replace( '#^https?://[^/]+#i', '', $s );
-		// Force a leading slash so patterns match the way visitors see paths.
 		if ( $s === '' ) {
 			return '';
 		}
 		if ( $s[0] !== '/' ) {
 			$s = '/' . $s;
 		}
-		// Strip trailing slash unless the pattern is just "/".
 		if ( strlen( $s ) > 1 && substr( $s, -1 ) === '/' ) {
 			$s = rtrim( $s, '/' );
 		}
 		return strtolower( $s );
 	}
 
-	/**
-	 * Auto-injected shells that each get their own slice of the display_rules
-	 * JSON column. Mirrors ES_Form_Repo::auto_shells(). Currently popup-auto
-	 * only; ribbon + slide-in join in v0.17.x.
-	 */
 	public static function auto_shells(): array {
 		return [ 'popup-auto', 'ribbon', 'slide-in' ];
 	}
 
-	/**
-	 * @deprecated since v0.17.0 — kept as a thin compat shim. Returns the
-	 * popup-auto slice of the per-shell rules map.
-	 */
 	public static function get_for_form( object $form ): array {
 		return self::get_for_form_shell( $form, 'popup-auto' );
 	}
 
-	/**
-	 * Read ONE shell's rules (sanitised single-set shape — same as defaults()).
-	 */
 	public static function get_for_form_shell( object $form, string $shell ): array {
 		$all = self::get_all_for_form( $form );
 		return $all[ $shell ] ?? self::defaults();
 	}
 
-	/**
-	 * Read the full per-shell rules map for a form (always normalised).
-	 */
 	public static function get_all_for_form( object $form ): array {
 		$raw     = $form->display_rules ?? '';
 		$decoded = is_string( $raw ) ? json_decode( $raw, true ) : null;
 		return self::sanitize_all_shells( is_array( $decoded ) ? $decoded : [] );
 	}
 
-	/**
-	 * Sanitize the per-shell display-rules map.
-	 *
-	 * Accepts both shapes for backwards-compat:
-	 *   - Legacy single-set: { show_mode, show_filters, hide_filters }   (pre v0.17)
-	 *   - Per-shell map:     { "popup-auto": { show_mode, ... }, ... }    (v0.17+)
-	 *
-	 * Always emits the per-shell map. Saves with the legacy single-set input
-	 * migrate the row to the new shape; reads handle both transparently.
-	 */
 	public static function sanitize_all_shells( array $raw ): array {
-		// Legacy single-set shape → wrap under popup-auto.
 		if ( isset( $raw['show_mode'] ) || isset( $raw['show_filters'] ) || isset( $raw['hide_filters'] ) ) {
 			$raw = [ 'popup-auto' => $raw ];
 		}
@@ -404,16 +283,11 @@ class ES_Display_Rules {
 		return $out;
 	}
 
-	/**
-	 * The decision: should this form render for the current request?
-	 */
 	public static function should_render( array $rules ): bool {
 		$rules = self::sanitize( $rules );
-		// Visitor gate ANDs with everything else — must pass before page-matching.
 		if ( ! self::visitor_matches( $rules ) ) {
 			return false;
 		}
-		// Schedule gate (day-of-week + time-of-day) ANDs too.
 		if ( ! self::schedule_matches( $rules['schedule'] ?? [] ) ) {
 			return false;
 		}
@@ -429,22 +303,7 @@ class ES_Display_Rules {
 		return true;
 	}
 
-	/**
-	 * Day-of-week + time-of-day gate. Empty pieces are no-ops:
-	 *   - days[] empty       → any day matches
-	 *   - start_time empty   → no lower bound
-	 *   - end_time empty     → no upper bound
-	 *   - all empty          → always passes
-	 *
-	 * Across-midnight windows (start > end, e.g. 22:00 → 02:00) are
-	 * interpreted as a wrap: current must be ≥ start OR ≤ end.
-	 *
-	 * Times come from WP site timezone via current_time(), so the admin's
-	 * "between 9 and 5" reads as their site's local clock.
-	 */
 	private static function schedule_matches( array $schedule ): bool {
-		// Read "now" from the WP site timezone, then hand the pure
-		// comparison to schedule_allows() — which is unit-tested.
 		return self::schedule_allows(
 			$schedule,
 			(int) current_time( 'w' ),
@@ -452,16 +311,6 @@ class ES_Display_Rules {
 		);
 	}
 
-	/**
-	 * Pure core of the schedule gate, with "now" injected so it can be
-	 * exhaustively unit-tested without freezing the clock.
-	 *
-	 * @param array  $schedule { days[], start_time, end_time }
-	 * @param int    $now_dow  Current day of week, 0=Sun … 6=Sat (date('w')).
-	 * @param string $now_hm   Current time as "HH:MM", 24-hour.
-	 *
-	 * See schedule_matches()'s doc block above for the wrap-around rule.
-	 */
 	public static function schedule_allows( array $schedule, int $now_dow, string $now_hm ): bool {
 		$days       = (array) ( $schedule['days']       ?? [] );
 		$start_time = (string) ( $schedule['start_time'] ?? '' );
@@ -475,28 +324,19 @@ class ES_Display_Rules {
 			return true;
 		}
 
-		// Single-bound cases.
 		if ( $start_time !== '' && $end_time === '' ) {
 			return strcmp( $now_hm, $start_time ) >= 0;
 		}
 		if ( $start_time === '' ) {
-			// Reached here only when end_time is non-empty (the both-empty
-			// and start-only cases returned above).
 			return strcmp( $now_hm, $end_time ) <= 0;
 		}
 
-		// Two-bound case: normal window if start <= end, wrap-around otherwise.
 		if ( strcmp( $start_time, $end_time ) <= 0 ) {
 			return strcmp( $now_hm, $start_time ) >= 0 && strcmp( $now_hm, $end_time ) <= 0;
 		}
 		return strcmp( $now_hm, $start_time ) >= 0 || strcmp( $now_hm, $end_time ) <= 0;
 	}
 
-	/**
-	 * Visitor-state gate (logged-in / logged-out / user role).
-	 * Returns true if the current request's visitor satisfies the per-shell
-	 * visitor constraints; false to suppress.
-	 */
 	private static function visitor_matches( array $rules ): bool {
 		$logged_in_rule = $rules['visitor_logged_in'] ?? 'any';
 		$is_logged_in   = is_user_logged_in();
@@ -510,8 +350,6 @@ class ES_Display_Rules {
 
 		$roles = (array) ( $rules['visitor_roles'] ?? [] );
 		if ( ! empty( $roles ) ) {
-			// Roles are only enforced when targeting logged-in users — sanitize
-			// already drops them otherwise, this is a belt-and-suspenders check.
 			if ( ! $is_logged_in ) {
 				return false;
 			}
@@ -535,21 +373,6 @@ class ES_Display_Rules {
 		return true;
 	}
 
-	/**
-	 * The esf_visitor cookie is written by frontend.js alone (audit B3). It is
-	 * the visitor id the reports count people by, and it is what the
-	 * new-vs-returning gate reads: frontend.js writes it on the first beacon,
-	 * so any later page sees a returning visitor, as before.
-	 *
-	 * This used to write the cookie here too, as an HttpOnly '1'. frontend.js
-	 * cannot read an HttpOnly cookie or overwrite it, so on every page it saw
-	 * no id and minted a new one, and one person counted as a new visitor on
-	 * every page. It also skipped the consent check frontend.js applies.
-	 *
-	 * What is left is the clean-up: a '1' still in a visitor's browser is that
-	 * old server cookie, so it is expired, and the next page's script writes a
-	 * real id it can read.
-	 */
 	public static function ensure_visitor_cookie(): void {
 		if ( ( $_COOKIE[ self::VISITOR_COOKIE ] ?? '' ) !== '1' || headers_sent() ) {
 			return;
@@ -563,12 +386,6 @@ class ES_Display_Rules {
 		] );
 	}
 
-	/**
-	 * Transient key cached for ~1 hour — flushed by Form_Repo on every save,
-	 * trash, restore, or delete via `delete_transient(...)`. Recomputed on
-	 * next read by scanning every active, non-trashed form's display_rules
-	 * for a non-default visitor_state value.
-	 */
 	private const VISITOR_STATE_USED_TRANSIENT = 'emblem_studio_uses_visitor_cookie';
 
 	public static function any_form_uses_visitor_state(): bool {
@@ -588,7 +405,6 @@ class ES_Display_Rules {
 			if ( ! is_array( $decoded ) ) {
 				continue;
 			}
-			// Decoded shape is per-shell map: { 'popup-auto' => { ..., visitor_state }, ... }
 			foreach ( $decoded as $shell_rules ) {
 				if ( is_array( $shell_rules ) && ( $shell_rules['visitor_state'] ?? 'any' ) !== 'any' ) {
 					$any = true;
@@ -604,9 +420,6 @@ class ES_Display_Rules {
 		delete_transient( self::VISITOR_STATE_USED_TRANSIENT );
 	}
 
-	/**
-	 * True when ANY of the filters in the set matches the current request.
-	 */
 	private static function filters_match_current( array $filters ): bool {
 		if ( ! empty( $filters['specials'] ) && self::specials_match( $filters['specials'] ) ) {
 			return true;
@@ -635,10 +448,6 @@ class ES_Display_Rules {
 		return false;
 	}
 
-	/**
-	 * Match the current request against any of the given WooCommerce page
-	 * keys. No-op when WC isn't active — saved rules persist but never fire.
-	 */
 	private static function wc_pages_match( array $picks ): bool {
 		if ( ! self::wc_active() ) {
 			return false;
@@ -658,22 +467,11 @@ class ES_Display_Rules {
 		return false;
 	}
 
-	/**
-	 * Match the current request URI against any of the given glob-style
-	 * patterns. `*` matches any sequence, `?` matches any single char.
-	 * Patterns are pre-normalised by normalize_url_pattern; the current
-	 * URI is normalised the same way before comparison.
-	 */
 	private static function url_matches( array $patterns ): bool {
 		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/';
 		return self::url_pattern_matches( $patterns, $uri );
 	}
 
-	/**
-	 * Pure core of the URL gate, with the request path injected so it
-	 * can be unit-tested. $uri is run through the same normalisation as
-	 * the stored patterns before the glob comparison.
-	 */
 	public static function url_pattern_matches( array $patterns, string $uri ): bool {
 		$uri = self::normalize_url_pattern( $uri );
 		if ( $uri === '' ) {

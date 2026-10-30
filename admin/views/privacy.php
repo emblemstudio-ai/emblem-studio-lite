@@ -32,10 +32,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php esc_html_e( 'Paste this into whichever category covers analytics or performance:', 'emblem-studio' ); ?>
 	</p>
 	<?php
-	// Click-to-copy boxes, the same as the web app's CopyBox. They used to be
-	// read-only textareas, and a textarea's corner handle let the box be dragged
-	// to any size (item 17 of Catalina's Lite test pass). These grow with the
-	// text and have nothing to drag.
 	$es_copybox = static function ( string $text ): void {
 		?>
 		<button type="button" class="es-copybox es-copy" data-es-copy="<?php echo esc_attr( $text ); ?>" title="<?php esc_attr_e( 'Click to copy', 'emblem-studio' ); ?>">

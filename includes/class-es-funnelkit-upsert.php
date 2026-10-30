@@ -3,31 +3,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Shared direct-contact contract for every local FunnelKit transport. */
 final class ES_FunnelKit_Upsert {
-	/**
-	 * The asset's "add new contacts as" choice, from a lead's `contact_status`.
-	 * Only the exact word 'unsubscribed' counts. Missing, blank or anything else
-	 * is 'subscribed', which is how every asset behaved before the option.
-	 *
-	 * @param mixed $value
-	 */
 	public static function contact_status( $value ): string {
 		return $value === 'unsubscribed' ? 'unsubscribed' : 'subscribed';
 	}
 
-	/**
-	 * Create or update one FunnelKit contact for a lead.
-	 *
-	 * `contact_status` (the asset's choice) only decides how a NEW contact
-	 * starts. 'unsubscribed' creates the contact and then puts it on FunnelKit's
-	 * unsubscribe list, before any list or tag is added, so a tag-triggered
-	 * automation already sees it unsubscribed. A contact that already exists
-	 * keeps its status under that choice: a subscriber is never unsubscribed,
-	 * and an unsubscribed one is never resubscribed. 'subscribed' is the
-	 * original behaviour, where a returning unsubscribed or unverified contact
-	 * is resubscribed. Bounced and complaint contacts stay protected either way.
-	 */
 	public static function run( array $lead ): array {
 		try {
 			$args = array_filter(
@@ -103,10 +83,6 @@ final class ES_FunnelKit_Upsert {
 				}
 			}
 
-			// FunnelKit's unsubscribe() needs a saved contact, so it runs after
-			// save(). A contact it could not unsubscribe gets no lists or tags,
-			// for the same reason as a failed resubscribe: a tag can start an
-			// automation that emails someone the owner chose not to email.
 			if ( $needs_unsubscribe && $id > 0 ) {
 				if ( method_exists( $contact, 'unsubscribe' ) ) {
 					$contact->unsubscribe( false );
@@ -214,27 +190,8 @@ final class ES_FunnelKit_Upsert {
 		}
 	}
 
-	/** FunnelKit field types that pick from a list of options (BWFCRM_Fields). */
-	private const CHOICE_TYPES = [ 4 /* select */, 5 /* radio */, 6 /* checkbox */ ];
+	private const CHOICE_TYPES = [ 4 , 5 , 6 ];
 
-	/**
-	 * Several answers for one FunnelKit field (a ticked checkbox group).
-	 *
-	 * A choice field (checkbox, radio, select) gets a JSON list. FunnelKit's
-	 * save_fields() decodes it and keeps every item that matches one of the
-	 * field's option labels, case-insensitive. A checkbox field stores them all;
-	 * radio and select keep the first match. JSON rather than a comma list,
-	 * because FunnelKit splits a plain string on commas and an answer can
-	 * contain one.
-	 *
-	 * Any other field (text, textarea, number) gets the answers joined with
-	 * ", ". FunnelKit silently skips an array for those types, and a JSON list
-	 * would show up in a text field as `["a","b"]`.
-	 *
-	 * Unknown type (FunnelKit's field model unavailable): JSON, as before.
-	 *
-	 * @param array<int|string, mixed> $values
-	 */
 	private static function list_value( array $values, ?int $type ): string {
 		$items = array_values( array_map( 'strval', array_filter( $values, 'is_scalar' ) ) );
 		if ( $type !== null && ! in_array( $type, self::CHOICE_TYPES, true ) ) {
@@ -243,7 +200,6 @@ final class ES_FunnelKit_Upsert {
 		return (string) ( function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items ) );
 	}
 
-	/** A FunnelKit custom field's numeric type, looked up by slug or ID. Null when unknown. */
 	private static function field_type( string $by, string $key ): ?int {
 		if ( ! class_exists( 'BWFAN_Model_Fields' ) ) {
 			return null;

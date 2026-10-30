@@ -3,146 +3,27 @@
 
 	const ajax = (window.EmblemStudio && window.EmblemStudio.ajaxUrl) || '/wp-admin/admin-ajax.php';
 	const postId = (window.EmblemStudio && window.EmblemStudio.postId) || 0;
-	// Am I being rendered inside an admin screen?
-	//
-	// A page builder's canvas is NOT an admin URL, which is why is_admin() never
-	// catches it. Elementor's editor lives at wp-admin/post.php?action=elementor,
-	// and the canvas you design in is an <iframe> pointing at the post's own
-	// permalink, which is an ordinary front-end page.
-	//
-	// PHP already keeps the self-placing shells out of that canvas, see
-	// ES_Display_Rules::is_admin_frame(). This is the other half: an inline asset
-	// the author put on the page DOES still render there, and it must not report
-	// a view, a click or a drop-off while they are laying the page out. A canvas
-	// is not a visit.
 	const IN_ADMIN_FRAME = (function () {
 		if (window.top === window.self) return false;
 		try {
 			if (window.top.location.pathname.indexOf('/wp-admin/') !== -1) return true;
-		} catch (e) { /* cross-origin top — the referrer is all we have */ }
+		} catch (e) { }
 		return String(document.referrer || '').indexOf('/wp-admin/') !== -1;
 	})();
 
 
-	// Boot CSS injected into every shadow root.
-	// `all: initial !important` on :host cuts inheritance from the
-	// surrounding theme and also guards against aggressive `body *`
-	// rules in the outer document. But `all: initial` resets THREE
-	// layout-critical properties to bad defaults:
-	//   - `display` → `inline` (a full-width ribbon would shrink to
-	//     content). Fixed with `display: block`.
-	//   - `width` → `auto`. In a normal block context that means
-	//     "fill parent", which is fine — but when the host's parent
-	//     is a flex/grid container (e.g. the preview iframe's body
-	//     for non-top ribbon positions), `auto` becomes "shrink to
-	//     content" and the host renders narrower than its parent.
-	//     Fixed with `width: 100%`.
-	//   - `box-sizing` → `content-box`. Any host-level padding or
-	//     border the author adds would push the host past 100% and
-	//     cause overflow. Fixed with `box-sizing: border-box`.
-	//   - `isolation` → `auto`. Without it, a z-index the author sets on their
-	//     OWN content (e.g. a layered banner design) escapes the shadow tree
-	//     and competes directly with platform chrome layered outside the host,
-	//     like a popup/ribbon/slide-in's close button — and can paint over it,
-	//     silently swallowing its clicks/taps. `isolation: isolate` seals the
-	//     shadow tree into its own stacking context so no z-index inside it can
-	//     ever climb out. (This is the actual fix; an earlier attempt set
-	//     `isolation: isolate` on the LIGHT-DOM `.esf-host` rule instead, which
-	//     `all: initial !important` here silently overrides — `!important`
-	//     always beats a non-`!important` declaration regardless of which side
-	//     of the shadow boundary it's on.)
-	// All four carry `!important` so they outlive the `all: initial`
-	// reset above them in the same rule.
 	const BOOT_CSS = ':host{all:initial!important;display:block!important;width:100%!important;box-sizing:border-box!important;isolation:isolate!important;}';
 
-	// Ship our own I-beam MOUSE POINTER over text fields.
-	//
-	// This is the mouse pointer, NOT the blinking caret — a distinction that
-	// cost three wrong fixes here (caret-color: currentColor, then
-	// color-scheme: light, then an explicit caret colour). All three shipped,
-	// none did anything, because the caret was never the problem.
-	//
-	// Windows 11 ships a WHITE mouse cursor by default. Over a light form field
-	// the I-beam is white on white and simply disappears — the field looks dead
-	// until you click it. It happens on every site, on a machine in LIGHT theme
-	// throughout, which is what finally identified it, and it is why no colour
-	// property helped: the OS cursor theme wins unless the page supplies its
-	// own cursor image.
-	//
-	// This plugin already fixes exactly this for its code editors, the same way
-	// — see admin.css and inspector.css. Full write-up in the SaaS repo's
-	// docs/WINDOWS-CARET-QUIRK.md.
-	//
-	// One deliberate difference from those: this I-beam is drawn dark over a
-	// thicker WHITE halo, so it stays visible on a dark-designed asset too. The
-	// admin's is a flat dark shape, fine on a permanently white editor but
-	// invisible on a black form. Falls back to `text` if a browser policy
-	// blocks data-URI cursors. Hotspot centred at 8,8.
-	//
-	// Zero specificity via `:where()`, so an asset can set its own `cursor` and
-	// win without !important. The non-shadow copy is scoped to the host, since
-	// that CSS lands in the theme's own document.
-	// Drawn slim on purpose: a 1px core with a soft 3px white halo at 85%
-	// opacity, serifs 4px wide, all on half-pixel coordinates so the strokes
-	// land on whole device pixels instead of straddling two and blurring. An
-	// earlier version used a 1.5px core inside a hard 3.5px halo, which on a
-	// 16px canvas reads as a fat cross rather than an I-beam.
-	// Shape tuned by hand in the SaaS repo's public/cursor-lab.html — keep the
-	// two repos and the admin stylesheets identical when it changes.
 	const IBEAM = "url(\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23ffffff'%20stroke-width='2'%20stroke-opacity='0.85'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3Cpath%20stroke='%2352585b'%20stroke-width='1'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3C/g%3E%3C/svg%3E\") 8 8, text";
-	// Text-entry surfaces only. Checkboxes, radios and buttons are not text and
-	// must keep their own pointer. Scoped deliberately narrowly here: this CSS
-	// can land in the THEME's document, so it must never restyle the cursor
-	// anywhere but inside our own asset.
 	const TEXTY = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=range]):not([type=image]),textarea,[contenteditable]';
 	const FIELD_CSS = ':where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 	const FIELD_CSS_SCOPED = ':where(.esf-host) :where(' + TEXTY + '){cursor:' + IBEAM + ';}';
 
-	// A card narrower than the space it is given sits in the MIDDLE of that space.
-	//
-	// The host is always the full width it was handed: a page's content column for
-	// an inline asset, the modal for a popup, the screen for a ribbon. An asset
-	// sets its own width (the authoring spec tells every asset to), so it is
-	// narrower than its host nearly always, and a block element with a set width
-	// and no margin sits hard against the left edge. Every place that draws an
-	// asset used to do exactly that, which is not what anyone designing a 480px
-	// card means by it.
-	//
-	// ':where()' holds specificity at zero, so ANY author rule that sets a margin
-	// wins without '!important'. '.esf-form{margin:0}' pins it left again, which
-	// is how an author asks for left on purpose.
-	//
-	// The inline axis only. Vertical placement is a shell's business, not ours.
-	// The non-shadow copy is scoped to the host, since that CSS lands in the
-	// customer's own document and must not reach a '.esf-form' we did not render.
-	//
-	// TWIN of CENTER_CSS in the SaaS embed.js. Keep the two identical.
 	const CENTER_CSS = ':where(.esf-form){margin-inline:auto;}';
 	const CENTER_CSS_SCOPED = ':where(.esf-host) :where(.esf-form){margin-inline:auto;}';
 
-	// How long the submit button stays visibly busy before the thank-you takes
-	// over. This is NOT a network wait — the request is already in flight — it is
-	// a deliberate beat, because a state change on the same frame as the click
-	// reads as a glitch rather than a response: the form vanishes and nothing
-	// appears to have happened.
-	//
-	// One second, set by feel on the real form. 400ms registered as a change but
-	// still went past too quickly to read as work being done. A second is at the
-	// top of the usable range: long enough to be believed, short enough that
-	// nobody starts wondering. Push it much past this and it stops being feedback
-	// and becomes a wait — which is the thing we removed in the first place.
-	//
-	// One number, tune it here; the live path and the editor preview share it.
 	const SUBMIT_BEAT_MS = 1000;
 
-	// Built-in busy state for the submit button, active while a submission is in
-	// flight (`.esf-submitting` lands on the <form>). The class is an authoring
-	// hook, but an asset that doesn't style it must still LOOK like it is working
-	// — otherwise a slow connection reads as a dead button and gets clicked again.
-	// `:where()` holds specificity at zero, so any author rule beats all of this.
-	// The spinner is a ::after, so it reaches <button type=submit> but not
-	// <input type=submit>, which can't carry pseudo-elements; the cursor and the
-	// dimming still apply to both.
 	function busyCss(scoped) {
 		const p = scoped ? ':where(.esf-host) ' : '';
 		return '@keyframes es-btn-spin{to{transform:rotate(360deg)}}'
@@ -151,19 +32,10 @@
 			+ 'width:.85em;height:.85em;margin-inline-start:.55em;vertical-align:-.12em;'
 			+ 'border:2px solid currentColor;border-top-color:transparent;border-radius:50%;'
 			+ 'animation:es-btn-spin .6s linear infinite;}'
-			// Slowed rather than stopped: a frozen ring reads as broken, and this
-			// is feedback the visitor needs, not decoration.
 			+ '@media (prefers-reduced-motion:reduce){' + p
 			+ ':where(.esf-submitting button[type="submit"])::after{animation-duration:2.4s;}}';
 	}
 
-	// A leading @import is only valid as the FIRST rule, but a valid @import is
-	// ALSO render-blocking — the browser holds back the whole stylesheet until
-	// the import loads, which on a slow/blocked font host leaves the asset
-	// unstyled. So we LIFT any leading @charset/@import out of the asset's
-	// stylesheet entirely and load each as a non-blocking <link> in the
-	// document head (its @font-face registers document-wide, so the fonts still
-	// reach the shadow). The asset's own rules then apply immediately.
 	var _esFontsLoaded = {};
 	function loadFontImport(rule) {
 		if (/^\s*@charset/i.test(rule)) return;
@@ -174,25 +46,10 @@
 		var link = document.createElement('link');
 		link.rel = 'stylesheet';
 		link.href = href;
-		link.media = 'print'; // non-blocking; switched to all once loaded
+		link.media = 'print';
 		link.onload = function () { this.media = 'all'; };
 		(document.head || document.documentElement).appendChild(link);
 	}
-	// A shadow-root <style> that declares @font-face registers that font for
-	// the WHOLE document per spec, not just its own tree — so an unscoped name
-	// is a shared global slot. Two renders with different CSS (e.g. the live
-	// "current" asset vs. an older revision that references the same font
-	// NAME but never carried its own @font-face) would then either borrow
-	// each other's registration or stomp on it depending on mount/unmount
-	// order — a revision with no font of its own should consistently show the
-	// fallback, not sometimes-right depending on which sibling preview
-	// happens to be open. So instead of lifting @font-face rules as-written,
-	// we scope each one to a name unique to ITS OWN content (family + a hash
-	// of its own rule text), rewrite every font-family reference to that name
-	// within this SAME css string, then lift the renamed rules into one
-	// shared, persistent <style> (deduped by exact rule text). Only a render
-	// that carries the identical @font-face rule(s) can ever resolve to that
-	// scoped name.
 	var _esLiftedFontFaceRules = {};
 	var _esFontFaceStyleEl = null;
 	function _esHashStr(s) {
@@ -236,35 +93,17 @@
 			return '';
 		});
 	}
-	// Strip leading @charset/@import (loading any fonts non-blocking), scope +
-	// lift any @font-face rules to the shared stylesheet above, and return the
-	// rest, optionally prefixed with the shadow reset.
 	function prepareCss(css, withBoot) {
 		css = css || '';
 		css = scopeAndLiftFontFaces(css);
-		// Quote-aware: a Google-Fonts @import URL can itself contain ';'
-		// (e.g. wght@400;500;600), so we must not stop at the first semicolon —
-		// match the quoted/parenthesised value, then the statement's own ';'.
 		var re = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
 		var m;
 		while ((m = re.exec(css)) !== null) {
 			loadFontImport(m[1]);
 			css = css.slice(m.index + m[0].length);
 		}
-		// Both defaults go BEFORE the asset's own CSS, so the author always wins.
 		return (withBoot ? BOOT_CSS + FIELD_CSS + CENTER_CSS : FIELD_CSS_SCOPED + CENTER_CSS_SCOPED) + busyCss(!withBoot) + css;
 	}
-
-	// ============================================================
-	// Per-shell dismiss memory (localStorage)
-	// ============================================================
-	// When the visitor closes an auto-injected shell, we may write a marker
-	// to localStorage so it stays suppressed across page loads. Behavior:
-	//   show_again  → don't write; suppression doesn't apply
-	//   hide_hours  → write { until: epoch_ms } expiring in N hours
-	//   never       → write { until: Infinity }
-	// On init we check the marker before wiring up the trigger; if it says
-	// "still suppressed", we skip the shell entirely (no events fire).
 
 	function dismissKey(formId, shell) {
 		return 'esf_dismissed_' + shell + '_' + formId;
@@ -276,7 +115,6 @@
 			const data = JSON.parse(raw);
 			if (data && data.until === 'forever') return true;
 			if (data && typeof data.until === 'number' && Date.now() < data.until) return true;
-			// Expired — clean up.
 			localStorage.removeItem(dismissKey(formId, shell));
 			return false;
 		} catch (e) { return false; }
@@ -289,8 +127,7 @@
 				const ms = Math.max(1, +hours || 24) * 3600 * 1000;
 				localStorage.setItem(dismissKey(formId, shell), JSON.stringify({ until: Date.now() + ms }));
 			}
-			// show_again: no-op
-		} catch (e) { /* swallow */ }
+		} catch (e) { }
 	}
 
 	function ready(fn) {
@@ -298,12 +135,6 @@
 		else document.addEventListener('DOMContentLoaded', fn);
 	}
 
-	// --- Client hint (local only) ----------------------------------------------
-	// No third-party call. This once fetched IP-derived location from ipapi.co;
-	// that's removed (see below). All it does now is pass the browser's own
-	// timezone (from Intl, no network) plus anything window.EmblemStudio.autofill
-	// injects. Visible form inputs always win — we only append a value if
-	// FormData doesn't already carry that key.
 	let geoPromise = null;
 	function fetchGeo() {
 		if (geoPromise) return geoPromise;
@@ -311,29 +142,15 @@
 			const data = {};
 			try { data.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
 
-			// In the preview/editor there's no real submission to enrich, so skip
-			// the external IP lookup entirely — it only adds latency (and noise).
 			if (window.EmblemStudio && window.EmblemStudio.preview) return data;
 
-			// Override hook for power users: window.EmblemStudio.autofill = async () => ({...})
 			if (window.EmblemStudio && typeof window.EmblemStudio.autofill === 'function') {
 				try {
 					const ov = await window.EmblemStudio.autofill();
 					if (ov && typeof ov === 'object') return Object.assign(data, ov);
-				} catch (e) { /* keep the local-only data below */ }
+				} catch (e) { }
 			}
 
-			// NO third-party geo call. The plugin used to fetch the visitor's
-			// country/city from ipapi.co on every page load — which sent their IP
-			// to an outside company before they'd done anything, and brushes
-			// against WordPress.org's "no external requests without consent" rule.
-			// It's gone. IP-derived location is a hosted-Emblem-Studio feature
-			// (Free tier onwards, and on connected sites); standalone Lite does not
-			// guess a visitor's location. A country/state field the visitor
-			// actually fills in still works through explicit Field Mapping.
-			//
-			// We still pass the browser's own timezone (from Intl, above — no
-			// network), plus anything the autofill override injected.
 			return data;
 		})();
 		return geoPromise;
@@ -348,10 +165,6 @@
 			]);
 		} catch (e) { return; }
 		if (!geo) return;
-		// Hints land in a separate namespace so they never collide with user-named
-		// inputs. Country / region / city are NOT sent from here any more (no
-		// third-party lookup). Timezone (local) and any autofill override still
-		// ride along; a mapped country/state field the visitor fills is unaffected.
 		const autoKeys = ['country', 'country_name', 'state', 'state_name', 'city', 'postcode', 'timezone'];
 		for (const k of autoKeys) {
 			if (geo[k]) formData.append('__es_geo_' + k, geo[k]);
@@ -387,13 +200,6 @@
 			return shadow;
 		}
 
-		// Light DOM mount: render directly inside the host so theme styles
-		// reach the form and the form's CSS is part of the page. NOTE: this
-		// also means the form's CSS can leak — author's responsibility to
-		// scope it (e.g. wrap selectors with the form's container).
-		// Unconditional: prepareCss also supplies the field defaults (see
-		// FIELD_CSS), so gating this on the asset having its own CSS meant an
-		// asset with none got no defaults either.
 		{
 			const style = document.createElement('style');
 			style.textContent = prepareCss(payload.css || '', false);
@@ -406,23 +212,6 @@
 		return host;
 	}
 
-	/*
-	 * LIVE VALUES (SER-1352). The contract is the SaaS repo's docs/LIVE-VALUES.md.
-	 *
-	 * TWIN of esFillLive in the SaaS public/embed/embed.js and fillLiveValues in its
-	 * resources/js/lib/liveValues.ts. The three must agree on the key, the name and
-	 * the group rules.
-	 *
-	 * The server has already decided what is safe: payload.live holds ONLY the text
-	 * of fields that are fresh, in stock, above zero and not refused. This never
-	 * judges a value. It swaps text in, leaves the author's words where there is
-	 * none, and shows or hides the lines that depend on it.
-	 *
-	 * ONE THING THE SAAS COPY DOES NOT NEED: this page may have come out of a page
-	 * cache, so the text baked into it can be hours old. Once a page mounts a live
-	 * value, one admin-ajax request asks for the current text of every marker on
-	 * it, and every mounted asset is filled again with the answer.
-	 */
 	const esLiveRoots = [];
 	const esLiveAnswers = {};
 	let esLiveTimer = null;
@@ -487,7 +276,6 @@
 		});
 	}
 
-	/** The map to fill one asset from: fresh answers where there are some, the page's own text otherwise. */
 	function esLiveMapFor(root) {
 		const map = {};
 		const inline = root.__esLiveInline || {};
@@ -542,14 +330,11 @@
 				});
 				esLiveRoots.forEach(function (root) { esFillLive(root, esLiveMapFor(root)); });
 			})
-			.catch(function () { /* the page's own text stays */ });
+			.catch(function () { });
 	}
 
 
 	function fireEvent(host, action) {
-		// In preview mode (form-edit's Preview button), don't fire any events —
-		// we don't want stats polluted by admin previews. Same applies to
-		// submissions handled below.
 		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
@@ -562,43 +347,14 @@
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
 			fetch(ajax, { method: 'POST', body: body, credentials: 'same-origin', keepalive: true });
-		} catch (e) { /* swallow */ }
+		} catch (e) { }
 	}
-
-	// ============================================================
-	// Click tracking
-	// ============================================================
-	// One delegated capturing listener per mounted form. Walks the
-	// composed path to find the nearest clickable element. Builds a stable
-	// label using a priority chain: data-es-track > id > visible text
-	// (truncated) > tag fallback. Beacon uses navigator.sendBeacon so the
-	// event survives the link navigation when the click target is a real <a>.
-	//
-	// AUTO-TRACKED: links (<a>), buttons (<button>, input[type=submit|button|
-	// reset], [role=button]) that live OUTSIDE a <form>, plus the shell close
-	// button / backdrop (handled separately). Click tracking is for non-form
-	// assets — CTAs (links and buttons) that are not part of a form. Anything
-	// inside a <form> is NOT auto-tracked: the submit button, fields, and labels
-	// are the form itself, and submitting / filling it in is conversion and
-	// engagement, which are measured on their own. Counting the submit button
-	// as a "click" would just double-count the same intent.
-	//
-	// OPT-IN: an author can force tracking on ANY element — including the submit
-	// button, a field, or a label inside a form — by adding a
-	// data-es-track="my-label" attribute to it. The attribute's value also
-	// becomes that element's stable name in the report.
 
 	const CLICK_LABEL_MAX = 60;
 
 	function isTrackableClickTarget(el) {
 		if (!el || el.nodeType !== 1) return false;
-		// Explicit opt-in always wins: a tagged element is tracked even if it's
-		// a form element we'd otherwise leave alone. This is the documented way
-		// for power users to bring a submit button, field, or label into click stats.
 		if (el.hasAttribute && el.hasAttribute('data-es-track')) return true;
-		// Form elements are not auto-tracked. Click tracking is for non-form
-		// assets — links and buttons that aren't part of a form. Authors who
-		// want an in-form element counted opt in with data-es-track (above).
 		if (el.closest && el.closest('form')) return false;
 		const tag = el.tagName;
 		if (tag === 'A') return true;
@@ -614,8 +370,6 @@
 	function findClickable(path, stopAt) {
 		for (let i = 0; i < path.length; i++) {
 			const n = path[i];
-			// Stop walking when we exit the form — a wrapping <a> around the
-			// shortcode shouldn't be attributed as an in-form click.
 			if (n === stopAt) return null;
 			if (isTrackableClickTarget(n)) return n;
 		}
@@ -629,7 +383,6 @@
 		if (id) return ('#' + id).slice(0, CLICK_LABEL_MAX);
 		const text = (el.textContent || el.getAttribute('aria-label') || el.getAttribute('value') || '').replace(/\s+/g, ' ').trim();
 		if (text) return text.slice(0, CLICK_LABEL_MAX);
-		// Last resort: tag + first class. Stable enough to group.
 		const tag = (el.tagName || '').toLowerCase();
 		const cls = (el.className && typeof el.className === 'string') ? el.className.split(/\s+/)[0] : '';
 		return (cls ? tag + '.' + cls : tag).slice(0, CLICK_LABEL_MAX);
@@ -639,7 +392,6 @@
 		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host && host.getAttribute('data-esf-id');
 		if (!formId) return;
-		// Honor per-form opt-out — host carries the flag from PHP.
 		if (host.getAttribute('data-esf-track-clicks') === '0') return;
 		const shell = host.getAttribute('data-esf-type') || 'inline';
 		try {
@@ -650,15 +402,13 @@
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
 			body.append('target', label || '');
-			// sendBeacon survives same-tab navigation when clicking a real link.
-			// Fall back to fetch with keepalive when sendBeacon isn't available.
 			if (navigator.sendBeacon) {
 				const blob = new Blob([body.toString()], { type: 'application/x-www-form-urlencoded' });
 				navigator.sendBeacon(ajax, blob);
 			} else {
 				fetch(ajax, { method: 'POST', body: body, credentials: 'same-origin', keepalive: true });
 			}
-		} catch (e) { /* swallow */ }
+		} catch (e) { }
 	}
 
 	function attachClickTracking(host, root) {
@@ -666,11 +416,7 @@
 		if (host.getAttribute('data-esf-track-clicks') === '0') return;
 		if (host._osClickHooked) return;
 		host._osClickHooked = true;
-		// For shadow DOM, root is the ShadowRoot and host is its host element.
-		// For light DOM, mount() returns the host itself; we want to stop at the
-		// host's parent (so the host is still trackable if it has a role=button).
 		const stopAt = (root === host) ? host.parentNode : host;
-		// Capturing phase so we still observe the click before stopPropagation handlers.
 		root.addEventListener('click', function (e) {
 			const path = (typeof e.composedPath === 'function') ? e.composedPath() : [e.target];
 			const el = findClickable(path, stopAt);
@@ -679,31 +425,8 @@
 		}, true);
 	}
 
-	// ============================================================
-	// Engagement + drop-off tracking
-	// ============================================================
-	// Two events, recorded as the visitor's intent unfolds:
-	//   • `engage`  — fired once the moment they first interact with a field
-	//                 (type / tick / pick). "Started filling in."
-	//   • `dropoff` — fired when they LEAVE the page having engaged but never
-	//                 submitted. This is the drop-off, recorded directly as its
-	//                 own event (not derived by subtracting conversions, which
-	//                 breaks against historical data).
-	// We bind on the <form> itself (inside the shadow root) rather than
-	// delegating from document, because `change` events don't cross the shadow
-	// boundary — a document listener would miss checkbox / select / radio picks.
-
-	// Hosts that have engaged this page load. Held by reference so a drop-off
-	// can still fire on unload even if the host (e.g. a popup) left the DOM.
 	const engagedHosts = new Set();
 
-	/* ES-STEP-PURE-START */
-	// Which step of a multi-step asset is on screen. Authors name each step's
-	// container with data-es-step="Question 9"; we never guess from class
-	// names, which authors choose freely. "On screen" means the element has a
-	// layout box (getClientRects), which display:none and a detached popup do
-	// not. If two are visible at once (a crossfade between slides), the later
-	// one in the HTML wins: that is the step the visitor was moving to.
 	function esVisibleStep(root) {
 		if (!root || typeof root.querySelectorAll !== 'function') return '';
 		const marked = root.querySelectorAll('[data-es-step]');
@@ -716,11 +439,8 @@
 		}
 		return label.slice(0, 64).trim();
 	}
-	/* ES-STEP-PURE-END */
 
 	function sendEvent(host, action, step) {
-		// In preview mode (form-edit's Preview button), don't fire — admin
-		// testing must never pollute stats.
 		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const formId = host.getAttribute('data-esf-id');
 		if (!formId) return;
@@ -733,62 +453,36 @@
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
 			if (step) body.append('step', step);
-			// sendBeacon so the event still lands when the visitor interacts and
-			// then immediately closes the tab — a normal fetch can be cancelled
-			// by the unloading page; a beacon can't. Essential for `dropoff`.
 			if (navigator.sendBeacon) {
 				const blob = new Blob([body.toString()], { type: 'application/x-www-form-urlencoded' });
 				navigator.sendBeacon(ajax, blob);
 			} else {
 				fetch(ajax, { method: 'POST', body: body, credentials: 'same-origin', keepalive: true });
 			}
-		} catch (e) { /* swallow */ }
+		} catch (e) { }
 	}
 
 	function fireDropoffs() {
-		// On page leave, every host that engaged but didn't submit is a drop-off.
 		engagedHosts.forEach(host => {
 			if (host._osSubmitted || host._osDropoffFired) return;
 			host._osDropoffFired = true;
-			// The live step first. A popup the visitor already closed is no
-			// longer in the page, so fall back to the step they last touched.
 			sendEvent(host, 'es_dropoff', esVisibleStep(host.shadowRoot || host) || host._esStep || '');
 		});
 	}
 
-	// `pagehide` is the reliable "leaving the page" signal (navigation, tab
-	// close, back/forward cache). We deliberately do NOT use visibilitychange,
-	// which also fires on a mere tab switch and would mis-count a visitor who
-	// looks away and comes back to submit.
 	window.addEventListener('pagehide', fireDropoffs);
 
-	// ============================================================
-	// Connections — "already subscribed" suppression
-	// ============================================================
-	// On conversion we record the completed form in a browser cookie (esf_sub)
-	// — the same cookie the server reads on the next page load to hide/replace
-	// connected forms. We also hide any connected forms already on THIS page so
-	// the visitor doesn't keep seeing them after subscribing.
 	function readCookie(name) {
 		const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
 		return m ? decodeURIComponent(m[1]) : '';
 	}
 
-	/* ES-VISITOR-START: read by tests/js/visitor.test.js. Needs readCookie, document, window. */
-	// ── Cookie-consent gating (SER-901) ──────────────────────────────────
-	// Only esf_visitor is gated — everything else in this file (A/B cookie,
-	// esf_sub/esf_dismissed, the honeypot) fires unconditionally, unaffected.
-	// Fail-open: a site with no consent mechanism at all behaves exactly as
-	// before (cookie sets normally). We only hold the write back once we can
-	// see a real "declined", so this can only reduce today's gating, never add risk.
 	let _esAnalyticsConsent = true;
 	let _esPendingVisitorWrite = null;
-	// The visitor id for this page, worked out by esVisitorId() below. Declared
-	// here because consent can arrive (and reset it) before that runs.
-	let _esVid = null; // null = not worked out yet; '' = no id on this page
+	let _esVid = null;
 	function esWriteVisitorCookie(value) {
 		if (_esAnalyticsConsent) {
-			try { document.cookie = 'esf_visitor=' + value + '; max-age=2592000; path=/; samesite=lax'; } catch (e) { /* ignore */ }
+			try { document.cookie = 'esf_visitor=' + value + '; max-age=2592000; path=/; samesite=lax'; } catch (e) { }
 		} else {
 			_esPendingVisitorWrite = value;
 		}
@@ -798,23 +492,16 @@
 		if (_esAnalyticsConsent && _esPendingVisitorWrite) {
 			esWriteVisitorCookie(_esPendingVisitorWrite);
 			_esPendingVisitorWrite = null;
-			// Consent arrived mid-page: let the next beacon work its id out again.
 			_esVid = null;
 		}
 	}
-	// Public hook for any consent-banner setup that doesn't speak the WP
-	// Consent API — paste `EmblemStudio.setAnalyticsConsent(true)` into the
-	// banner's own "run this when a category is accepted" script slot, once.
 	window.EmblemStudio = window.EmblemStudio || {};
 	window.EmblemStudio.setAnalyticsConsent = esApplyAnalyticsConsent;
-	// Auto-detect the WP Consent API (wordpress.org/plugins/wp-consent-api/) —
-	// most serious WP consent-banner plugins implement it, so this needs zero
-	// setup from the client.
 	(function () {
 		if (typeof window.wp_has_consent !== 'function') return;
 		const granted = function () {
 			try { return !!(window.wp_has_consent('statistics') || window.wp_has_consent('statistics-anonymous')); }
-			catch (e) { return true; } // fail open on a broken integration too
+			catch (e) { return true; }
 		};
 		esApplyAnalyticsConsent(granted());
 		document.addEventListener('wp_listen_for_consent_change', function (e) {
@@ -823,20 +510,6 @@
 		});
 	})();
 
-	// Anonymous, first-party per-visitor id (a random value — no PII, no IP) so
-	// reports can count unique visitors + new-vs-returning. Reuses the esf_visitor
-	// cookie the new/returning display gate already reads; a legacy '1' flag is
-	// upgraded to a real id. ~30-day cookie (browsers cap this; per-person stats
-	// are short-window by nature). Created once per page load and reused.
-	//
-	// NO COOKIE, NO ID (audit B3). The new id is read back after writing it. If
-	// it did not stick (consent declined, or a banner or browser blocking it),
-	// this browser cannot keep an id, and minting a fresh one on every page made
-	// one person count as several. Such a visitor sends '' instead: their views,
-	// clicks and sign-ups still count, they just stay out of the per-person
-	// figures, which the reports compute over visitors with an id only. This
-	// works with any banner, because it tests the cookie, not the banner. Same
-	// code as the SaaS embed.js.
 	function esVisitorId() {
 		if (_esVid !== null) return _esVid;
 		let v = readCookie('esf_visitor');
@@ -850,16 +523,14 @@
 		_esVid = v;
 		return v;
 	}
-	/* ES-VISITOR-END */
 
 	function markSubscribed(host) {
 		const daysAttr = host.getAttribute('data-esf-conn-days');
 		const formId = host.getAttribute('data-esf-id');
-		if (daysAttr === null || !formId) return; // form takes no part in connections
-		const days = parseInt(daysAttr, 10) || 0;        // 0 = forever
+		if (daysAttr === null || !formId) return;
+		const days = parseInt(daysAttr, 10) || 0;
 		const now = Math.floor(Date.now() / 1000);
 		const exp = days === 0 ? 0 : now + days * 86400;
-		// Merge into the existing cookie, dropping any expired entries.
 		const map = {};
 		readCookie('esf_sub').split(',').forEach(p => {
 			const b = p.split(':');
@@ -870,7 +541,7 @@
 		let maxAge = 86400;
 		Object.keys(map).forEach(id => {
 			const e = map[id];
-			if (e !== 0 && e <= now) return;             // expired
+			if (e !== 0 && e <= now) return;
 			parts.push(id + ':' + e);
 			const age = e === 0 ? 3650 * 86400 : (e - now);
 			if (age > maxAge) maxAge = age;
@@ -879,32 +550,13 @@
 		hideConnectedOnPage(host);
 	}
 
-	/**
-	 * Subscribing here silences its linked peers on THIS page, with no reload.
-	 *
-	 * Hiding is only half of it, and for an auto shell it is the useless half. A
-	 * popup, ribbon or slide-in sits in the page as a bootstrap element that is
-	 * ALREADY display:none — a marker, not the thing the visitor sees. Setting it
-	 * to none again changes nothing, and its trigger is still armed: when exit
-	 * intent fires a minute later it clones the template into a brand new overlay
-	 * and appends it to the body, which no amount of hiding the marker prevents.
-	 *
-	 * So the trigger has to be disarmed, not the marker hidden. The flag set here
-	 * is what each auto shell's fire() checks before it opens.
-	 *
-	 * Both are kept: the hide covers an inline peer or an overlay that is already
-	 * open, the flag covers one that has not fired yet.
-	 */
 	function hideConnectedOnPage(host) {
 		const sup = host.getAttribute('data-esf-conn-suppress');
 		if (!sup) return;
 		sup.split(',').map(s => s.trim()).filter(Boolean).forEach(id => {
 			document.querySelectorAll('[data-esf-id="' + id + '"]').forEach(el => {
-				// Hide the mounted host, its bootstrap, or any open overlay/bar.
 				const wrap = el.closest && el.closest('.esf-popup-overlay, .esf-ribbon, .esf-slide-in');
 				(wrap || el).style.display = 'none';
-				// Disarm anything not yet fired, including this element's own
-				// bootstrap sibling when we matched the template's inner host.
 				el.setAttribute('data-esf-conn-silenced', '1');
 				document.querySelectorAll(
 					'.esf-popup-auto-bootstrap[data-esf-id="' + id + '"],' +
@@ -915,13 +567,10 @@
 		});
 	}
 
-	/** Has a peer on this page silenced this auto shell since it was armed? */
 	function isConnSilenced(boot) {
 		return !!boot && boot.getAttribute('data-esf-conn-silenced') === '1';
 	}
 
-	// Replace mode: show the author's [data-esf-subscribed] block instead of
-	// the form. Returns true when such a block exists.
 	function showSubscribedState(shadow) {
 		const el = shadow.querySelector('[data-esf-subscribed], [data-osf-subscribed]');
 		if (!el) return false;
@@ -937,8 +586,6 @@
 		if (host._osEngageHooked) return;
 		host._osEngageHooked = true;
 		function onFirstInput(e) {
-			// The hidden honeypot is never touched by a real human; ignore it so
-			// browser autofill or a bot write can't register a phantom engagement.
 			const t = e.target;
 			if (t && t.name === 'esf_hp') return;
 			form.removeEventListener('input', onFirstInput, true);
@@ -947,14 +594,8 @@
 			engagedHosts.add(host);
 			sendEvent(host, 'es_engage');
 		}
-		// Capture phase, self-removing after the first real interaction.
-		// `input` covers typing; `change` covers checkbox / radio / select
-		// where `input` may not fire.
 		form.addEventListener('input', onFirstInput, true);
 		form.addEventListener('change', onFirstInput, true);
-		// Remember the step after each interaction, once the page has redrawn
-		// (a Next click moves the slide). Read by fireDropoffs when the host
-		// has left the page, e.g. a popup closed before the tab was.
 		function rememberStep() {
 			setTimeout(function () {
 				const s = esVisibleStep(host.shadowRoot || host);
@@ -966,9 +607,7 @@
 	}
 
 	function observeViewport(host) {
-		// Fire a "view" event the first time at least 10% of the host is visible.
 		if (!('IntersectionObserver' in window)) {
-			// No viewport API — best-effort: count as viewed immediately.
 			fireEvent(host, 'es_view');
 			return;
 		}
@@ -985,19 +624,6 @@
 		obs.observe(host);
 	}
 
-	// The trap is NOT ASSOCIATED WITH THE FORM AT ALL. No `form` attribute, no
-	// place in the form's subtree, so it does not appear in form.elements.
-	//
-	// That is the whole point, and the previous attempt missed it. Moving the
-	// field to a sibling and tying it back with `form="…"` reads like taking it
-	// out of the form, but the attribute puts it straight back into the form's
-	// own list of controls — which is the list a browser autofills from, not the
-	// DOM subtree. So the field went on being cross-filled for real visitors, and
-	// real people went on being filed as bots.
-	//
-	// handleSubmit reads the value off `form._esHoneypot` and appends it by hand,
-	// which we can do because we build the submission ourselves and never let the
-	// browser serialise the form. Nothing is lost by cutting the association.
 	function injectHoneypot(form) {
 		if (form._esHoneypotInjected) return;
 		form._esHoneypotInjected = true;
@@ -1011,20 +637,10 @@
 		input.autocomplete = 'off';
 		wrap.appendChild(input);
 		form._esHoneypot = input;
-		// The trap's timing starts the first time the visitor touches the form:
-		// the server writes down ITS time then, signed (audit S6). The trap
-		// field sits outside the form, so a bot filling it does not start this.
 		form.addEventListener('focusin', function () { requestStamp(form); }, { capture: true, once: true });
 		(form.parentNode || form).insertBefore(wrap, form.nextSibling);
 	}
 
-	/* ES-STAMP-START: read by tests/js/stamp.test */
-	// A signed note of the server's time, for the spam trap (audit S6). The
-	// browser only carries it: it cannot be edited, and the server times the
-	// submission on its own clock at both ends, so neither a fast phone clock
-	// nor a bot reporting a slow time can move the result. Fetched, not printed
-	// into the page, because a page cache would serve everyone the same one.
-	// One request per form a visitor actually starts, never per view.
 	const STAMP_WAIT_MS = 1500;
 	function requestStamp(form) {
 		if (form._esStampP) return form._esStampP;
@@ -1040,30 +656,20 @@
 			.then(function (j) { return (j && j.data && j.data.stamp) || ''; })
 			.catch(function () { return ''; });
 		form._esStampP = p;
-		// A failed request must not stick: the next attempt asks again.
 		p.then(function (stamp) { if (!stamp && form._esStampP === p) form._esStampP = null; });
 		return p;
 	}
-	// The stamp for a submission, asked for now if nobody touched the form (a
-	// tap on the button alone). Never holds a submission past STAMP_WAIT_MS:
-	// without a stamp the server still takes it, and only a filled trap cares.
 	function stampForSubmit(form) {
 		const p = requestStamp(form);
-		form._esStampP = null; // each submission gets its own
+		form._esStampP = null;
 		return Promise.race([p, new Promise(function (r) { setTimeout(function () { r(''); }, STAMP_WAIT_MS); })]);
 	}
-	/* ES-STAMP-END */
 
 	function hasInlineThankYou(shadow) {
 		return !!shadow.querySelector('[data-esf-thankyou], [data-esf-success], [data-osf-thankyou], [data-osf-success]');
 	}
 
-	// Every mutation is snapshotted onto `shadow._esThankYouUndo` first, so an
-	// OPTIMISTIC reveal (shown before the server has answered) can be rolled back
-	// if the submission turns out to have failed. Add a mutation here and you must
-	// snapshot it, or the undo silently leaves it applied.
 	function showInlineThankYou(shadow) {
-		// Includes the legacy `data-osf-*` markers from pre-rename assets.
 		const el = shadow.querySelector('[data-esf-thankyou], [data-esf-success], [data-osf-thankyou], [data-osf-success]');
 		const form = shadow.querySelector('form');
 		const undo = [];
@@ -1078,10 +684,6 @@
 		}
 		if (!form) { shadow._esThankYouUndo = undo; return; }
 		if (el && form.contains(el)) {
-			// The thank-you lives INSIDE the form (the common authored pattern, e.g.
-			// the starter markup). Hiding the whole form would hide it too — instead
-			// hide the form's other top-level branches and keep the chain down to the
-			// thank-you visible.
 			Array.prototype.forEach.call(form.children, function (child) {
 				if (!child.contains(el)) { snap(child); child.style.display = 'none'; }
 			});
@@ -1099,9 +701,6 @@
 		shadow._esThankYouUndo = undo;
 	}
 
-	// Put the form back after an optimistic reveal that the server then rejected.
-	// Replays the snapshots in reverse, so a node touched twice lands on the value
-	// it had before the FIRST mutation.
 	function undoInlineThankYou(shadow) {
 		const undo = shadow._esThankYouUndo;
 		if (!undo) return;
@@ -1126,56 +725,19 @@
 		err.textContent = message;
 	}
 
-	// Wipes a message from an earlier attempt without adding the element when
-	// there has never been one.
 	function clearInlineError(form) {
 		const err = form.querySelector('.esf-error');
 		if (err) err.textContent = '';
 	}
 
-	// An email a message could actually be delivered to: an @, and a domain whose
-	// final label is at least two characters, starts with a letter and ends with
-	// a letter or digit ("com", "uk", "xn--p1ai" — but not "c" and not "123").
-	//
-	// We check this ourselves rather than leaning on the browser, for two
-	// reasons. Authored markup carries `novalidate` (the authoring spec asks for
-	// it), so the browser checks nothing on submit. And even with validation on,
-	// `type="email"` accepts "name@examle" — a domain with no dot is legal by the
-	// RFC and undeliverable in practice.
-	//
-	// TWIN of ES_Ajax::EMAIL_SHAPE and of the SaaS's App\Rules\DeliverableEmail
-	// + public/embed/embed.js. Change one and you must change all four, or the
-	// same address is accepted by one client and refused by another.
 	const EMAIL_SHAPE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)*\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])$/;
 
-	// Returns the offending input when the form has an email field the visitor
-	// has not filled in properly, or null when there is nothing to complain
-	// about (including a form-less asset, which has no email field at all).
 	function findBadEmailInput(form) {
-		// The other usual names count too, as they do on the server (EmailField /
-		// ES_Field_Matcher::EMAIL_NAME_VARIANTS). A `your-email` text box used to
-		// skip this check and leave a mistyped address to the server (SER-1430).
 		const input = form.querySelector('input[name="email"], input[name="your-email"], input[name="email_address"], input[name="user_email"], input[name="e-mail"], input[type="email"]');
 		if (!input) return null;
 		return EMAIL_SHAPE.test(String(input.value || '').trim()) ? null : input;
 	}
 
-	// The first `required` control the visitor has left empty, or null when the
-	// form is complete. Returned with the message to show, because "tick the box"
-	// and "fill this in" are different sentences, and a visitor who skipped a
-	// consent line needs the first one.
-	//
-	// We check this ourselves for the same reason we check the email ourselves:
-	// authored markup carries `novalidate` (the authoring spec asks for it), so
-	// the browser enforces nothing on submit. Without this sweep `required` was
-	// decoration — a consent checkbox could be left unticked and the lead still
-	// saved, with the consent then recorded as refused (SER-853 logs that state
-	// honestly, which made the hole visible without closing it).
-	//
-	// The email field is skipped deliberately: findBadEmailInput has the better
-	// message for it, and an empty address fails that check anyway.
-	//
-	// TWIN of the SaaS public/embed/embed.js — change one, change both.
 	function findUnfilledRequired(form) {
 		const controls = form.querySelectorAll('input[required], select[required], textarea[required]');
 		for (let i = 0; i < controls.length; i++) {
@@ -1190,7 +752,6 @@
 				return { el: el, message: 'Please tick the box to continue.' };
 			}
 
-			// One checked radio satisfies every member of the group.
 			if (type === 'radio') {
 				if (!el.name) continue;
 				const group = form.querySelectorAll('input[type="radio"][name="' + escapeAttrValue(el.name) + '"]');
@@ -1207,27 +768,11 @@
 		return null;
 	}
 
-	// Just enough escaping for a name= about to go inside an attribute selector.
-	// Field names are author-controlled, not visitor-controlled, so this stops a
-	// stray quote breaking the selector; it is not a security boundary.
 	function escapeAttrValue(value) {
 		const BACKSLASH = String.fromCharCode(92);
 		return String(value).split(BACKSLASH).join(BACKSLASH + BACKSLASH).split('"').join(BACKSLASH + '"');
 	}
 
-	// A field with several answers must reach the server as a list.
-	//
-	// The server keeps only the LAST value for a repeated plain name, so three
-	// ticked boxes that all share name="colors" arrived as one answer. A name
-	// ending in [] arrives as a list. So before posting, any name that really
-	// carries several answers is re-sent as name[]:
-	//   - two or more CHECKED checkboxes share a name that does not end in [], or
-	//   - a select[multiple] has two or more selected options and no [].
-	// Names already ending in [] are left alone. The plain key is deleted and
-	// every value FormData held for it is appended under name[] instead.
-	//
-	// TWIN of the same helper in the SaaS public/embed/embed.js. Keep them
-	// identical, so a form behaves the same whichever one takes the submission.
 	function sendMultiValueNamesAsLists(form, data) {
 		const counts = {};
 		form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (el) {
@@ -1256,26 +801,13 @@
 		const btn = form.querySelector('button[type="submit"], input[type="submit"]');
 		if (btn) btn.disabled = isSubmitting;
 		form.classList.toggle('esf-submitting', isSubmitting);
-		// The real re-entry guard. Disabling the button is not enough on its own:
-		// pressing Enter in a text field still fires submit in several browsers
-		// even when the submit button is disabled, and an asset may have no submit
-		// button we can find. handleSubmit checks this flag before doing anything.
 		form._esBusy = isSubmitting;
 	}
 
 	async function handleSubmit(host, shadow, form, e) {
 		e.preventDefault();
-		// Already in flight — ignore. Cleared only when a submission FAILS, so a
-		// successful one can never be sent twice. Checked before the preview
-		// branch too, so a double-click in the editor behaves like the real thing.
 		if (form._esBusy) return;
 
-		// In preview mode, simulate the success state visually and DON'T POST —
-		// unless the "Submit for real" preview toggle is on, in which case we fall
-		// through to the real submission path (creates a lead, pushes to the CRM).
-		// The same busy beat as live, so what the author feels here is what a
-		// visitor gets. Without it the preview is instant in a way the real thing
-		// never is, and the author tunes their copy against a lie.
 		if (window.EmblemStudio && window.EmblemStudio.preview && !window.EmblemStudio.previewSend) {
 			const mode = host.getAttribute('data-esf-success-mode') || 'inline_state';
 			setSubmittingState(form, true);
@@ -1289,26 +821,16 @@
 			}, SUBMIT_BEAT_MS);
 			return;
 		}
-		// The author said these fields are required, so they are. `novalidate`
-		// means the browser will not say it for us, and until this check existed
-		// nothing did: a consent checkbox could be skipped and the lead saved
-		// anyway. Runs before the email check so the visitor is told about one
-		// problem at a time, starting with the first field they missed.
 		const missing = findUnfilledRequired(form);
 		if (missing) {
 			showInlineError(form, missing.message);
-			try { missing.el.focus(); } catch (err) { /* not focusable — the message stands on its own */ }
+			try { missing.el.focus(); } catch (err) { }
 			return;
 		}
-		// Nothing leaves the page until the address could actually receive the
-		// thing the visitor just asked for. Checked here, before the POST, so a
-		// typo is a correction rather than a silent dead lead — and so the
-		// optimistic thank-you below is never shown for a submission we already
-		// know the server will refuse.
 		const badEmail = findBadEmailInput(form);
 		if (badEmail) {
 			showInlineError(form, 'Please enter a valid email address.');
-			try { badEmail.focus(); } catch (err) { /* not focusable — the message stands on its own */ }
+			try { badEmail.focus(); } catch (err) { }
 			return;
 		}
 		clearInlineError(form);
@@ -1323,41 +845,16 @@
 		data.append('action', 'es_submit');
 		data.append('form_id', formId);
 
-		// The trap, appended by hand: it is deliberately not form-associated (see
-		// injectHoneypot), so FormData above cannot see it. Its timing is the
-		// stamp, added just before sending.
 		if (form._esHoneypot) data.append('esf_hp', form._esHoneypot.value);
 		const stampP = stampForSubmit(form);
 		data.append('post_id', postId);
 		data.append('vid', esVisitorId());
 
-		// Tag the conversion with the shell type so reports can split by it.
 		const shell = host.getAttribute('data-esf-type') || 'inline';
 		data.append('type', shell);
 
-		// "Submit for real" from the Design-tab previewer: a genuine submission
-		// (lead saved, CRM push) but flagged so the server keeps it OUT of the
-		// conversion stats. Only meaningful for logged-in editors (the server
-		// re-checks the capability before honoring it).
 		if (window.EmblemStudio && window.EmblemStudio.preview) data.append('es_preview', '1');
 
-		// OPTIMISTIC THANK-YOU, after a short deliberate beat. The reveal is NOT
-		// waiting on the network — the request is already on its way — but it does
-		// not happen on the same frame as the click either. A state change under
-		// ~200ms reads as a glitch rather than a response: the form simply vanishes
-		// and nothing appears to have been processed. So the button holds its busy
-		// state for SUBMIT_BEAT_MS and the thank-you takes over after it, giving the
-		// sequence people expect (clicked, working, done) at a pace that never
-		// varies with the connection.
-		//
-		// Only for `inline_state`: the other two modes need something the browser
-		// doesn't have yet — the redirect URL, or the custom message text — both of
-		// which come back with the response. And only when the asset actually has a
-		// thank-you element, otherwise the "reveal" is just the form vanishing with
-		// nothing in its place.
-		//
-		// If the POST fails we cancel or undo the reveal and show the error, so a
-		// lost lead is still reported rather than papered over by a thank-you.
 		const successMode = host.getAttribute('data-esf-success-mode') || 'inline_state';
 		const optimistic = successMode === 'inline_state' && hasInlineThankYou(shadow);
 		let revealed = false;
@@ -1369,18 +866,12 @@
 				showInlineThankYou(shadow);
 			}, SUBMIT_BEAT_MS);
 		}
-		// Undo whichever stage the reveal reached: still pending (cancel the timer,
-		// so a fast failure never flashes a thank-you it already knows is wrong), or
-		// already on screen (put the form back).
 		const abandonReveal = function () {
 			if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
 			if (revealed) { undoInlineThankYou(shadow); revealed = false; }
 		};
 
-		// Silently enrich with IP-derived country/state/city/timezone, but only
-		// for keys not already present (a visible input always wins). This step
-		// is best-effort — any error here MUST NOT block submission.
-		try { await enrichWithGeo(data); } catch (e) { /* swallow */ }
+		try { await enrichWithGeo(data); } catch (e) { }
 		const stamp = await stampP;
 		if (stamp) data.append('es_stamp', stamp);
 
@@ -1394,15 +885,10 @@
 					setSubmittingState(form, false);
 					return;
 				}
-				// Converted — exclude this host from the page-leave drop-off sweep,
-				// and record the subscription (cookie + hide same-page peers).
 				host._osSubmitted = true;
 				markSubscribed(host);
 				const d = json.data || {};
 				if (d.mode === 'redirect' && d.redirect_url) {
-					// Only ever navigate to a web page. A stored `javascript:` or
-					// `data:` value would otherwise run on the visitor's page; if
-					// it isn't http(s), fall through to the thank-you state.
 					let target = null;
 					try { target = new URL(String(d.redirect_url), window.location.href); } catch (e) { target = null; }
 					if (target && (target.protocol === 'http:' || target.protocol === 'https:')) {
@@ -1410,10 +896,6 @@
 						return;
 					}
 				}
-				// When the reveal is optimistic it is already on screen, or is about
-				// to be by its own timer — either way leave it alone. Showing it
-				// again would re-snapshot the (already mutated) DOM as the undo
-				// baseline, and firing early would defeat the beat.
 				if (!optimistic) showInlineThankYou(shadow);
 			})
 			.catch(() => {
@@ -1423,23 +905,12 @@
 			});
 	}
 
-	// Preview-only: the Design-tab preview is a sandbox. By default the form does
-	// NOT enforce required fields (free click-through), and submitting never POSTs.
-	// The "Enforce required" / "Submit for real" toggles flip native validation
-	// back on (and `previewSend` lets the submit hit the real endpoint). Live
-	// pages never reach this — `preview` is false there.
 	function applyPreviewFormMode(form) {
 		if (!(window.EmblemStudio && window.EmblemStudio.preview)) return;
 		const es = window.EmblemStudio;
 		form.noValidate = !(es.previewValidate || es.previewSend);
 	}
 
-	// --- A/B variant cookie persistence ---------------------------------------
-	// The server picks the variant and stamps data-esf-variant="A"/"B" on every
-	// host / trigger / bootstrap element for forms with a running A/B test. We
-	// mirror that pick into a cookie so the next page load reads it server-side
-	// and serves the same variant. One letter; no PII; 30-day TTL. Same legal
-	// category as the existing esf_visitor cookie (strictly necessary).
 	function persistVariantCookies() {
 		const els = document.querySelectorAll('[data-esf-id][data-esf-variant]');
 		const seen = {};
@@ -1450,21 +921,12 @@
 			const key = 'esf_ab_' + formId;
 			if (seen[key]) return;
 			seen[key] = 1;
-			// Only write if not already set to the same value — avoids
-			// touching the cookie store on every render.
 			const current = (document.cookie.match(new RegExp('(?:^|; )' + key + '=([^;]*)')) || [])[1];
 			if (current && current.toUpperCase() === slot) return;
 			document.cookie = key + '=' + slot + '; max-age=2592000; path=/; samesite=lax';
 		});
 	}
 
-	// Replace mode (already-subscribed visitor): inline checks this on its own
-	// host at mount time (see init() below), but a click/auto popup, ribbon, or
-	// slide-in doesn't have a live host to check until it actually opens — the
-	// mark lives on the host baked inside its <template>. This peeks at that
-	// template so the trigger/bootstrap arm step can skip page_view for an
-	// already-subscribed visitor too, matching inline instead of counting a
-	// view for content that's semantically already been replaced.
 	function isTemplateHostSubscribed(templateSelector) {
 		const tpl = document.querySelector(templateSelector);
 		const host = tpl && tpl.content && tpl.content.querySelector('.esf-host');
@@ -1474,16 +936,12 @@
 	function init() {
 		persistVariantCookies();
 
-		// Inline forms: mount immediately, fire page_view, observe viewport for view.
 		document.querySelectorAll('.esf-host[data-esf-id]:not(.esf-popup-host)').forEach(host => {
 			if (host._osMounted || host.shadowRoot) return;
 			host._osMounted = true;
 			const shadow = mount(host);
 			if (!shadow) return;
 
-			// Replace mode: server flagged this visitor as already subscribed.
-			// Show the [data-esf-subscribed] block instead of the form and skip
-			// all tracking / submit wiring.
 			if (host.getAttribute('data-esf-subscribed') === '1') {
 				showSubscribedState(shadow);
 				return;
@@ -1492,8 +950,6 @@
 			fireEvent(host, 'es_page_view');
 			observeViewport(host);
 			fetchGeo();
-			// Click tracking is wired even when there's no <form> — the
-			// container may be a pure click-through CTA with no inputs.
 			attachClickTracking(host, shadow);
 
 			const form = shadow.querySelector('form');
@@ -1504,16 +960,11 @@
 			form.addEventListener('submit', e => handleSubmit(host, shadow, form, e));
 		});
 
-		// Click-popup triggers: fire page_view on render, observe trigger for trigger_view,
-		// on click build the modal overlay, mount form, fire view, wire submit.
 		document.querySelectorAll('.esf-popup-trigger[data-esf-popup-id]').forEach(trigger => {
 			if (trigger._osPopupHooked) return;
 			trigger._osPopupHooked = true;
 
 			const popupId = trigger.getAttribute('data-esf-popup-id');
-			// Replace mode: an already-subscribed visitor doesn't count as a view —
-			// same rule as inline, just checked on the template since there's no
-			// live host to read yet (see isTemplateHostSubscribed above).
 			if (!isTemplateHostSubscribed('template.esf-popup-data[data-esf-popup-id="' + popupId + '"]')) {
 				fetchGeo();
 				fireEvent(trigger, 'es_page_view');
@@ -1525,31 +976,21 @@
 				openPopup(popupId);
 			});
 
-			// Design-tab preview: open immediately, same as popup-auto/ribbon/slide-in —
-			// there's no real visitor to click the trigger, so a click-popup asset would
-			// otherwise never render in the previewer if this markup is ever reused there.
 			if (window.EmblemStudio && window.EmblemStudio.preview) openPopup(popupId);
 		});
 
-		// Auto popups: each bootstrap element carries trigger config + a sibling
-		// <template> with the host. Fire page_view on render, then wire whichever
-		// triggers are enabled; the first one to fire opens the modal.
 		document.querySelectorAll('.esf-popup-auto-bootstrap[data-esf-popup-id]').forEach(boot => {
 			if (boot._osAutoHooked) return;
 			boot._osAutoHooked = true;
 			initAutoPopup(boot);
 		});
 
-		// Ribbons: same trigger model as auto popups, but instead of opening a
-		// modal the trigger reveals a fixed-position sticky bar at top or bottom.
 		document.querySelectorAll('.esf-ribbon-bootstrap[data-esf-ribbon-id]').forEach(boot => {
 			if (boot._osRibbonHooked) return;
 			boot._osRibbonHooked = true;
 			initRibbon(boot);
 		});
 
-		// Slide-ins: small corner card. Same trigger model. Slides in from
-		// the matching side; mirrored close button on the opposite corner.
 		document.querySelectorAll('.esf-slide-in-bootstrap[data-esf-slide-in-id]').forEach(boot => {
 			if (boot._osSlideInHooked) return;
 			boot._osSlideInHooked = true;
@@ -1565,36 +1006,17 @@
 		try { config = JSON.parse(boot.getAttribute('data-esf-auto-config') || '{}'); }
 		catch (e) { return; }
 		if (!config) return;
-		// A trigger drives WHEN an auto shell shows on a live page; with none set
-		// it never fires there. But the edit-screen preview renders the shell
-		// immediately (below), so don't bail for a missing trigger in preview —
-		// otherwise a fresh asset whose trigger isn't chosen yet previews blank.
 		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
-		// Honour persistent dismissal — if the visitor closed this popup with
-		// a "don't show again" rule still in effect, skip entirely. This is
-		// real-visitor memory — without the preview exemption, previewing the
-		// asset once (and dismissing it) silently blanks every later preview
-		// until the dismissal window expires.
 		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(popupId, 'popup-auto')) return;
 
-		// Replace mode: an already-subscribed visitor doesn't count as a view.
 		if (!isTemplateHostSubscribed('template.esf-popup-data[data-esf-popup-id="' + popupId + '"]')) {
 			fetchGeo();
 			fireEvent(boot, 'es_page_view');
 		}
 
 		const showClose = config.close_button !== false;
-		// The guard runs at FIRE time, not at arm time. A visitor who subscribes to
-		// a linked form after this trigger was armed has silenced it, and the
-		// trigger has no other way to find out.
 		const fire = (autofired) => isConnSilenced(boot) || openPopup(popupId, {
-			// See openPopup: an exit-intent popup ignores backdrop clicks, because
-			// the gesture that summons it ends near the edge of the screen and the
-			// next stray click lands on the backdrop. That reasoning does not hold
-			// when the exit WINDOW ran out and auto-fire opened this by itself: no
-			// exit gesture happened, the pointer is wherever the visitor left it, so
-			// a backdrop click is a real "no thanks" and closes it like any popup.
 			backdropCloses: config.trigger !== 'exit' || autofired === true,
 			showClose: showClose,
 			onClose: function () {
@@ -1630,12 +1052,6 @@
 				break;
 			}
 			case 'exit': {
-				// Device-appropriate:
-				// - Desktop: cursor leaves viewport at top.
-				// - Mobile/tablet: window blur while page is still visible (URL bar,
-				//   menu, share sheet — anything that pulls focus to browser chrome
-				//   without backgrounding the page).
-				// - Optional: include real tab/app switches via visibilitychange.
 				let fired = false;
 				let expired = false;
 				const onMouseLeave = e => { if (e.clientY <= 0) fireOnce(); };
@@ -1646,18 +1062,12 @@
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
 				};
-				// viaWindow says the exit WINDOW ran out and auto-fire opened this,
-				// rather than the visitor making an exit gesture. The popup shell uses
-				// it to decide whether a backdrop click may close the thing.
 				function fireOnce(viaWindow) {
 					if (fired || expired) return;
 					fired = true;
 					disarm();
 					fire(viaWindow === true);
 				}
-				// Buffer: don't ARM exit-intent until the visitor has been on the page
-				// for exit_buffer_seconds. If they bounce inside that window nothing is
-				// armed — so the shell never opens and no impression (es_view) is logged.
 				const arm = () => {
 					if (fired || expired) return;
 					document.addEventListener('mouseleave', onMouseLeave);
@@ -1666,12 +1076,6 @@
 						document.addEventListener('visibilitychange', onVisibility);
 					}
 				};
-				// Window: the other end of the same idea. exit_window_seconds is how long
-				// after load this trigger stays interested. Past it we stop listening, so
-				// a visitor who leaves late sees nothing — unless exit_window_autofire is
-				// on, in which case the deadline itself opens the shell. 0 = no limit.
-				// Both timers count from load, so a window shorter than the buffer means
-				// the trigger never arms at all (autofire still fires).
 				const exitWindowMs = Math.max(0, +config.exit_window_seconds || 0) * 1000;
 				if (exitWindowMs > 0) {
 					setTimeout(() => {
@@ -1706,63 +1110,8 @@
 		obs.observe(trigger);
 	}
 
-	/* ── THE "AUTO" CLOSE BUTTON ───────────────────────────────────────────
-	   TWIN of esAutoCloseCss() in the SaaS public/embed/embed.js, verbatim, so
-	   an asset set to Auto looks the same on every site (SER-1403). Change both.
-
-	   The same button as 'light' and 'dark' — faint ring, see-through
-	   middle, stroked X — with the one difference that its colour is worked
-	   out from what is behind it instead of chosen in advance.
-
-	   IT EXISTS BECAUSE SOME BACKGROUNDS MOVE. A ribbon whose slides swap
-	   between a pale ground and a near-black one every ten seconds has no
-	   right answer among the fixed themes: whichever you pick is wrong for
-	   half the cycle.
-
-	   HOW. backdrop-filter INVERTS whatever sits behind the button, so the
-	   element becomes near black over a light asset and near white over a
-	   dark one. grayscale strips the hue, so the button is only ever black
-	   or white and a green ribbon cannot hand back a magenta one. contrast
-	   pushes it to the ends so it is a definite tone rather than a wash.
-
-	   THE SHAPE COMES FROM THE MASK, AND SO DOES THE TRANSLUCENCY. Three
-	   layers: the X, the ring, the disc. Each carries the SAME alpha the
-	   fixed themes use for that part (0.70, 0.15, 0.10), and because the
-	   element being masked is the inverted backdrop, a layer at 15% alpha
-	   puts 15% of the inverted colour over 85% of the real background. That
-	   is what keeps the middle see-through and the ring a hairline, rather
-	   than stamping a solid disc over the asset.
-
-	   TWO THINGS THAT LOOK RIGHT AND ARE NOT, both measured at 1.00:1
-	   before this version was arrived at. An <svg> glyph with
-	   mix-blend-mode does NOT blend against the filtered element; it blends
-	   against the raw background, so over a dark ground the button turned
-	   white and the glyph turned white with it. A nested backdrop-filter
-	   does not double-invert either, because it re-reads the same backdrop
-	   root rather than its parent's result. Neither is worth trying again.
-
-	   MEASURED, Chromium, X against the disc behind it: white 7.6:1, black
-	   9.0:1, pale red 7.0:1, mint 7.3:1, near-black red 7.5:1, dark green
-	   7.0:1. The fixed themes beat that on the ground they were picked for
-	   and disappear on the other one; this holds everywhere.
-
-	   TWO GROUNDS IT CANNOT DO, and they are exactly why 'light' and 'dark'
-	   are still offered. A background within a few percent of mid grey,
-	   because inverting mid grey returns mid grey, and no amount of
-	   contrast fixes it: contrast pivots on the middle. And a busy photo
-	   directly under the corner, where the inversion changes across the
-	   button. Pick a fixed theme for those two.
-
-	   The whole block sits inside @supports. A browser without masks or
-	   backdrop-filter matches none of it and renders 'auto' as the light
-	   theme, which is the base rule, so there is no state where the button
-	   disappears.
-
-	   GEOMETRY IS TIED TO THE 26px BUTTON. The circle stops and the viewBox
-	   below are that size. Change the button and change these with it. */
 	function esAutoCloseCss(scope, btn) {
 		var sel = scope + '[data-esf-close-theme="auto"] ' + btn;
-		// Alphas match the fixed themes part for part: X 0.70, ring 0.15, fill 0.10.
 		var cross = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'><path d='M9.5 9.5l7 7M16.5 9.5l-7 7' stroke='rgba(0,0,0,0.7)' stroke-width='1.6' stroke-linecap='round' fill='none'/></svg>\")";
 		var ring = 'radial-gradient(circle at 50% 50%,transparent 0 11.6px,rgba(0,0,0,.15) 11.9px 12.5px,transparent 12.8px)';
 		var fill = 'radial-gradient(circle at 50% 50%,rgba(0,0,0,.10) 0 11.8px,transparent 12.1px)';
@@ -1776,18 +1125,11 @@
 			'-webkit-mask-size:' + sizes + '!important;mask-size:' + sizes + '!important;' +
 			'-webkit-mask-repeat:no-repeat!important;mask-repeat:no-repeat!important;' +
 			'-webkit-mask-position:center,center,center!important;mask-position:center,center,center!important;}' +
-			// The real glyph stays in the DOM for assistive tech and for the
-			// no-@supports fallback. Here the mask draws it, so hide the duplicate.
 			sel + ' svg{display:none!important;}' +
-			// The base rule brightens the background on hover, which does nothing
-			// to a masked element. Deepen the inversion instead, so the button
-			// still answers the pointer.
 			sel + ':hover{background:transparent!important;' +
 			'-webkit-backdrop-filter:' + filter(5) + '!important;backdrop-filter:' + filter(5) + '!important;}}';
 	}
 
-	/** Which close-button theme an asset asked for. Anything unrecognised is
-	 *  'light', which is what every asset got before the column existed. */
 	function esCloseTheme(v) {
 		return (v === 'dark' || v === 'auto') ? v : 'light';
 	}
@@ -1796,51 +1138,17 @@
 		if (document.getElementById('esf-popup-styles')) return;
 		const style = document.createElement('style');
 		style.id = 'esf-popup-styles';
-		// `all: revert !important` on the close button neutralises whatever the
-		// host theme has set on <button> selectors so the X stays visible and
-		// looks the same on every site.
 		style.textContent =
 			'.esf-popup-overlay{position:fixed;inset:0;z-index:99999;' +
 			'background:rgba(15,17,21,.55);' +
 			'-webkit-backdrop-filter:blur(8px) saturate(120%);backdrop-filter:blur(8px) saturate(120%);' +
 			'display:flex;justify-content:safe center;align-items:safe center;padding:24px;overflow:auto;' +
 			'animation:esf-popup-fade .18s ease-out both;}' +
-			// Fullscreen mode: kill the backdrop padding so the modal can fill the
-			// viewport edge-to-edge. Modal goes to 100vw/100vh with no rounded
-			// corners, and the content area expands to match.
 			'.esf-popup-overlay[data-fullscreen="1"]{padding:0;}' +
-			// Centering used to be margin:auto on the modal, but a flex item
-			// centered via margin:auto (or via the container's align-items/
-			// justify-content:center) can't be scrolled to its start edge once
-			// it's taller than the overlay — the auto-margin/centering math
-			// eats the space overflow:auto would otherwise turn into scroll
-			// room. `safe center` above is the fix: center when it fits,
-			// fall back to start-aligned (fully scrollable) when it doesn't.
 			'.esf-popup-modal{position:relative;max-width:min(92vw,var(--esf-max-width,720px));margin:0;overflow:visible;' +
 			'background:transparent;animation:esf-popup-rise .22s ease-out both;}' +
 			'.esf-popup-modal[data-fullscreen="1"]{max-width:100vw;width:100vw;height:100vh;border-radius:0;margin:0;}' +
-			// The overlay (not modal/content) is the scroll container for a form
-			// taller than the viewport, so modal/content stay overflow:visible and
-			// a rounded asset's drop-shadow is never clipped. The close button is
-			// pinned to the modal's top-right corner via absolute positioning —
-			// simple and reliable (an earlier sticky/float/height:0 wrapper scheme,
-			// meant to keep it reachable on very tall forms, instead left it
-			// floating below the card on short ones; reverted).
-			//
-			// min-width: the overlay→modal→content→host chain is all shrink-to-fit,
-			// so it has no definite width of its own. A form whose root CSS uses
-			// `container-type: inline-size` (or any container query) ignores its own
-			// contents when sizing, and with nothing above it pinning a width it
-			// collapses to 0 — a blank popup with no error. The floor gives the chain
-			// a definite width to resolve against. min(...,--esf-max-width,...) keeps
-			// the floor from ever exceeding the form's own configured max-width, so
-			// normal forms (always wider than 320px) are visually unchanged.
 			'.esf-popup-content{position:relative;min-width:min(320px,var(--esf-max-width,720px),92vw);overflow:visible;}' +
-			// Minimal scrollbar — thin, no arrow buttons, semi-transparent thumb
-			// so it overlays the form's edge instead of looking like a separate
-			// native widget. No scrollbar-gutter: the slot is taken only when the
-			// form actually scrolls. The close button is JS-offset (see openPopup)
-			// to stay a constant distance from the form whether or not it shows.
 			'.esf-popup-overlay{scrollbar-width:thin;scrollbar-color:rgba(190,190,190,0.5) transparent;}' +
 			'.esf-popup-overlay::-webkit-scrollbar{width:8px;height:8px;}' +
 			'.esf-popup-overlay::-webkit-scrollbar-track{background:transparent;}' +
@@ -1848,13 +1156,6 @@
 			'.esf-popup-overlay::-webkit-scrollbar-thumb:hover{background:rgba(150,150,150,0.5);}' +
 			'.esf-popup-overlay::-webkit-scrollbar-button{display:none;width:0;height:0;}' +
 			'.esf-popup-overlay::-webkit-scrollbar-corner{background:transparent;}' +
-			// A short card in a full-screen popup sits in the MIDDLE, like a normal
-			// popup's. It used to sit hard against the top of the screen (Alex's call,
-			// 22 Sept, item 11 of Catalina's test pass). `safe center` falls back to the
-			// top once the card is taller than the screen, so it still scrolls from its
-			// start. The host stretches across, so a design that fills the screen still
-			// fills it. Full screen still never closes on a click outside: a full-screen
-			// design has no outside, and the choice is the same for both.
 			'.esf-popup-content[data-fullscreen="1"]{height:100vh;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;justify-content:safe center;}' +
 			'.esf-popup-close{all:revert!important;' +
 			'position:absolute!important;top:12px!important;right:12px!important;z-index:10!important;' +
@@ -1870,11 +1171,6 @@
 			'.esf-popup-close:focus-visible{outline:2px solid #2271b1!important;outline-offset:2px!important;}' +
 			'.esf-popup-overlay[data-esf-close-theme="dark"]{--esf-close-fg:rgba(0,0,0,0.55);--esf-close-bg:rgba(0,0,0,0.06);--esf-close-border:rgba(0,0,0,0.12);--esf-close-hover-fg:#1d2327;--esf-close-hover-bg:rgba(0,0,0,0.10);}' +
 			esAutoCloseCss('.esf-popup-overlay', '.esf-popup-close') +
-			// isolation:isolate covers a LIGHT-DOM form (use_shadow_dom off): its
-			// content sits as a plain descendant of .esf-host with no shadow
-			// boundary, so without this an author's own z-index can climb up and
-			// paint over the close button. (A shadow-DOM form gets the same
-			// protection from BOOT_CSS's :host rule instead — see its comment.)
 			'.esf-popup-content .esf-host{display:block;isolation:isolate;}' +
 			'html.esf-popup-open,body.esf-popup-open{overflow:hidden;}' +
 			'@keyframes esf-popup-fade{from{opacity:0}to{opacity:1}}' +
@@ -1882,23 +1178,6 @@
 		document.head.appendChild(style);
 	}
 
-	/* ── THE CARD'S CORNER, FOR A FULL-SCREEN POPUP ────────────────────────
-	   A full-screen modal fills the viewport, so its top-right corner is the
-	   SCREEN's. The close button used to sit there, and on a 480px card that
-	   left it half a screen away from the thing it closes, over the dimmed
-	   page, where neither the light nor the dark style could be seen
-	   (SER-1403, items 10 and 12 of Catalina's Lite test pass).
-
-	   So in full screen the button is placed on the card's own corner,
-	   measured. The card is the union of the asset's visible top-level
-	   elements, which covers the form and a thank-you state that replaces
-	   it. A design that fills the screen has its corner at the screen's, so
-	   it lands exactly where it always did.
-
-	   Returns a rect in viewport coordinates, or null when nothing is drawn
-	   yet (the caller then leaves the button in the modal's corner).
-
-	   TWIN of esCardRect in the SaaS public/embed/embed.js. */
 	function esCardRect(root) {
 		let box = null;
 		for (const el of root.children) {
@@ -1918,7 +1197,6 @@
 		const showClose = opts.showClose !== false;
 		const onCloseCb = opts.onClose;
 
-		// Reuse an existing open overlay for the same popup (idempotent clicks).
 		const existing = document.querySelector('.esf-popup-overlay[data-esf-popup-id="' + popupId + '"]');
 		if (existing) return;
 
@@ -1937,30 +1215,22 @@
 		const content = document.createElement('div');
 		content.className = 'esf-popup-content';
 
-		// Clone the host out of the template (deep clone — includes the JSON payload).
 		const cloned = tpl.content.querySelector('.esf-host');
 		if (!cloned) return;
 		const host = cloned.cloneNode(true);
 		content.appendChild(host);
 
-		// Apply the per-form popup max-width. CSS clamps it to 92vw on small
-		// screens via min(92vw, var(--esf-max-width, 720px)).
 		const maxWidth = parseInt(host.getAttribute('data-esf-max-width'), 10);
 		if (maxWidth > 0) {
 			modal.style.setProperty('--esf-max-width', maxWidth + 'px');
 		}
 
-		// Fullscreen mode overrides the max-width / max-height / padding rules.
 		if (host.getAttribute('data-esf-fullscreen') === '1') {
 			overlay.dataset.fullscreen = '1';
 			modal.dataset.fullscreen = '1';
 			content.dataset.fullscreen = '1';
 		}
 
-		// Close-button theme. 'light' (translucent white) suits a dark form,
-		// 'dark' flips to translucent black for a light one, and 'auto' works
-		// it out from what is actually behind the button, frame by frame —
-		// see esAutoCloseCss for how, and for the two grounds it cannot do.
 		const overlayCloseTheme = esCloseTheme(host.getAttribute('data-esf-close-theme'));
 		if (overlayCloseTheme !== 'light') {
 			overlay.dataset.esfCloseTheme = overlayCloseTheme;
@@ -1975,11 +1245,6 @@
 			closeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12"/></svg>';
 		}
 
-		// Normally the close is a sibling of content (a direct child of modal),
-		// pinned to the modal's top-right corner, which is the card's, because
-		// the modal shrink-wraps it. In full screen the modal is the whole
-		// viewport, so the button goes inside content, the scroll container
-		// there, and syncCloseOffset puts it on the card's corner.
 		modal.appendChild(content);
 		if (closeBtn) (content.dataset.fullscreen === '1' ? content : modal).appendChild(closeBtn);
 		overlay.appendChild(modal);
@@ -1987,17 +1252,8 @@
 		document.documentElement.classList.add('esf-popup-open');
 		document.body.classList.add('esf-popup-open');
 
-		// Keep the close button a constant 12px from the FORM's right edge,
-		// not the card edge. A scrollbar takes layout space and widens the
-		// card, so offset the button by the scrollbar's measured width. The
-		// ResizeObserver re-syncs when a form height change (e.g. a success
-		// state) makes the scrollbar appear or disappear.
-		//
-		// FULL SCREEN is placed differently: see esCardRect. The button lives
-		// inside `content`, which is the scroll container there, so it scrolls
-		// with the card, and its position comes from the card's measured corner.
 		const isFull = content.dataset.fullscreen === '1';
-		let cardRoot = null; // set once the asset is mounted
+		let cardRoot = null;
 		let closeObserver = null;
 		const syncCloseOffset = () => {
 			if (!closeBtn) return;
@@ -2013,18 +1269,10 @@
 					return;
 				}
 			}
-			// content.offsetWidth includes the scrollbar; clientWidth doesn't.
 			const sbw = Math.max(0, content.offsetWidth - content.clientWidth);
-			// setProperty with 'important' is required — the .esf-popup-close
-			// rule sets right:12px!important (theme-proofing), which a plain
-			// inline style cannot override.
 			closeBtn.style.setProperty('right', ( 12 + sbw ) + 'px', 'important');
 		};
 		if (closeBtn && window.ResizeObserver) {
-			// Observe `content`: its width changes precisely when the
-			// scrollbar appears or disappears, whatever the cause. In full
-			// screen, also the host, whose height moves when the card does
-			// (a thank-you state, an image arriving).
 			closeObserver = new ResizeObserver(syncCloseOffset);
 			closeObserver.observe(content);
 			if (isFull) closeObserver.observe(host);
@@ -2040,37 +1288,19 @@
 		}
 		function onKey(e) { if (e.key === 'Escape') close(); }
 		if (closeBtn) closeBtn.addEventListener('click', function () { fireClickEvent(host, '__close__'); close(); });
-		// Backdrop click closes only when there's a close button (otherwise the
-		// author probably wants the popup to stay until form-driven dismissal).
-		//
-		// EXIT-INTENT POPUPS OPT OUT. This one arrives because the visitor moved
-		// the pointer to leave, which is a fast movement toward the edge of the
-		// screen — exactly the gesture most likely to land on the backdrop by
-		// accident a moment later. Dismissing on that stray click throws away the
-		// one chance the popup had, and the frequency cap means they will not see
-		// it again for a day. The X is still there and Escape still works, so
-		// nobody is trapped; they just have to mean it.
-		//
-		// One exception, decided by the caller: an exit-intent popup that opened
-		// because its exit WINDOW ran out, not because of an exit gesture. Nothing
-		// moved the pointer toward the edge, so backdrop clicks close it normally.
 		if (showClose && opts.backdropCloses !== false) {
 			overlay.addEventListener('click', e => { if (e.target === overlay) { fireClickEvent(host, '__backdrop__'); close(); } });
 		}
 		document.addEventListener('keydown', onKey);
 
-		// Mount the form inside the cloned host and wire its submit.
 		const shadow = mount(host);
 		if (!shadow) return;
 		cardRoot = shadow;
-		syncCloseOffset(); // form is in the DOM now — measure real scrollbar state
-		// Images load async and can push the form past the scroll threshold
-		// after open — re-measure as each one finishes.
+		syncCloseOffset();
 		shadow.querySelectorAll('img').forEach(img => {
 			if (!img.complete) img.addEventListener('load', syncCloseOffset);
 		});
-		// Replace mode: an already-subscribed visitor doesn't count as a view.
-		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view'); // form became visible (popup opened)
+		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view');
 		attachClickTracking(host, shadow);
 
 		const form = shadow.querySelector('form');
@@ -2081,14 +1311,6 @@
 		form.addEventListener('submit', e => handleSubmit(host, shadow, form, e));
 	}
 
-	// ============================================================
-	// Ribbon shell
-	// ============================================================
-	// A sticky bar at the top or bottom of the page. Same trigger model as
-	// auto popups (delay / scroll / inactivity / exit). When the trigger
-	// fires, the bar slides into view; close button or successful submit
-	// dismisses it for the rest of the page load.
-
 	function initRibbon(boot) {
 		const ribbonId = boot.getAttribute('data-esf-ribbon-id');
 		if (!ribbonId) return;
@@ -2097,20 +1319,10 @@
 		try { config = JSON.parse(boot.getAttribute('data-esf-auto-config') || '{}'); }
 		catch (e) { return; }
 		if (!config) return;
-		// A trigger drives WHEN an auto shell shows on a live page; with none set
-		// it never fires there. But the edit-screen preview renders the shell
-		// immediately (below), so don't bail for a missing trigger in preview —
-		// otherwise a fresh asset whose trigger isn't chosen yet previews blank.
 		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
-		// Honour persistent dismissal — if the visitor closed this ribbon
-		// with a "don't show again" rule still in effect, skip entirely. This is
-		// real-visitor memory — without the preview exemption, previewing the
-		// asset once (and dismissing it) silently blanks every later preview
-		// until the dismissal window expires.
 		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(ribbonId, 'ribbon')) return;
 
-		// Replace mode: an already-subscribed visitor doesn't count as a view.
 		if (!isTemplateHostSubscribed('template.esf-ribbon-data[data-esf-ribbon-id="' + ribbonId + '"]')) {
 			fetchGeo();
 			fireEvent(boot, 'es_page_view');
@@ -2118,8 +1330,7 @@
 
 		const position  = boot.getAttribute('data-esf-position') === 'bottom' ? 'bottom' : 'top';
 		const showClose = config.close_button !== false;
-		const sticky    = config.sticky !== false; // default true
-		// Silenced by a linked form the visitor submitted after this was armed.
+		const sticky    = config.sticky !== false;
 		const fire = () => isConnSilenced(boot) || openRibbon(ribbonId, position, {
 			showClose: showClose,
 			sticky: sticky,
@@ -2166,18 +1377,12 @@
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
 				};
-				// viaWindow says the exit WINDOW ran out and auto-fire opened this,
-				// rather than the visitor making an exit gesture. The popup shell uses
-				// it to decide whether a backdrop click may close the thing.
 				function fireOnce(viaWindow) {
 					if (fired || expired) return;
 					fired = true;
 					disarm();
 					fire(viaWindow === true);
 				}
-				// Buffer: don't ARM exit-intent until the visitor has been on the page
-				// for exit_buffer_seconds. If they bounce inside that window nothing is
-				// armed — so the shell never opens and no impression (es_view) is logged.
 				const arm = () => {
 					if (fired || expired) return;
 					document.addEventListener('mouseleave', onMouseLeave);
@@ -2186,12 +1391,6 @@
 						document.addEventListener('visibilitychange', onVisibility);
 					}
 				};
-				// Window: the other end of the same idea. exit_window_seconds is how long
-				// after load this trigger stays interested. Past it we stop listening, so
-				// a visitor who leaves late sees nothing — unless exit_window_autofire is
-				// on, in which case the deadline itself opens the shell. 0 = no limit.
-				// Both timers count from load, so a window shorter than the buffer means
-				// the trigger never arms at all (autofire still fires).
 				const exitWindowMs = Math.max(0, +config.exit_window_seconds || 0) * 1000;
 				if (exitWindowMs > 0) {
 					setTimeout(() => {
@@ -2213,29 +1412,17 @@
 		const style = document.createElement('style');
 		style.id = 'esf-ribbon-styles';
 		style.textContent =
-			// Transparent positioning wrapper — the author's form provides all
-			// visuals (background, padding, max-width, etc.). For sticky ribbons,
-			// body padding is applied dynamically in openRibbon() so page content
-			// pushes down by the ribbon's actual height instead of being overlaid.
 			'.esf-ribbon{position:fixed;left:0;right:0;z-index:99998;' +
 			'box-sizing:border-box;animation:esf-ribbon-in .5s ease-out both;}' +
 			'.esf-ribbon[data-position="top"]{top:0;}' +
 			'.esf-ribbon[data-position="bottom"]{bottom:0;animation-name:esf-ribbon-in-bottom;}' +
-			// Sit BELOW the WP admin bar (32px on desktop, 46px on mobile) when
-			// it\'s present and the ribbon is sticky at the top of the viewport.
 			'body.admin-bar .esf-ribbon[data-sticky="1"][data-position="top"]{top:32px;}' +
 			'@media screen and (max-width:782px){' +
 			'body.admin-bar .esf-ribbon[data-sticky="1"][data-position="top"]{top:46px;}' +
 			'}' +
-			// Non-sticky ribbon: scrolls with the page. Inserted at the top of
-			// the body (or end for position=bottom) and positioned in flow,
-			// not fixed. No body padding push needed — it takes its own space.
 			'.esf-ribbon[data-sticky="0"]{position:relative;top:auto;bottom:auto;' +
 			'animation-name:esf-ribbon-fade;}' +
-			// isolation:isolate — see the identical comment on the popup's .esf-host rule.
 			'.esf-ribbon .esf-host{display:block;isolation:isolate;}' +
-			// Close button: floats over the ribbon at top-right of the viewport.
-			// all:revert + !important neutralises theme button styles.
 			'.esf-ribbon-close{all:revert!important;' +
 			'position:absolute!important;top:12px!important;right:12px!important;z-index:2!important;' +
 			'width:26px!important;height:26px!important;min-width:0!important;min-height:0!important;' +
@@ -2260,10 +1447,9 @@
 		if (!ribbonId) return;
 		opts = opts || {};
 		var showClose = opts.showClose !== false;
-		var sticky    = opts.sticky !== false; // default: sticky
+		var sticky    = opts.sticky !== false;
 		var onClose   = opts.onClose;
 
-		// Idempotent: don't spawn a second ribbon for the same form on the same page.
 		if (document.querySelector('.esf-ribbon[data-esf-ribbon-id="' + ribbonId + '"]')) return;
 
 		const tpl = document.querySelector('template.esf-ribbon-data[data-esf-ribbon-id="' + ribbonId + '"]');
@@ -2297,21 +1483,12 @@
 			ribbon.appendChild(closeBtn);
 		}
 
-		// Where to insert:
-		//   sticky top:     anywhere is fine (position:fixed); use body end so it's late in z-order
-		//   sticky bottom:  same
-		//   non-sticky top: prepend to body so it's at the very top of document flow
-		//   non-sticky btm: append to body so it lands at the very end
 		if (!sticky && position !== 'bottom') {
 			document.body.insertBefore(ribbon, document.body.firstChild);
 		} else {
 			document.body.appendChild(ribbon);
 		}
 
-		// Body padding push — only for sticky ribbons. Non-sticky lives in
-		// document flow and naturally occupies its own space. The transition
-		// makes the page content slide down to match the ribbon sliding in
-		// (and back up when it closes) over the same 0.5s window.
 		const padProp = position === 'bottom' ? 'paddingBottom' : 'paddingTop';
 		const originalPad = document.body.style[padProp];
 		const originalTransition = document.body.style.transition;
@@ -2324,8 +1501,6 @@
 				if (h === ribbonHeightApplied) return;
 				ribbonHeightApplied = h;
 				document.body.style[padProp] = h + 'px';
-				// A sticky BOTTOM ribbon also lifts any slide-in corner card by its
-				// height (published as a CSS var) so the two never overlap.
 				if (position === 'bottom') document.documentElement.style.setProperty('--esf-ribbon-bottom-h', h + 'px');
 			}
 			applyPad();
@@ -2338,12 +1513,9 @@
 		}
 
 		function close() {
-			// Animate ribbon out in the direction it came from, while body
-			// padding eases back to zero — both over the same 0.5s.
 			ribbon.style.transition = 'transform 0.5s ease-out';
 			ribbon.style.transform = position === 'bottom' ? 'translateY(100%)' : 'translateY(-100%)';
 			if (sticky) document.body.style[padProp] = originalPad || '';
-			// Let any lifted slide-in ease back down as the bottom ribbon leaves.
 			if (sticky && position === 'bottom') document.documentElement.style.setProperty('--esf-ribbon-bottom-h', '0px');
 			setTimeout(function () {
 				ribbon.remove();
@@ -2352,14 +1524,11 @@
 				if (typeof onClose === 'function') onClose();
 			}, 500);
 		}
-		// No Esc-to-close: a ribbon is a non-modal banner, not a modal dialog.
-		// Esc closing it would surprise a visitor pressing Esc for another reason.
 		if (closeBtn) closeBtn.addEventListener('click', function () { fireClickEvent(host, '__close__'); close(); });
 
 		const shadow = mount(host);
 		if (!shadow) return;
-		// Replace mode: an already-subscribed visitor doesn't count as a view.
-		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view'); // form became visible (ribbon revealed)
+		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view');
 		attachClickTracking(host, shadow);
 
 		const form = shadow.querySelector('form');
@@ -2370,13 +1539,6 @@
 		form.addEventListener('submit', e => handleSubmit(host, shadow, form, e));
 	}
 
-	// ============================================================
-	// Slide-in shell
-	// ============================================================
-	// A small fixed-position card that slides in from the matching side of
-	// the screen (bottom-right corner → slides in from the right). Close
-	// button is mirrored to the opposite top corner of the card.
-
 	function initSlideIn(boot) {
 		const slideInId = boot.getAttribute('data-esf-slide-in-id');
 		if (!slideInId) return;
@@ -2385,18 +1547,10 @@
 		try { config = JSON.parse(boot.getAttribute('data-esf-auto-config') || '{}'); }
 		catch (e) { return; }
 		if (!config) return;
-		// A trigger drives WHEN an auto shell shows on a live page; with none set
-		// it never fires there. But the edit-screen preview renders the shell
-		// immediately (below), so don't bail for a missing trigger in preview —
-		// otherwise a fresh asset whose trigger isn't chosen yet previews blank.
 		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
-		// Real-visitor dismissal memory — without the preview exemption,
-		// previewing the asset once (and dismissing it) silently blanks every
-		// later preview until the dismissal window expires.
 		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(slideInId, 'slide-in')) return;
 
-		// Replace mode: an already-subscribed visitor doesn't count as a view.
 		if (!isTemplateHostSubscribed('template.esf-slide-in-data[data-esf-slide-in-id="' + slideInId + '"]')) {
 			fetchGeo();
 			fireEvent(boot, 'es_page_view');
@@ -2404,7 +1558,6 @@
 
 		const corner    = boot.getAttribute('data-esf-corner') === 'bottom-left' ? 'bottom-left' : 'bottom-right';
 		const showClose = config.close_button !== false;
-		// Silenced by a linked form the visitor submitted after this was armed.
 		const fire = () => isConnSilenced(boot) || openSlideIn(slideInId, corner, {
 			showClose: showClose,
 			onClose: function () {
@@ -2450,18 +1603,12 @@
 					window.removeEventListener('blur', onBlur);
 					document.removeEventListener('visibilitychange', onVisibility);
 				};
-				// viaWindow says the exit WINDOW ran out and auto-fire opened this,
-				// rather than the visitor making an exit gesture. The popup shell uses
-				// it to decide whether a backdrop click may close the thing.
 				function fireOnce(viaWindow) {
 					if (fired || expired) return;
 					fired = true;
 					disarm();
 					fire(viaWindow === true);
 				}
-				// Buffer: don't ARM exit-intent until the visitor has been on the page
-				// for exit_buffer_seconds. If they bounce inside that window nothing is
-				// armed — so the shell never opens and no impression (es_view) is logged.
 				const arm = () => {
 					if (fired || expired) return;
 					document.addEventListener('mouseleave', onMouseLeave);
@@ -2470,12 +1617,6 @@
 						document.addEventListener('visibilitychange', onVisibility);
 					}
 				};
-				// Window: the other end of the same idea. exit_window_seconds is how long
-				// after load this trigger stays interested. Past it we stop listening, so
-				// a visitor who leaves late sees nothing — unless exit_window_autofire is
-				// on, in which case the deadline itself opens the shell. 0 = no limit.
-				// Both timers count from load, so a window shorter than the buffer means
-				// the trigger never arms at all (autofire still fires).
 				const exitWindowMs = Math.max(0, +config.exit_window_seconds || 0) * 1000;
 				if (exitWindowMs > 0) {
 					setTimeout(() => {
@@ -2497,22 +1638,13 @@
 		const style = document.createElement('style');
 		style.id = 'esf-slide-in-styles';
 		style.textContent =
-			// Card itself — fixed position in the chosen corner. max-width is
-			// driven by the form's --esf-max-width custom property (set in JS
-			// from the data attribute) with a 92vw fallback for mobile.
 			'.esf-slide-in{position:fixed;bottom:calc(20px + var(--esf-ribbon-bottom-h, 0px));transition:bottom .5s ease-out;z-index:99998;' +
 			'max-width:min(92vw,var(--esf-max-width,380px));' +
-			// Same container-query collapse guard as the popup (see ensurePopupStyles):
-			// a fixed-position card with only max-width is shrink-to-fit, so a form
-			// using container queries collapses to 0. Floor it, capped at the card's
-			// own max-width so a narrow custom max-width is still respected.
 			'min-width:min(320px,var(--esf-max-width,380px),92vw);' +
 			'box-sizing:border-box;animation:0.5s ease-out both;}' +
 			'.esf-slide-in[data-corner="bottom-right"]{right:20px;animation-name:esf-slide-in-from-right;}' +
 			'.esf-slide-in[data-corner="bottom-left"]{left:20px;animation-name:esf-slide-in-from-left;}' +
-			// isolation:isolate — see the identical comment on the popup's .esf-host rule.
 			'.esf-slide-in .esf-host{display:block;isolation:isolate;}' +
-			// Close button — mirrored: card at right → close at left, and vice versa.
 			'.esf-slide-in-close{all:revert!important;' +
 			'position:absolute!important;top:12px!important;z-index:2!important;' +
 			'width:26px!important;height:26px!important;min-width:0!important;min-height:0!important;' +
@@ -2561,7 +1693,6 @@
 		const host = cloned.cloneNode(true);
 		card.appendChild(host);
 
-		// Apply max-width via CSS custom property (same pattern as popup modal).
 		const maxWidth = parseInt(host.getAttribute('data-esf-max-width'), 10);
 		if (maxWidth > 0) {
 			card.style.setProperty('--esf-max-width', maxWidth + 'px');
@@ -2580,7 +1711,6 @@
 		document.body.appendChild(card);
 
 		function close() {
-			// Animate out in the same direction it came from, then remove.
 			card.style.transition = 'transform 0.5s ease-out';
 			card.style.transform = corner === 'bottom-left'
 				? 'translateX(calc(-100% - 30px))'
@@ -2590,13 +1720,10 @@
 				if (typeof onClose === 'function') onClose();
 			}, 500);
 		}
-		// No Esc-to-close: a slide-in is a non-modal corner card, not a modal
-		// dialog. Esc closing it would surprise a visitor pressing Esc otherwise.
 		if (closeBtn) closeBtn.addEventListener('click', function () { fireClickEvent(host, '__close__'); close(); });
 
 		const shadow = mount(host);
 		if (!shadow) return;
-		// Replace mode: an already-subscribed visitor doesn't count as a view.
 		if (host.getAttribute('data-esf-subscribed') !== '1') fireEvent(host, 'es_view');
 		attachClickTracking(host, shadow);
 
@@ -2608,9 +1735,6 @@
 		form.addEventListener('submit', e => handleSubmit(host, shadow, form, e));
 	}
 
-	// Preview-only: following a link would navigate the preview iframe away from
-	// the asset and leave the previewer broken until a reload. Instead we float a
-	// hint next to the link showing where it WOULD go on the live page.
 	function esPreviewLinkHint(anchorEl, text) {
 		try {
 			var id = 'esf-preview-link-hint', el = document.getElementById(id);
@@ -2635,13 +1759,9 @@
 			clearTimeout(el._t);
 			el.style.opacity = '1';
 			el._t = setTimeout(function () { el.style.opacity = '0'; }, 2200);
-		} catch (e) { /* swallow */ }
+		} catch (e) { }
 	}
 
-	// One document-level capturing guard: in preview mode, intercept clicks on a
-	// real <a href> so the preview iframe never navigates away. Reads the preview
-	// flag at click time, so it's a no-op on live pages. composedPath so the link
-	// is still found when the asset renders inside a shadow root.
 	function installPreviewLinkGuard() {
 		document.addEventListener('click', function (e) {
 			if (!(window.EmblemStudio && window.EmblemStudio.preview)) return;
@@ -2650,7 +1770,6 @@
 			for (var i = 0; i < path.length; i++) {
 				var n = path[i];
 				if (!n || n.nodeType !== 1) continue;
-				// The shell close button has its own preview hint — leave it alone.
 				if (n.classList && (n.classList.contains('esf-inspect-close') || n.classList.contains('esf-ribbon-close') || n.classList.contains('esf-popup-close'))) return;
 				if (n.tagName === 'A' && n.hasAttribute && n.hasAttribute('href')) { a = n; break; }
 			}

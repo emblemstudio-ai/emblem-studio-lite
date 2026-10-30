@@ -3,8 +3,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// Only assets that can actually show up here: one with a form in its markup, or
-// one that already captured leads before its form was edited out.
 $forms   = ES_Leads::lead_capable_forms( ES_Form_Repo::all() );
 $filters = ES_Leads::parse_filters( $_GET );
 $paged   = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
@@ -14,23 +12,14 @@ $rows   = $result['rows'];
 $total  = $result['total'];
 $pages  = max( 1, (int) ceil( $total / ES_Leads::PER_PAGE ) );
 
-// Consent for everything on this page, in one query rather than one per row.
-// Shown in each row's detail panel — recording proof nobody can see isn't
-// proof, and the point is showing the wording someone agreed to at the time,
-// not the wording the form happens to carry today.
 $consents = ES_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( (array) $rows, 'id' ) ) );
 
-// Per-tab counts honor every active filter EXCEPT kind, so the badge
-// shows "if you flipped tabs, this is what you'd see".
 $counts = ES_Leads::counts_by_kind( $filters );
 
-// Has any filter been applied? Used to gate the "Clear filters" link
-// and to switch the export button label between "Export all" / "Export filtered."
 $has_active_filter = $filters['form_id'] || $filters['from'] || $filters['to'] || $filters['email'] || ( $filters['status'] && $filters['status'] !== 'all' );
 
 $base_url = admin_url( 'admin.php?page=emblem-studio-leads' );
 
-// Build a URL that carries the current filter set (used for pagination links).
 $filter_qs = array_filter( [
 	'form_id' => $filters['form_id'],
 	'from'    => $filters['from'],
@@ -41,7 +30,6 @@ $filter_qs = array_filter( [
 ], fn( $v ) => $v !== null && $v !== '' );
 $filter_url = add_query_arg( $filter_qs, $base_url );
 
-// Export link carries the same filter — the CSV reflects what's on screen.
 $export_args = array_merge( [ 'action' => 'es_export_leads' ], $filter_qs );
 $export_url  = wp_nonce_url( add_query_arg( $export_args, admin_url( 'admin-post.php' ) ), 'es_export_leads' );
 
@@ -68,7 +56,6 @@ $status_labels = [
 	<hr class="es-horizon" aria-hidden="true">
 
 	<?php
-	// Build href for each tab — preserve every other filter, swap the kind.
 	$tab_kinds = [
 		'humans' => __( 'Humans', 'emblem-studio' ),
 		'bots'   => __( 'Bots',   'emblem-studio' ),
@@ -259,9 +246,6 @@ $status_labels = [
 							   title="<?php esc_attr_e( 'Try sending this lead to FunnelKit/webhooks again.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Retry', 'emblem-studio' ); ?></a>
 							<br>
 						<?php endif; ?>
-						<?php // An explicit button rather than a click on the name: the row
-							// already carries Move/Retry/Delete, so "click the row" was an
-							// invisible action sitting underneath real ones. ?>
 						<button type="button" class="es-lead-toggle" aria-expanded="false" aria-controls="es-lead-detail-<?php echo (int) $r->id; ?>"><?php esc_html_e( 'View', 'emblem-studio' ); ?></button>
 						<br>
 						<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_lead&id=' . (int) $r->id ), 'es_delete_lead_' . (int) $r->id ) ); ?>"
@@ -270,10 +254,6 @@ $status_labels = [
 					</td>
 				</tr>
 				<?php
-				// The full submission. Everything here is already loaded for the
-				// row above, so opening one costs no extra request — it just
-				// unhides. The list only ever showed a derived display name, so
-				// every answer beyond name/email was invisible in the admin.
 				$detail_extra = $r->extra_fields ? json_decode( $r->extra_fields, true ) : [];
 				$detail_extra = is_array( $detail_extra ) ? $detail_extra : [];
 				$detail_consent = $consents[ (int) $r->id ] ?? [];
@@ -320,10 +300,6 @@ $status_labels = [
 								</dl>
 
 								<?php
-								// Why the bot check landed where it did. Shown for a rescued
-								// submission too, so "the trap is still being cross-filled and
-								// the rescue is working" is visible rather than something you
-								// have to infer.
 								$detail_signals   = ES_Leads::bot_signals( $r->bot_signals ?? null );
 								$detail_reason    = ES_Leads::bot_reason( $detail_signals, ! empty( $r->is_bot ) );
 								$detail_confirmed = ES_Leads::bot_confirmed( $detail_signals );
@@ -347,10 +323,6 @@ $status_labels = [
 									<p class="es-lead-detail-none"><?php esc_html_e( 'This form had no consent checkbox, so there is nothing recorded. That is not the same as someone declining.', 'emblem-studio' ); ?></p>
 								<?php else : ?>
 									<?php
-									// One entry per thing agreed to — a submission can carry
-									// several. The wording opens on demand rather than sitting
-									// inline: with several consents the panel becomes
-									// unreadable, and the same wording repeats across leads.
 									foreach ( $detail_consent as $ci => $c ) :
 										?>
 										<p class="es-lead-consent-state <?php echo $c['agreed'] ? 'is-agreed' : 'is-declined'; ?>">

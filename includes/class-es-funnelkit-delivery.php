@@ -4,7 +4,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Selects exactly one FunnelKit delivery path for an accepted submission. */
 final class ES_FunnelKit_Delivery {
 	public static function dispatch(
 		string $asset_key,

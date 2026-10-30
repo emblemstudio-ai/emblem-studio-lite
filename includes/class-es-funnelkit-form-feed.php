@@ -3,7 +3,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Coordinates Emblem Studio assets with FunnelKit Pro Form Feeds. */
 final class ES_FunnelKit_Form_Feed {
 	public const SOURCE = 'emblem-studio';
 
@@ -75,16 +74,6 @@ final class ES_FunnelKit_Form_Feed {
 		}
 	}
 
-	/**
-	 * On a connected site, catalog() reads the LOCAL asset mirror — which
-	 * only refreshes on connect, hourly (es_saas_pull), and at disconnect. A
-	 * rename/edit made in the SaaS could sit stale in FunnelKit's own Forms
-	 * picker for up to an hour. Rather than pulling inside catalog() itself
-	 * (it's called several times per picker render — get_form_selection(),
-	 * get_form_fields(), get_form_link() — which would fire that many HTTP
-	 * round-trips), refresh once per admin request, throttled, and only when
-	 * FunnelKit's own admin screen is the one being loaded.
-	 */
 	public static function maybe_refresh_catalog(): void {
 		if ( ! class_exists( 'Emblem_Studio_SaaS_Connector' ) || ! Emblem_Studio_SaaS_Connector::is_connected() ) {
 			return;
@@ -116,15 +105,8 @@ final class ES_FunnelKit_Form_Feed {
 		);
 	}
 
-	/** @return array<string,array{key:string,name:string,fields:array,edit_url:string}> */
-	/** The catalog for this request, or null. Cleared by ES_Form_Repo on every write. */
 	private static ?array $catalog_memo = null;
 
-	/**
-	 * The catalog, built once per request (audit P8). Building it loads every
-	 * asset and parses each one's HTML, and a FunnelKit screen asks for it from
-	 * four places.
-	 */
 	public static function catalog(): array {
 		return self::$catalog_memo ??= self::build_catalog();
 	}
@@ -150,10 +132,6 @@ final class ES_FunnelKit_Form_Feed {
 						}
 					}
 				}
-				// Only assets that actually contain a form belong in FunnelKit's own
-				// Forms picker — a click-through ribbon or announcement popup has
-				// nothing to map (SER-929). form_types (shell/placement) can't be the
-				// filter; a ribbon/popup can legitimately carry real fields too.
 				if ( empty( $fields ) ) {
 					continue;
 				}
