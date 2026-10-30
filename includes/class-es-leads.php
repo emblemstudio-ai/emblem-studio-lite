@@ -438,7 +438,7 @@ class ES_Leads {
 			$cs = $consent[ (int) $r['id'] ] ?? [];
 
 			$row = array_merge(
-				[ $r['id'], $r['created_at'], $r['form_name'], $r['form_slug'], $r['email'], $first, $last, $phone, $tags ],
+				[ $r['id'], $r['created_at'], $r['form_name'] ?? __( 'Deleted asset', 'emblem-studio' ), $r['form_slug'], $r['email'], $first, $last, $phone, $tags ],
 				$custom_cells,
 				[
 					$r['funnelkit_pushed'],
