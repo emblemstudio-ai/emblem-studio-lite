@@ -1714,16 +1714,22 @@
 	}
 
 	function openSwatchPickerAt(cm, color, anchor) {
-		var startIdx = color.start;
 		var cur = color.value;
+		var mark = cm.markText(cm.posFromIndex(color.start), cm.posFromIndex(color.start + cur.length), { inclusiveLeft: false, inclusiveRight: false });
 		window.ESInspectorColor.openPicker({
 			anchor: anchor,
 			value: cur,
 			onChange: function (str) {
-				var from = cm.posFromIndex(startIdx);
-				var to = cm.posFromIndex(startIdx + cur.length);
-				cm.replaceRange(str, from, to);
+				var at = mark && mark.find();
+				if (!at || cm.getRange(at.from, at.to) !== cur) return;
+				var fromIdx = cm.indexFromPos(at.from);
+				mark.clear();
+				cm.replaceRange(str, at.from, at.to);
 				cur = str;
+				mark = cm.markText(cm.posFromIndex(fromIdx), cm.posFromIndex(fromIdx + str.length), { inclusiveLeft: false, inclusiveRight: false });
+			},
+			onClose: function () {
+				if (mark) { mark.clear(); mark = null; }
 			}
 		});
 	}
