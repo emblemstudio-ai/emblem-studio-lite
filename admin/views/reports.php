@@ -7,11 +7,17 @@ $forms = ES_Form_Repo::all();
 $tz    = wp_timezone();
 $today = new DateTimeImmutable( 'now', $tz );
 
+// "All time" starts at the first real data point, not a hardcoded epoch —
+// so the From field reads e.g. 2026-05-20 instead of a confusing 2000-01-01.
+// Falls back to a 2-week window when there's no data yet.
 $first_event = ES_Reports::first_event_date();
 $all_start   = $first_event
 	? new DateTimeImmutable( $first_event . ' 00:00:00', $tz )
 	: $today->modify( '-13 days' );
 
+/**
+ * Each preset: [ label, from-DateTimeImmutable, to-DateTimeImmutable, granularity ]
+ */
 $presets = [
 	'last24h'    => [ __( 'Last 24h', 'emblem-studio' ),           $today->modify( '-24 hours' ), $today, 'hour' ],
 	'yesterday'  => [ __( 'Yesterday', 'emblem-studio' ),          $today->modify( '-1 day' )->setTime( 0, 0, 0 ), $today->modify( '-1 day' )->setTime( 23, 59, 59 ), 'hour' ],
@@ -70,10 +76,14 @@ if ( $form_id ) {
 		'conv_rate_pv'  => $agg['page_views'] > 0 ? round( $agg['conversions'] / $agg['page_views'] * 100, 2 ) : 0.0,
 		'dismissals'    => $agg['dismissals'],
 		'close_rate'    => $agg['close_rate'],
+		// null, not 0: this row spans every form and every shell, so there is no
+		// single trigger population to divide by. See ES_Reports::kpis().
 		'ctr'           => null,
 	];
 }
 
+// Prior period of equal length, immediately before the current one — for the
+// "vs previous period" deltas on the headline numbers.
 $span_secs = max( 1, $to_dt->getTimestamp() - $from_dt->getTimestamp() );
 $prev_to   = $from_dt->modify( '-1 second' );
 $prev_from = $from_dt->modify( '-' . ( $span_secs + 1 ) . ' seconds' );
@@ -98,7 +108,14 @@ $device_labels = [
 $device_total = 0;
 foreach ( $device_break as $d ) { $device_total += (int) $d['views']; }
 
+// --- Layout + tier preview --------------------------------------------------
+// One reports page; each card shows real content or a locked teaser depending on
+// the viewer's tier (catalogue rule #5). These switchers are PREVIEW scaffolding
+// until real accounts/billing exist — the plugin's true tier is "Lite".
 $design = ( isset( $_GET['design'] ) && $_GET['design'] === 'grid' ) ? 'grid' : 'journey';
+// The Lite build's real tier IS Lite — lock it (advanced cards become upsell
+// teasers via $es_unlocked below). The full plugin keeps the preview switcher
+// (fake until real accounts/billing exist).
 $tier = ES_Caps::is_lite()
 	? 'lite'
 	: ( ( isset( $_GET['tier'] ) && in_array( $_GET['tier'], [ 'lite', 'free', 'paid' ], true ) ) ? $_GET['tier'] : 'paid' );
@@ -119,6 +136,7 @@ $range_label = $granularity === 'hour'
 $base_args = [ 'page' => 'emblem-studio-reports' ];
 if ( $form_id ) { $base_args['form_id'] = $form_id; }
 
+// Current query state, so switcher links preserve form/shell/range/dates.
 $cur_args = $base_args;
 if ( $shell )       { $cur_args['shell'] = $shell; }
 if ( $active_preset ) { $cur_args['range'] = $active_preset; }
@@ -129,6 +147,8 @@ $switch_url = static function ( array $overrides ) use ( $cur_args ) {
 	return esc_url( add_query_arg( array_merge( $cur_args, $overrides ), admin_url( 'admin.php' ) ) );
 };
 
+// Delta sub-line: up/down % vs the previous period. $invert flips good/bad
+// colour (a rising close-rate is bad).
 $es_delta = static function ( $cur, $prev_val, $invert = false ) {
 	$cur = (float) $cur; $prev_val = (float) $prev_val;
 	if ( $prev_val == 0.0 ) {
@@ -145,6 +165,7 @@ $es_delta = static function ( $cur, $prev_val, $invert = false ) {
 		. '<span class="es-rep-vs">' . esc_html__( 'vs prev', 'emblem-studio' ) . '</span></div>';
 };
 
+// --- Card renderers (defined once, arranged differently per layout) ---------
 $render_funnel = static function () use ( $kpis ) {
 	$steps = [
 		[ 'label' => __( 'Reached', 'emblem-studio' ),   'n' => (int) $kpis['page_views'],  'cls' => 'r' ],
@@ -308,6 +329,7 @@ $render_bot = static function () use ( $bot_break ) {
 	<?php
 };
 
+// Gate wrapper: render real card if the tier unlocks it, else a teaser.
 $render_visitors = static function () use ( $visitor_stats ) {
 	$cells = [
 		[ __( 'Unique visitors', 'emblem-studio' ), (int) $visitor_stats['unique_visitors'] ],
@@ -435,6 +457,8 @@ $render_gated = static function ( $required, $title, callable $render ) use ( $e
 		</div>
 	</div>
 
+	<?php // Preview switchers — temporary scaffolding until real accounts/billing land.
+	// Hidden in the Lite build: its tier is fixed to Lite, so there's nothing to switch. ?>
 	<?php if ( ! ES_Caps::is_lite() ) : ?>
 	<div class="es-rep-switcher">
 		<span class="es-rep-switcher-eyebrow"><?php esc_html_e( 'Preview', 'emblem-studio' ); ?></span>
@@ -455,6 +479,7 @@ $render_gated = static function ( $required, $title, callable $render ) use ( $e
 
 	<p class="es-range-caption"><?php echo esc_html( $scope_label ); ?> · <?php echo esc_html( $range_label ); ?></p>
 
+	<?php // Headline stat row (Lite) with vs-previous deltas; close rate is Free. ?>
 	<div class="es-kpis es-rep-stats">
 		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Reached', 'emblem-studio' ); ?></div>

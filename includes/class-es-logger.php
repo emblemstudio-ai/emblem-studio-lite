@@ -32,6 +32,11 @@ class ES_Logger {
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t ORDER BY id DESC LIMIT %d", $limit ) );
 	}
 
+	/**
+	 * Delete log rows older than $days. Default 30 days.
+	 * Logs include email addresses (from FunnelKit push traces) — bounded retention
+	 * is a GDPR / data-hygiene requirement.
+	 */
 	public static function purge_old( int $days = 30 ): int {
 		global $wpdb;
 		$t = ES_Install::table( 'logs' );

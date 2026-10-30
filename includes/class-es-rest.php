@@ -3,6 +3,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Admin-only REST endpoints used by the form-edit screen.
+ *
+ * Today: a single search-by-title endpoint that powers the post / page
+ * chip pickers in the Display Rules section. Returns up to 20 matches
+ * for the current query, ordered by date desc.
+ */
 class ES_REST {
 
 	public const NAMESPACE_V1 = 'emblem-studio/v1';
@@ -29,6 +36,7 @@ class ES_REST {
 		$type = sanitize_key( (string) $req->get_param( 'type' ) );
 		$q    = trim( (string) $req->get_param( 'q' ) );
 
+		// Taxonomy term search (categories / tags).
 		$taxonomy = null;
 		if ( $type === 'category' ) {
 			$taxonomy = 'category';
@@ -57,6 +65,7 @@ class ES_REST {
 			return rest_ensure_response( $out );
 		}
 
+		// Post / page title search.
 		if ( ! in_array( $type, [ 'post', 'page' ], true ) ) {
 			return new WP_Error( 'bad_type', 'Invalid type', [ 'status' => 400 ] );
 		}

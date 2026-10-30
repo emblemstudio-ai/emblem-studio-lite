@@ -1,4 +1,29 @@
 <?php
+/**
+ * Plugin Name: Emblem Studio SaaS Connector
+ * Description: Bridge between a WordPress site and the Emblem Studio SaaS. Powers the Lite plugin's "Connect a free account" flow (pairing + embedded dashboard), injects the page's WordPress context so SaaS display rules enforce on this site, places the site's auto-shell forms, and relays leads to FunnelKit locally. The free standalone Emblem Studio plugin does NOT need this — it's bundled into the Lite edition only.
+ * Version: 1.3.35-beta
+ * Requires PHP: 7.4
+ *
+ * CONNECTION CONFIG — two sources, constants win (so an existing manual setup is
+ * untouched), else the stored option written by the in-WP Connect button:
+ *   1. wp-config.php constants (manual / legacy):
+ *        define('ESS_API_BASE',  'https://app.example.com');  // no trailing slash
+ *        define('ESS_SITE_ID',   2);
+ *        define('ESS_SITE_TOKEN','xxxxxxxxxxxxxxxxxxxx');
+ *   2. Option `ess_connection` — set by Emblem Studio → Connect (one-click pairing).
+ *
+ * WHERE THIS FILE LIVES: right here, in the PLUGIN repo, at connector/. There is no
+ * copy in the SaaS repo and no cross-repo path — an older header here claimed it was
+ * maintained in the SaaS repo under wp-connector/, which was never true. It is
+ * export-ignored from the full plugin release and folded into the Lite build as
+ * includes/connector.php by bin/build-lite.sh.
+ *
+ * VERSION: tracks the PLUGIN version — bump both together. (It sat at 0.8.3 through
+ * four connector-touching releases, which made it useless for support and debugging.)
+ * Once folded into Lite this header is informational; Lite's real version comes from
+ * the plugin header.
+ */
 
 if (! defined('ABSPATH')) {
     exit;
@@ -6,69 +31,144 @@ if (! defined('ABSPATH')) {
 
 final class Emblem_Studio_SaaS_Connector
 {
+    /**
+     * Reported to the SaaS on every embed heartbeat, so it can tell which
+     * connector build a site is running (SER-1128 stage 4 gates on it).
+     * MUST track the `Version:` header above — bump both together.
+     */
     const VERSION = '1.3.35-beta';
 
+    /** Where the asset copy lived before 1.3.34. Only ever deleted now. */
     const FORMS_TRANSIENT = 'ess_connector_forms';
 
+    /**
+     * The last good copy of the site's embed payload, and when it was fetched
+     * (audit P5). An option, not a transient: a transient expires and is gone,
+     * and then the next visitor waited for a fresh fetch. A copy is kept until
+     * a newer one replaces it.
+     */
     const EMBED_COPY_OPTION = 'ess_embed_copy';
+    /** Refreshes the copy in the background. */
     const EMBED_REFRESH_HOOK = 'es_saas_refresh_embed';
+    /** How long a copy counts as fresh. */
     const EMBED_FRESH_SECONDS = 300;
+    /** After a failed refresh, how long before the next try. */
     const EMBED_RETRY_SECONDS = 60;
+    /** Stored connection written by the Connect button. */
     const OPTION = 'ess_connection';
 
+    /**
+     * Default SaaS base used to prefill the Connect screen when nothing is set.
+     * This is what every shipped copy connects to, so it must stay production.
+     * For local development, define ESS_API_BASE in wp-config.php instead — the
+     * constant wins over this, and on its own only changes the prefill (a manual
+     * connection needs ESS_SITE_ID and ESS_SITE_TOKEN too).
+     */
     const DEFAULT_API_BASE = 'https://emblemstudio.ai';
 
+    /** Post-decouple background catch-up (SER-950) — see run_postdecouple_pull(). */
     const POSTDECOUPLE_OPTION = 'es_postdecouple_cfg';
     const POSTDECOUPLE_STATE = 'es_postdecouple_state';
     const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';
     const FK_SYNC_HOOK = 'es_saas_funnelkit_sync';
+    /**
+     * How often to ask for waiting leads. Always this often: a slower "idle"
+     * pace (1.3.28) left a site asleep for ten minutes whenever it checked in
+     * before the SaaS had found out it could not reach it.
+     */
     const FK_SYNC_SECONDS = 2 * MINUTE_IN_SECONDS;
-    const POSTDECOUPLE_MAX_ATTEMPTS = 40;
+    const POSTDECOUPLE_MAX_ATTEMPTS = 40; // ~13 min of real effort before giving up and revoking anyway
 
+    /** WP admin page slug → embedded SaaS path (under /app/s/<code>/…). */
     const PAGE_MAP = [
-        'emblem-studio'              => 'assets',
-        'emblem-studio-new'          => 'assets/new',
+        'emblem-studio'              => 'assets',     // Forms & Assets
+        'emblem-studio-new'          => 'assets/new', // Add New
+        // One list per asset type (SER-1691), and the survey answers. SaaS-only:
+        // a standalone install has no types and no surveys.
         'emblem-studio-surveys'      => 'surveys',
         'emblem-studio-sales-notifications' => 'sales-notifications',
         'emblem-studio-survey-results' => 'survey-results',
+        // The Schedule board (SER-1328). SaaS-only: it reads every asset's
+        // periods and queued changes from the account, which a standalone
+        // install does not have. Must be mapped, because maybe_embed() on an
+        // unmapped slug quietly embeds the Assets page instead.
         'emblem-studio-schedule'     => 'schedule',
-        'emblem-studio-tests'        => 'tests',
+        'emblem-studio-tests'        => 'tests',      // A/B Tests
         'emblem-studio-leads'        => 'leads',
         'emblem-studio-reports'      => 'reports',
         'emblem-studio-integrations' => 'integrations',
         'emblem-studio-design-system' => 'design-system',
         'emblem-studio-settings'     => 'settings',
+        // Support (SER-1049) — site-scoped like everything else here. A ticket
+        // filed from wp-admin is always about THIS site; there's no "general
+        // account" concept reachable from wp-admin to begin with.
         'emblem-studio-tickets'      => 'tickets',
+        // Who can work on this website, site-scoped like the rest.
         'emblem-studio-team'         => 'team',
     ];
 
     public static function init(): void
     {
+        // Front-end: inject context + place form slots + load embed.js (no-ops
+        // until the site is connected).
         add_action('wp_footer', [__CLASS__, 'render'], 99);
+        // Inbound lead relay (token-authed) → local FunnelKit.
         add_action('rest_api_init', [__CLASS__, 'register_routes']);
+        // Connect flow. Login-gated (P6): the framed SaaS login hands back a grant
+        // over postMessage; this AJAX handler spends it server-side to pair the site
+        // with the signed-in account. (admin_post_es_connect is the DEPRECATED
+        // account-less one-click path, kept only for backward compatibility.)
         add_action('admin_post_es_connect', [__CLASS__, 'handle_connect']);
         add_action('wp_ajax_es_connect_complete', [__CLASS__, 'handle_connect_complete']);
         add_action('admin_post_es_decouple', [__CLASS__, 'handle_decouple']);
         add_action('admin_notices', [__CLASS__, 'connect_notice']);
+        // Periodic copy-down: refresh WP's local copy of assets/stats/leads.
         add_action('es_saas_pull', [__CLASS__, 'cron_pull']);
+        // The asset copy, refreshed off the visitor's request (audit P5).
         add_action(self::EMBED_REFRESH_HOOK, [__CLASS__, 'refresh_embed']);
+        // Pull-based FunnelKit delivery: collect leads the SaaS could not push
+        // here (a LocalWP site, a firewalled one). See sync_funnelkit().
         add_filter('cron_schedules', [__CLASS__, 'cron_schedules']);
         add_action(self::FK_SYNC_HOOK, [__CLASS__, 'sync_funnelkit']);
         add_action('init', [__CLASS__, 'schedule_funnelkit_sync']);
+        // Background import (mirror up + copy down) kicked off at connect, plus the
+        // status endpoint the dashboard's loading screen polls.
         add_action('es_saas_import', [__CLASS__, 'run_import']);
         add_action('wp_ajax_es_import_status', [__CLASS__, 'ajax_import_status']);
+        // Post-decouple background catch-up (SER-950) — runs after the site has
+        // already reverted to Lite, so it never blocks or crashes the admin.
         add_action(self::POSTDECOUPLE_HOOK, [__CLASS__, 'run_postdecouple_pull']);
+        // Tell the SaaS the moment WordPress's timezone changes. Both options,
+        // because a site either names a zone ("America/New_York") or sets a
+        // manual offset, and WordPress clears one when you set the other.
         add_action('update_option_timezone_string', [__CLASS__, 'push_timezone']);
         add_action('update_option_gmt_offset', [__CLASS__, 'push_timezone']);
+        // Live values (SER-1351): ES_Live_Values measures, the connector supplies
+        // the SaaS's watch list and sends what changed.
         add_filter('es_live_values_watch_list', [__CLASS__, 'live_values_watch_list']);
         add_action('es_live_values_measured', [__CLASS__, 'push_live_values'], 10, 2);
+        // Purchases after an asset brought somebody in (SER-1346). Sent the
+        // moment the shop records one, and again on every periodic pull, so a
+        // site that was unreachable catches up without anybody noticing.
         add_action('es_purchases_ready', [__CLASS__, 'push_purchases']);
+        // WordPress's "Erase Personal Data" ran here (SER-1431). Sent at once,
+        // and again on every periodic pull until Emblem Studio confirms.
         add_action('es_erasure_ready', [__CLASS__, 'push_erasures']);
+        // Real orders for the "after an order" trigger (SER-1689). The SaaS says
+        // on every FunnelKit check whether any asset here wants them, so a site
+        // that does not use the trigger records and sends nothing.
         add_filter('es_recent_orders_wanted', [__CLASS__, 'recent_orders_wanted']);
         add_action('es_recent_orders_ready', [__CLASS__, 'push_recent_orders']);
+        // Name embed.js to the speed plugins that exclude by URL (ES_No_Delay).
         add_filter('es_no_delay_urls', [__CLASS__, 'no_delay_urls']);
     }
 
+    /**
+     * Add embed.js to the URLs speed plugins are asked not to delay.
+     *
+     * @param mixed $urls
+     * @return array<mixed>
+     */
     public static function no_delay_urls($urls): array
     {
         $urls = is_array($urls) ? $urls : [];
@@ -80,6 +180,18 @@ final class Emblem_Studio_SaaS_Connector
         return $urls;
     }
 
+    /* ── Erasure requests (SER-1431) ───────────────────────────────────── */
+
+    /**
+     * Tell Emblem Studio about everyone erased on this site.
+     *
+     * On a connected site the leads and the consent records live in Emblem
+     * Studio, and this site holds a mirror. WordPress's own erase tool removes
+     * the mirror, so without this the person would still be there.
+     *
+     * An address leaves the queue only once Emblem Studio has taken it, so a
+     * site that was offline sends it again later rather than dropping it.
+     */
     public static function push_erasures(): void
     {
         $cfg = self::config();
@@ -89,12 +201,26 @@ final class Emblem_Studio_SaaS_Connector
         foreach (array_chunk(ES_Privacy::queued_saas_erasures(), 50) as $chunk) {
             $data = self::pull_post($cfg, '/v1/embed/erase', ['emails' => array_values($chunk)]);
             if (! is_array($data) || empty($data['ok'])) {
-                return;
+                return; // Kept; the next run tries again.
             }
             ES_Privacy::clear_saas_erasures($chunk);
         }
     }
 
+    /* ── Live values (SER-1351) ─────────────────────────────────────────── */
+
+    /**
+     * Which prices and coupons this site's assets show, from Emblem Studio.
+     *
+     * Connected, the assets live in the SaaS, variants and queued changes
+     * included, so the SaaS is the one that knows. The SaaS parses the HTML;
+     * WordPress never has to. When the SaaS cannot be reached this passes the
+     * value through untouched, and ES_Live_Values falls back to the local copy
+     * of the assets, which pull_assets() keeps.
+     *
+     * @param mixed $current
+     * @return mixed
+     */
     public static function live_values_watch_list($current)
     {
         $cfg = self::config();
@@ -121,6 +247,15 @@ final class Emblem_Studio_SaaS_Connector
         return $keys;
     }
 
+    /**
+     * Send the readings that changed, and the keys that were measured again and
+     * found the same. The SaaS answers with any unchanged key it does not hold
+     * (a fresh install, a lost row), and those are sent again in full at once
+     * rather than waiting for them to change.
+     *
+     * @param array<int, array<string, mixed>> $changed
+     * @param array<int, string>               $unchanged
+     */
     public static function push_live_values($changed, $unchanged): void
     {
         $cfg = self::config();
@@ -157,6 +292,19 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /* ── Purchases after an asset (SER-1346) ───────────────────────────── */
+
+    /**
+     * Send what the shop said, and nothing else.
+     *
+     * The buyer was matched to their sign-up HERE, by ES_Purchases, using the address
+     * WooCommerce already holds. What travels is the lead's id, the order's id and
+     * numbers. No email address, no name, no address of any kind.
+     *
+     * A row is only marked as sent once the SaaS has taken it, so a site that was
+     * offline sends it again later rather than losing it. A refund rewrites the row
+     * and marks it unsent, which is how money coming back out reaches the numbers.
+     */
     public static function push_purchases(): void
     {
         $cfg = self::config();
@@ -164,6 +312,9 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
 
+        // Somebody asked to be erased and their row has already gone from this site.
+        // Emblem Studio is told first, so an interrupted run leaves the erasure
+        // outstanding rather than quietly finished.
         $forget = ES_Purchases::forgotten();
         if ($forget !== []) {
             foreach (array_chunk($forget, 200) as $chunk) {
@@ -175,6 +326,8 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
+        // Ten passes of 200 is a deliberate ceiling. A site coming back after a long
+        // silence catches up over a few runs instead of holding one request open.
         for ($pass = 0; $pass < 10; $pass++) {
             $rows = ES_Purchases::pending(200);
             if ($rows === []) {
@@ -188,7 +341,7 @@ final class Emblem_Studio_SaaS_Connector
 
             $data = self::pull_post($cfg, '/v1/embed/purchases', ['purchases' => array_values($rows)]);
             if (! is_array($data) || empty($data['ok'])) {
-                return;
+                return; // Leave them unsent; the next run tries again.
             }
 
             ES_Purchases::mark_sent($ids);
@@ -198,8 +351,10 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /** Option holding the SaaS's last answer to "does anything here want orders?" */
     const RECENT_ORDERS_WANTED = 'ess_recent_orders_wanted';
 
+    /** @param mixed $wanted */
     public static function recent_orders_wanted($wanted): bool
     {
         if (! self::is_connected()) {
@@ -218,10 +373,15 @@ final class Emblem_Studio_SaaS_Connector
             update_option(self::RECENT_ORDERS_WANTED, ['wanted' => $wanted, 'at' => time()], false);
         }
         if (! $wanted && class_exists('ES_Recent_Orders')) {
-            ES_Recent_Orders::clear();
+            ES_Recent_Orders::clear(); // nothing here uses them; hold nothing
         }
     }
 
+    /**
+     * Send the orders ES_Recent_Orders queued: product names and links, the paid
+     * time, and one-way references. Never a name, an email or an order number.
+     * An entry leaves the queue only once the SaaS has taken it.
+     */
     public static function push_recent_orders(): void
     {
         $cfg = self::config();
@@ -235,7 +395,7 @@ final class Emblem_Studio_SaaS_Connector
 
         $data = self::pull_post($cfg, '/v1/embed/recent-orders', $pending);
         if (! is_array($data) || empty($data['ok'])) {
-            return;
+            return; // left queued; the next tick tries again
         }
         ES_Recent_Orders::mark_sent(array_column($pending['orders'], 'ref'), $pending['forget']);
         if (array_key_exists('wanted', $data)) {
@@ -243,6 +403,9 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /* ── Connection state ──────────────────────────────────────────────── */
+
+    /** The stored connection array, or [] if none. */
     private static function stored(): array
     {
         $o = get_option(self::OPTION);
@@ -250,6 +413,12 @@ final class Emblem_Studio_SaaS_Connector
         return is_array($o) ? $o : [];
     }
 
+    /**
+     * Unified connection config, or null when not connected. wp-config constants
+     * win (manual/legacy), else the stored option from the Connect button.
+     *
+     * @return array{api_base:string,site_id:int,site_token:string,code:?string}|null
+     */
     public static function config(): ?array
     {
         if (defined('ESS_API_BASE') && defined('ESS_SITE_ID') && defined('ESS_SITE_TOKEN')) {
@@ -281,6 +450,16 @@ final class Emblem_Studio_SaaS_Connector
         return self::config() !== null;
     }
 
+    /**
+     * The product name shown in the WP admin sidebar, by edition/tier:
+     *   • not connected → "Emblem Studio Lite" (the stripped standalone)
+     *   • connected, free account → "Emblem Studio Beta" (pre-sale; becomes "Free"
+     *     once we actually start selling)
+     *   • connected, paid account → "Emblem Studio Pro"
+     * The account plan isn't enforced yet (P6); until the pairing response carries
+     * a plan, a connected site reads as Beta. Stored as `plan` on the connection
+     * so this flips to Pro automatically once tiers land.
+     */
     public static function edition_label(): string
     {
         if (! self::is_connected()) {
@@ -294,6 +473,7 @@ final class Emblem_Studio_SaaS_Connector
             : __('Emblem Studio Beta', 'emblem-studio');
     }
 
+    /** How the connection is configured: 'constants' (wp-config) or 'option', or null. */
     private static function connected_via(): ?string
     {
         if (defined('ESS_API_BASE') && defined('ESS_SITE_ID') && defined('ESS_SITE_TOKEN')) {
@@ -303,11 +483,21 @@ final class Emblem_Studio_SaaS_Connector
         return self::is_connected() ? 'option' : null;
     }
 
+    /* ── Admin: embedded SaaS pages + the three states ─────────────────── */
+
+    /**
+     * Called by ES_Admin's route_* methods. Returns true if it produced the
+     * page's output (so the caller skips the built-in Lite view):
+     *   • not connected → false  (the Lite screen shows; user can hit Connect)
+     *   • connected + sign-in OK → embed the matching SaaS page
+     *   • connected + sign-in FAILS → the "You've been disconnected" screen
+     *     (never silently falls back to the Lite pages).
+     */
     public static function maybe_render_page(string $slug): bool
     {
         $cfg = self::config();
         if (! $cfg) {
-            return false;
+            return false; // not connected — let the Lite view render.
         }
 
         $session = self::mint_session($cfg);
@@ -319,6 +509,11 @@ final class Emblem_Studio_SaaS_Connector
 
         $path = self::PAGE_MAP[$slug] ?? 'assets';
 
+        // Deep-link into a specific asset from the native ?action=edit&id=N (the
+        // same URL the built-in editor uses — parity, so a shared link opens the
+        // same place whether the site runs the plugin or the embedded dashboard).
+        // A GET navigation, not a mutation, so no nonce. The tab lives in the URL
+        // #hash, which the server can't see — render_embed reads it client-side.
         // phpcs:disable WordPress.Security.NonceVerification.Recommended
         if ($slug === 'emblem-studio' && ($_GET['action'] ?? '') === 'edit' && ! empty($_GET['id'])) {
             $path = 'assets/'.(int) $_GET['id'];
@@ -332,11 +527,14 @@ final class Emblem_Studio_SaaS_Connector
         return true;
     }
 
+    /** The Connect / Account screen (the dedicated submenu). */
     public static function render_account_page(): void
     {
         if (! current_user_can('manage_options')) {
             return;
         }
+        // `es_reconnect` forces the sign-in screen even while a stale connection is
+        // still stored (used by the "Reconnect" button on the disconnected screen).
         $reconnect = ! empty($_GET['es_reconnect']); // phpcs:ignore WordPress.Security.NonceVerification
         if (self::is_connected() && ! $reconnect) {
             self::render_connected_panel();
@@ -345,6 +543,7 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /** Mint a short-lived embed sign-in token for the current WP user. */
     private static function mint_session(array $cfg): ?array
     {
         $u    = wp_get_current_user();
@@ -373,13 +572,25 @@ final class Emblem_Studio_SaaS_Connector
         ];
     }
 
+    /** Full-bleed iframe of the embedded SaaS page, chrome-less + auto sign-in. */
     private static function render_embed(string $api, string $code, string $path, string $token, bool $editor = false): void
     {
+        // The SaaS origin we accept fullscreen messages from.
         $p = wp_parse_url($api);
         $origin = (isset($p['scheme']) ? $p['scheme'] : 'https').'://'.(isset($p['host']) ? $p['host'] : '')
             .(isset($p['port']) ? ':'.$p['port'] : '');
 
+        // The iframe src is assembled in JS, not here, for one reason: the active
+        // editor TAB lives in the WP page's URL #hash (e.g. …&action=edit&id=7#stats),
+        // and a #fragment is never sent to the server — PHP can't see it. The inline
+        // builder reads location.hash, so a shared tab-deep-link actually opens that
+        // tab. The pieces PHP knows (base path, editor) are handed over as data; the
+        // sign-in token rides the src fragment (#est=…), never logged.
         $embed_base = $api.'/app/s/'.rawurlencode($code).'/'.$path;
+        // Let WordPress position the content column (it already sits right of the
+        // admin menu and auto-adjusts for folded/responsive states). We just strip
+        // the column's padding so the iframe is flush, and fill the height. This
+        // avoids hardcoding the menu width (which slid the page under the sidebar).
         ?>
         <style>
             #wpcontent { padding-left: 0 !important; }
@@ -589,6 +800,7 @@ final class Emblem_Studio_SaaS_Connector
         <?php
     }
 
+    /** "You've been disconnected" — Try again / Sign in again / Decouple (no silent Lite fallback). */
     private static function render_disconnected(): void
     {
         $retry_url   = admin_url('admin.php?page=emblem-studio');
@@ -612,6 +824,7 @@ final class Emblem_Studio_SaaS_Connector
         <?php
     }
 
+    /** Connected → show status + a Decouple button. */
     private static function render_connected_panel(): void
     {
         $cfg  = self::config();
@@ -652,8 +865,17 @@ final class Emblem_Studio_SaaS_Connector
         <?php
     }
 
+    /**
+     * Not connected → sign in to a real Emblem Studio account (P6). Clicking "Sign
+     * in to connect" opens Emblem Studio's WorkOS login in a POPUP (not an iframe),
+     * so the password goes browser → WorkOS directly and never touches any server
+     * of ours. On success the popup hands us a short-lived grant over postMessage
+     * (verified by a one-time state nonce), which we spend server-side
+     * (handle_connect_complete) to pair the site with that account.
+     */
     private static function render_connect_panel(): void
     {
+        // Which SaaS to talk to: constant > stored > ?es_api override > default.
         $api = defined('ESS_API_BASE') ? (string) ESS_API_BASE : self::DEFAULT_API_BASE;
         $s   = self::stored();
         if (! empty($s['api_base'])) {
@@ -666,6 +888,9 @@ final class Emblem_Studio_SaaS_Connector
 
         $origin = home_url('/');
         $name   = get_bloginfo('name');
+        // One-time nonce echoed back by the popup, so we trust the message even if
+        // WorkOS's canonical-host redirect changes the popup's origin (localhost vs
+        // 127.0.0.1 in dev). The grant itself is cryptographically verified on pair.
         $state = wp_generate_password(24, false);
         $popup = $api.'/embed/connect?origin='.rawurlencode($origin).'&name='.rawurlencode($name).'&state='.rawurlencode($state);
         ?>
@@ -751,6 +976,7 @@ final class Emblem_Studio_SaaS_Connector
         <?php
     }
 
+    /** A Decouple form with a JS confirm that spells out the revert-to-Lite effect. */
     private static function decouple_form_html(): string
     {
         $confirm = esc_js(__('Decouple this site? The dashboard will switch back to the WordPress Lite plugin. The leads, subscribers and stats already synced stay in your Emblem Studio account — decoupling does not delete them there. You can reconnect anytime.', 'emblem-studio'));
@@ -762,6 +988,14 @@ final class Emblem_Studio_SaaS_Connector
             .'</form>';
     }
 
+    /* ── Connect / decouple handlers ───────────────────────────────────── */
+
+    /**
+     * DEPRECATED (pre-P6 account-less one-click pairing). Connecting now requires
+     * signing in to a real account, so this legacy admin-post handler no longer
+     * pairs — it just sends the user to the sign-in screen. Kept so any old
+     * bookmarked link degrades gracefully.
+     */
     public static function handle_connect(): void
     {
         if (! current_user_can('manage_options')) {
@@ -773,6 +1007,13 @@ final class Emblem_Studio_SaaS_Connector
         exit;
     }
 
+    /**
+     * Finish a login-gated connect (P6). The WorkOS popup verified the account
+     * owner (password never touched us) and handed the browser a short-lived grant;
+     * here we spend it SERVER-SIDE at /v1/embed/connect/pair to attach this site to
+     * that real account and store the durable connection (the site secret never
+     * touches the browser). Called over admin-ajax by the connect screen.
+     */
     public static function handle_connect_complete(): void
     {
         if (! current_user_can('manage_options')) {
@@ -797,6 +1038,10 @@ final class Emblem_Studio_SaaS_Connector
                 'grant'    => $grant,
                 'name'     => get_bloginfo('name'),
                 'platform' => 'wp',
+                // Hand over WordPress's OWN timezone so the user never has to retype
+                // something this site already knows (the SaaS uses it for scheduling
+                // + report days). An IANA name, or a "+03:00" offset on sites that
+                // use a manual offset; the SaaS validates and falls back to UTC.
                 'timezone' => function_exists('wp_timezone_string') ? wp_timezone_string() : '',
             ],
         ]);
@@ -822,27 +1067,42 @@ final class Emblem_Studio_SaaS_Connector
         delete_transient(self::FORMS_TRANSIENT);
         delete_option(self::EMBED_COPY_OPTION);
 
+        // Import (mirror up + copy down) runs in bounded background passes so the
+        // dashboard shows a progress screen instead of blocking (see start_import +
+        // run_import_pass + render_embed).
         self::start_import();
 
         wp_send_json_success(['redirect' => admin_url('admin.php?page=emblem-studio')]);
     }
 
+    /**
+     * Send this site's local forms to the SaaS to be upserted (mirror-on-connect).
+     * Best-effort — a failure here never blocks connecting (the dashboard just
+     * starts empty and the user can re-run by reconnecting).
+     */
     private static function mirror_forms(array $cfg): void
     {
         if (! class_exists('ES_Form_Repo')) {
             return;
         }
+        // Every non-trashed form, all statuses — including archived, since archived
+        // assets still need to sync up (they just don't show in the admin's "All"
+        // tab, which is what all('all') now means).
         $rows = array_merge(ES_Form_Repo::all('all'), ES_Form_Repo::all('archived'));
         $forms = [];
         foreach ((array) $rows as $row) {
             if (! is_object($row) || empty($row->id)) {
                 continue;
             }
+            // NEVER mirror a SaaS-origin asset back up. It was copied DOWN from the
+            // SaaS (so it carries a saas_form_id); sending it up would be seen as a
+            // new asset (it has no matching wp_form_id there) and duplicate it on
+            // every connect. Only WP-authored forms (no saas_form_id) mirror up.
             if (! empty($row->saas_form_id)) {
                 continue;
             }
             $export = ES_Form_Repo::to_export_array($row);
-            $export['wp_form_id'] = (int) $row->id;
+            $export['wp_form_id'] = (int) $row->id; // stable key → idempotent upsert
             $export['revisions']  = self::form_revisions((int) $row->id);
             $forms[] = $export;
         }
@@ -854,20 +1114,41 @@ final class Emblem_Studio_SaaS_Connector
             'site_id' => $cfg['site_id'],
             'token'   => $cfg['site_token'],
             'forms'   => $forms,
+            // Rides along free, as the safety net for a timezone push that never
+            // arrived: the site was offline, the SaaS was down, or the option
+            // changed while this plugin was inactive. See push_timezone().
             'timezone' => self::wp_timezone(),
         ]);
     }
 
+    /**
+     * WordPress's own timezone, in whatever shape it reports.
+     *
+     * An IANA name like "America/New_York", or "-04:00" on a site using a manual
+     * offset. The SaaS normalises whatever arrives.
+     */
     private static function wp_timezone(): string
     {
         return function_exists('wp_timezone_string') ? (string) wp_timezone_string() : '';
     }
 
+    /**
+     * Push the timezone the moment somebody changes it in WordPress.
+     *
+     * A WordPress site's timezone is WordPress's to decide. The SaaS dashboard
+     * has no field to disagree with it, so this side is the only source, and it
+     * used to speak exactly once, at pairing. That left two problems: a change
+     * made here never reached the SaaS, and a bad value there could never be
+     * corrected by anything.
+     *
+     * Hooked to the option itself rather than polled, so it costs nothing on
+     * every other day of the year and is instant on the day it matters.
+     */
     public static function push_timezone(): void
     {
         $cfg = self::config();
         if (empty($cfg['site_id']) || empty($cfg['site_token'])) {
-            return;
+            return; // not connected — nobody to tell
         }
 
         $tz = self::wp_timezone();
@@ -875,6 +1156,11 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
 
+        // Fire and forget. This runs inside an admin save, so it must never make
+        // somebody wait and must never fail the save it hangs off. A push that
+        // does not land is picked up within the hour by report_timezone(), which
+        // keeps sending until the SaaS confirms. (This comment used to say "the
+        // next mirror pass", which only ever ran once, at connect.)
         wp_remote_post(rtrim($cfg['api_base'], '/').'/v1/embed/site-timezone', [
             'timeout'  => 5,
             'blocking' => false,
@@ -887,6 +1173,12 @@ final class Emblem_Studio_SaaS_Connector
         ]);
     }
 
+    /**
+     * Send this site's local display-rule presets to the SaaS to be upserted
+     * (SER-899 phase 2) — same shape and same rule as mirror_forms(): a preset
+     * already pulled DOWN from the SaaS (carries a saas_preset_id) never mirrors
+     * back up, or it would look like a new one and duplicate on every connect.
+     */
     private static function mirror_presets(array $cfg): void
     {
         if (! class_exists('ES_Preset_Repo')) {
@@ -902,7 +1194,7 @@ final class Emblem_Studio_SaaS_Connector
                 continue;
             }
             $export = ES_Preset_Repo::to_export_array($row);
-            $export['wp_preset_id'] = (int) $row->id;
+            $export['wp_preset_id'] = (int) $row->id; // stable key → idempotent upsert
             $presets[] = $export;
         }
         if (empty($presets)) {
@@ -916,6 +1208,7 @@ final class Emblem_Studio_SaaS_Connector
         ]);
     }
 
+    /** The wpdb table for a mirror kind, or '' when it doesn't exist. */
     private static function mirror_table(string $kind): string
     {
         global $wpdb;
@@ -924,6 +1217,7 @@ final class Emblem_Studio_SaaS_Connector
         return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table ? $table : '';
     }
 
+    /** Rows still to mirror for a kind (id > cursor). Drives the progress figure. */
     private static function mirror_remaining(string $kind, int $after = 0): int
     {
         global $wpdb;
@@ -936,6 +1230,17 @@ final class Emblem_Studio_SaaS_Connector
         return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE id > %d", $after));
     }
 
+    /**
+     * Mirror ONE id-ordered batch of a kind ('events' | 'leads') and return the
+     * advanced state; or null when the batch was refused (caller stops and retries
+     * this same cursor on a later pass — never skips, so no holes).
+     *
+     * Idempotent server-side by (form_id, wp_event_id / wp_lead_id), so replaying a
+     * batch after a crash is harmless.
+     *
+     * @param  array<string,mixed>  $state
+     * @return array<string,mixed>|null
+     */
     private static function mirror_batch(array $cfg, array $state, string $kind, string $path, string $next_stage): ?array
     {
         global $wpdb;
@@ -952,6 +1257,19 @@ final class Emblem_Studio_SaaS_Connector
             ? 'id, form_id, event_type, type, click_target, variant, post_id, ua, ip, visitor, created_at'
             : 'id, form_id, email, extra_fields, funnelkit_contact_id, funnelkit_pushed, error, is_bot, bot_signals, ip, created_at';
 
+        // NEVER mirror a SaaS-origin row back up — the same rule mirror_forms()
+        // applies to assets, which this had been missing.
+        //
+        // These tables hold BOTH our own history and the copies pull_stats() /
+        // pull_leads() bring DOWN from the SaaS. Sending a pulled row back up
+        // hands it over as WP-authored: it arrives under a fresh wp_event_id, so
+        // the SaaS's insert-or-ignore (keyed on form_id + wp_event_id) cannot
+        // recognise it as the row it sent us, and stores it a second time. Every
+        // re-connect inflated the stats a little more.
+        //
+        // The SaaS already guards the other direction — its export sends only
+        // rows with no wp_event_id, precisely so nothing round-trips. This is the
+        // matching half. Only rows we originated travel up.
         $origin_col = $kind === 'events' ? 'saas_event_id' : 'saas_lead_id';
 
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table/$cols/$origin_col are constant names.
@@ -984,12 +1302,14 @@ final class Emblem_Studio_SaaS_Connector
             return null;
         }
 
+        // Cursor advances ONLY after the batch actually landed.
         $state['last_id'] = $last;
         $state['done']    = (int) $state['done'] + count($items);
 
         return $state;
     }
 
+    /** @return array<string,mixed> */
     private static function map_event(object $row): array
     {
         return [
@@ -1003,10 +1323,15 @@ final class Emblem_Studio_SaaS_Connector
             'ua'           => $row->ua,
             'ip'           => $row->ip,
             'visitor'      => $row->visitor,
+            // Sent as UTC, because that is what the SaaS stores. This column is WP
+            // local time, so handing it over raw filed every mirrored event under
+            // the site's offset — the matching half of the conversion pull_stats()
+            // does coming the other way.
             'created_at'   => get_gmt_from_date((string) $row->created_at),
         ];
     }
 
+    /** @return array<string,mixed> */
     private static function map_lead(object $row): array
     {
         return [
@@ -1018,12 +1343,25 @@ final class Emblem_Studio_SaaS_Connector
             'funnelkit_pushed'     => (int) $row->funnelkit_pushed,
             'error'                => $row->error,
             'is_bot'               => (int) $row->is_bot,
+            // Travels with the verdict, in both directions. A WordPress-captured
+            // lead was flagged HERE, so this side is the only place the evidence
+            // exists — without it the dashboard shows "Bot" and cannot say why,
+            // which is the same blind spot in mirror image.
             'bot_signals'          => $row->bot_signals ?? null,
             'ip'                   => $row->ip,
+            // Sent as UTC — see map_event(). Same column, same conversion, so a
+            // lead reads at the same moment on both sides.
             'created_at'           => get_gmt_from_date((string) $row->created_at),
         ];
     }
 
+    /* ── Copy-down (Phase 2): pull the SaaS state back into WordPress ──────── */
+
+    /**
+     * Pull the SaaS's assets, stats and leads into this WordPress so it always
+     * holds an up-to-date local copy. Runs on connect, on the es_saas_pull cron,
+     * and one final time at decouple. Best-effort — a failure is retried next run.
+     */
     public static function pull_all(?array $cfg = null): void
     {
         $cfg = $cfg ?: self::config();
@@ -1039,6 +1377,7 @@ final class Emblem_Studio_SaaS_Connector
         self::push_erasures();
     }
 
+    /** WP-cron tick — refresh the local copy while connected. */
     public static function cron_pull(): void
     {
         if (self::is_connected()) {
@@ -1047,6 +1386,12 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * The timer sync_funnelkit() runs on.
+     *
+     * @param mixed $schedules
+     * @return array<string, mixed>
+     */
     public static function cron_schedules($schedules): array
     {
         $schedules = is_array($schedules) ? $schedules : [];
@@ -1058,6 +1403,7 @@ final class Emblem_Studio_SaaS_Connector
         return $schedules;
     }
 
+    /** Keep the FunnelKit collect timer running while this site is connected. */
     public static function schedule_funnelkit_sync(): void
     {
         if (self::is_connected() && ! wp_next_scheduled(self::FK_SYNC_HOOK)) {
@@ -1065,6 +1411,19 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Collect the FunnelKit leads the SaaS could not push here.
+     *
+     * Normally the SaaS calls this site for every lead. A site it cannot reach
+     * (a LocalWP site like test-es.local, a firewalled one) would never get
+     * them. This site CAN reach the SaaS, so it asks: which leads are waiting
+     * for me? It delivers them through the same run_dispatch() a push uses and
+     * reports each result back. It also sends up the FunnelKit catalog when
+     * asked, so the dashboard can still offer this site's lists and tags.
+     *
+     * Checks every couple of minutes. For a site the SaaS can reach, the answer
+     * is an empty list, one small request.
+     */
     public static function sync_funnelkit(): void
     {
         $cfg = self::config();
@@ -1072,13 +1431,19 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
 
+        // SER-1747: say whether this shop already measures purchases, so a switch
+        // turned on here before connecting is kept, not reset.
         $data = self::pull_post($cfg, '/v1/embed/funnelkit/pending', [
             'shop_data_local' => class_exists('ES_Purchases') && get_option(ES_Purchases::ENABLED_OPTION) === '1',
         ]);
         if (! $data) {
-            return;
+            return; // the SaaS is unreachable or older; try again next tick
         }
 
+        // The owner's "Shop data" switch lives in the web app's Site settings now
+        // (SER-1747): this site's own Settings page is replaced by the web app's
+        // once connected. Applied to the same option ES_Purchases reads, so
+        // switching it on there also starts the catch-up on recent orders.
         if (array_key_exists('shop_data', $data) && $data['shop_data'] !== null && class_exists('ES_Purchases')) {
             $want = ! empty($data['shop_data']) ? '1' : '0';
             if (get_option(ES_Purchases::ENABLED_OPTION) !== $want) {
@@ -1086,6 +1451,9 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
+        // The same answer says whether any asset here uses the order trigger.
+        // Recorded on every tick, so switching an asset on reaches this site
+        // within two minutes, and anything waiting goes up with it.
         if (array_key_exists('orders_wanted', $data)) {
             self::set_recent_orders_wanted(! empty($data['orders_wanted']));
             if (! empty($data['orders_wanted'])) {
@@ -1094,7 +1462,7 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         if (! self::funnelkit_available()) {
-            return;
+            return; // nothing to deliver into; the leads keep waiting
         }
         if (! empty($data['want_meta'])) {
             self::pull_post($cfg, '/v1/embed/funnelkit/meta', ['meta' => self::funnelkit_meta_payload()]);
@@ -1107,6 +1475,8 @@ final class Emblem_Studio_SaaS_Connector
                 continue;
             }
             [$res] = self::run_dispatch($lead['dispatch']);
+            // Another delivery of this lead is running right now. Leave it
+            // waiting; the next tick replays whatever that one recorded.
             if (($res['mode'] ?? '') === 'in_progress') {
                 continue;
             }
@@ -1123,6 +1493,22 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Make sure the SaaS knows this site's clock, and keep checking until it does.
+     *
+     * Every schedule on a connected site runs on the timezone the SaaS holds for
+     * it, and WordPress is the only place that timezone is set. It used to reach
+     * the SaaS by three routes, and all three could miss: pairing sent it and the
+     * SaaS dropped it, the mirror at connect carried it but skipped a site with
+     * no assets in WordPress, and push_timezone() only fires when the setting
+     * changes. A site that missed all three stayed on UTC with nothing to correct
+     * it, and its schedules ran hours off.
+     *
+     * So this runs hourly and costs nothing once it has landed: it remembers the
+     * last value the SaaS CONFIRMED, for this connection, and only speaks when the
+     * current one differs. Blocking on purpose, because the point is to know it
+     * arrived. Keyed by site id, so connecting to a different site reports again.
+     */
     public static function report_timezone(): void
     {
         $cfg = self::config();
@@ -1151,12 +1537,19 @@ final class Emblem_Studio_SaaS_Connector
         ]);
 
         if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
-            return;
+            return; // Not confirmed. The next hour tries again.
         }
 
         update_option('ess_timezone_reported', $marker, false);
     }
 
+    /**
+     * Assets only, on demand — a lighter refresh than pull_all() (skips
+     * presets/stats/leads) for callers that just need the local asset mirror
+     * fresh right now, e.g. FunnelKit's own Forms picker (see
+     * ES_FunnelKit_Form_Feed::maybe_refresh_catalog()), which otherwise only
+     * sees whatever the last hourly es_saas_pull happened to pull down.
+     */
     public static function pull_assets_now(): void
     {
         $cfg = self::config();
@@ -1165,12 +1558,37 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /* ── The connect-time import: resumable, chunked, cron-independent ────────
+     *
+     * A real site's history is tens of thousands of rows, so this CANNOT be one
+     * long job:
+     *   - PHP's max_execution_time kills a long run mid-way, and a run that
+     *     restarts from zero each time may never finish on a big enough table.
+     *   - It was queued behind WP-Cron with no fallback. On a cached / CDN-fronted
+     *     host (DISABLE_WP_CRON, or blocked loopback) nothing spawns it, so connect
+     *     looked like a hang for minutes.
+     *
+     * So: state lives in an option (`es_import_state`) and every pass does a
+     * bounded slice of work, then reschedules while work remains. A killed pass
+     * costs at most one batch — the next resumes from the stored cursor.
+     *
+     * TWO drivers, either alone is enough, and a transient lock keeps them from
+     * overlapping:
+     *   1. the `es_saas_import` cron event (works with the tab closed), and
+     *   2. the dashboard overlay, which drives passes over AJAX while it's open —
+     *      so the import runs even where WP-Cron never fires.
+     */
+
+    /** Rows per mirror batch (one HTTP POST). */
     const IMPORT_BATCH = 500;
 
+    /** Work budget for a single pass — comfortably inside a default max_execution_time. */
     const IMPORT_PASS_SECONDS = 15;
 
+    /** Only one import worker at a time (cron vs the overlay's AJAX ticks). */
     const IMPORT_LOCK = 'es_import_lock';
 
+    /** Resumable cursor + progress. @return array<string,mixed> */
     private static function import_state(): array
     {
         $state = get_option('es_import_state', []);
@@ -1181,11 +1599,16 @@ final class Emblem_Studio_SaaS_Connector
         return $state + ['stage' => 'forms', 'last_id' => 0, 'done' => 0, 'total' => 0, 'stalled' => 0];
     }
 
+    /** @param array<string,mixed> $state */
     private static function save_import_state(array $state): void
     {
         update_option('es_import_state', $state, false);
     }
 
+    /**
+     * Arm a fresh import and kick the first pass immediately (don't just queue it
+     * and hope something triggers WP-Cron). Called right after a successful pair.
+     */
     private static function start_import(): void
     {
         update_option('es_import_status', 'running');
@@ -1193,32 +1616,43 @@ final class Emblem_Studio_SaaS_Connector
             'stage'   => 'forms',
             'last_id' => 0,
             'done'    => 0,
+            // Best-effort total for the progress line; the overlay copes if it's off.
             'total'   => self::mirror_remaining('events') + self::mirror_remaining('leads'),
             'stalled' => 0,
         ]);
 
         wp_schedule_single_event(time(), 'es_saas_import');
+        // Best-effort nudge; the overlay drives passes itself if this never fires.
         if (function_exists('spawn_cron')) {
             spawn_cron();
         }
     }
 
+    /** WP-cron entry (`es_saas_import`): run one pass, reschedule while work remains. */
     public static function run_import(): void
     {
         $progress = self::run_import_pass();
         if ($progress['status'] === 'done') {
             return;
         }
+        // Stalled (rate-limited / server down) → wait before leaning on it again.
         $delay = ! empty($progress['stalled']) ? 60 : 1;
         if (! wp_next_scheduled('es_saas_import')) {
             wp_schedule_single_event(time() + $delay, 'es_saas_import');
         }
     }
 
+    /**
+     * One bounded slice of the import. Safe to call from cron OR from the overlay's
+     * AJAX tick — the lock means whoever gets there first does the work and the
+     * other just reads progress.
+     *
+     * @return array<string,mixed>
+     */
     public static function run_import_pass(): array
     {
         if (get_transient(self::IMPORT_LOCK)) {
-            return self::import_progress();
+            return self::import_progress(); // another worker is mid-pass
         }
         set_transient(self::IMPORT_LOCK, 1, 120);
 
@@ -1235,7 +1669,7 @@ final class Emblem_Studio_SaaS_Connector
 
             while ($state['stage'] !== 'done' && time() < $deadline) {
                 $next = self::import_step($cfg, $state);
-                if ($next === null) {
+                if ($next === null) { // batch refused — keep the cursor, retry later
                     $state['stalled'] = time();
                     self::save_import_state($state);
                     break;
@@ -1249,6 +1683,8 @@ final class Emblem_Studio_SaaS_Connector
                 self::finish_import($cfg);
             }
         } catch (\Throwable $e) {
+            // Never let a thrown pass wedge the import: the cursor is already saved,
+            // so the next pass resumes. Fall through and report progress.
         } finally {
             delete_transient(self::IMPORT_LOCK);
         }
@@ -1256,6 +1692,13 @@ final class Emblem_Studio_SaaS_Connector
         return self::import_progress();
     }
 
+    /**
+     * Advance the import by one unit of work. Returns the new state, or null when a
+     * batch was refused (cursor unchanged so the next pass retries it).
+     *
+     * @param  array<string,mixed>  $state
+     * @return array<string,mixed>|null
+     */
     private static function import_step(array $cfg, array $state): ?array
     {
         switch ($state['stage']) {
@@ -1291,6 +1734,7 @@ final class Emblem_Studio_SaaS_Connector
         return $state;
     }
 
+    /** Import finished: arm the periodic refresh and lift the overlay. */
     private static function finish_import(?array $cfg = null): void
     {
         if ($cfg && ! wp_next_scheduled('es_saas_pull')) {
@@ -1305,6 +1749,7 @@ final class Emblem_Studio_SaaS_Connector
         update_option('es_import_status', 'done');
     }
 
+    /** What the overlay shows. @return array<string,mixed> */
     private static function import_progress(): array
     {
         $state = self::import_state();
@@ -1318,6 +1763,11 @@ final class Emblem_Studio_SaaS_Connector
         ];
     }
 
+    /**
+     * Poll target for the setup overlay. Also DRIVES a pass, so the import proceeds
+     * while the page is open even if WP-Cron never fires on this host. Returns real
+     * progress (done/total), not just a running/done flag.
+     */
     public static function ajax_import_status(): void
     {
         if (! current_user_can('manage_options') || ! check_ajax_referer('es_import_status', 'nonce', false)) {
@@ -1326,6 +1776,19 @@ final class Emblem_Studio_SaaS_Connector
         wp_send_json_success(self::run_import_pass());
     }
 
+    /**
+     * POST one mirror batch, with backoff so a batch is never silently dropped.
+     *
+     * The caller advances its id cursor only when this returns true, so a refused
+     * batch is retried instead of leaving a permanent hole in the imported history.
+     * Retries on 429 (rate limited) and on transport/5xx errors, honouring
+     * Retry-After when the server sends it.
+     *
+     * Retries are deliberately few and short: they must fit inside one import pass
+     * (IMPORT_PASS_SECONDS). Returning false doesn't lose anything — the pass marks
+     * the import stalled, keeps the cursor, and a later pass retries the SAME batch.
+     * Long waits belong to the scheduler, not to a blocking sleep here.
+     */
     private static function mirror_post(string $url, array $payload): bool
     {
         for ($attempt = 0; $attempt < 3; $attempt++) {
@@ -1340,6 +1803,7 @@ final class Emblem_Studio_SaaS_Connector
                 if ($code >= 200 && $code < 300) {
                     return true;
                 }
+                // 4xx other than 429 is a permanent refusal — retrying won't help.
                 if ($code !== 429 && $code < 500) {
                     return false;
                 }
@@ -1348,9 +1812,12 @@ final class Emblem_Studio_SaaS_Connector
                 $retry_after = 0;
             }
 
+            // Don't sleep after the final attempt — the pass reschedules instead.
             if ($attempt === 2) {
                 break;
             }
+            // Server's Retry-After wins; otherwise back off 2s then 4s. Capped so a
+            // long Retry-After can't blow the pass budget — that's the scheduler's job.
             $wait = $retry_after > 0 ? $retry_after : (2 ** ($attempt + 1));
             sleep(min($wait, 5));
         }
@@ -1358,6 +1825,7 @@ final class Emblem_Studio_SaaS_Connector
         return false;
     }
 
+    /** POST a proven request to a SaaS export endpoint; decoded body or null. */
     private static function pull_post(array $cfg, string $path, array $extra = []): ?array
     {
         $res = wp_remote_post(rtrim($cfg['api_base'], '/') . $path, [
@@ -1376,6 +1844,12 @@ final class Emblem_Studio_SaaS_Connector
         return is_array($data) ? $data : null;
     }
 
+    /**
+     * Upsert every SaaS asset into the local forms table (match by the wp_form_id
+     * it was mirrored up as, else by the SaaS id stored on a prior pull, else
+     * create). Assets Lite can't run are copied but forced INACTIVE; supported
+     * ones keep the SaaS status. ES_Form_Repo::save() enforces Lite's own caps.
+     */
     private static function pull_assets(array $cfg): void
     {
         if (! class_exists('ES_Form_Repo')) {
@@ -1388,6 +1862,9 @@ final class Emblem_Studio_SaaS_Connector
 
         global $wpdb;
         $t = $wpdb->prefix . 'emblemstudio_forms';
+        // saas_form_id => local WordPress id, reported back to the SaaS after the
+        // loop so the dashboard can show a real, working [es-inline-N] shortcode
+        // for assets authored there (it has no way to know this id otherwise).
         $wp_ids = [];
         foreach ($data['assets'] as $a) {
             if (! is_array($a) || empty($a['saas_form_id'])) {
@@ -1403,6 +1880,10 @@ final class Emblem_Studio_SaaS_Connector
                 $local_id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE saas_form_id = %d", $saas_id));
             }
 
+            // Per-shell Lite support: keep the asset active on the shells Lite can
+            // run and drop the ones it can't (auto popup / ribbon / slide-in). If
+            // NO shell is runnable the whole asset is Lite-deactivated. The disabled
+            // set is stored so the forms list can strike it through.
             $auto       = ['popup-auto', 'ribbon', 'slide-in'];
             $saas_types = is_array($a['form_types'] ?? null) ? array_values($a['form_types']) : ['inline'];
             $disabled   = array_values(array_intersect($saas_types, $auto));
@@ -1433,6 +1914,8 @@ final class Emblem_Studio_SaaS_Connector
                 'track_clicks'         => ! empty($a['track_clicks']),
                 'track_purchases'      => ! empty($a['track_purchases']),
                 'funnelkit_enabled'    => ! empty($a['funnelkit_enabled']),
+                // How FunnelKit adds a NEW contact. An older SaaS build sends
+                // no key, which means 'subscribed', as it always did.
                 'funnelkit_contact_status' => (string) ($a['funnelkit_contact_status'] ?? '') === 'unsubscribed' ? 'unsubscribed' : 'subscribed',
                 'webhooks'             => is_array($a['webhooks'] ?? null) ? $a['webhooks'] : [],
                 'connections'          => is_array($a['connections'] ?? null) ? $a['connections'] : [],
@@ -1442,6 +1925,8 @@ final class Emblem_Studio_SaaS_Connector
 
             $new_id = (int) ES_Form_Repo::save($fields, $local_id ?: null);
             if ($new_id) {
+                // Authoritative post-save: store only the Lite-runnable shells (may be
+                // empty → renders nowhere) + the disabled set for the strikethrough.
                 $wpdb->update($t, [
                     'saas_form_id'  => $saas_id,
                     'form_types'    => wp_json_encode($supported),
@@ -1449,12 +1934,26 @@ final class Emblem_Studio_SaaS_Connector
                 ], ['id' => $new_id]);
                 $wp_ids[$saas_id] = $new_id;
 
+                // Archive is a separate flag from status (like trash), so it isn't
+                // part of ES_Form_Repo::save()'s field set — apply it explicitly.
+                // Only touch it when the key is present, so an older SaaS build
+                // (no archived_at in the payload yet) never un-archives on pull.
+                //
+                // set_archived_at(), NOT archive()/restore_from_archive(). Those two
+                // are the wp-admin user action and switch the form off as part of
+                // the deal, which is right when a person clicks Archive and wrong
+                // here: $status above is the answer the SaaS just gave us, and the
+                // flag must not overwrite it. The SaaS sends archived_at as null
+                // rather than omitting it, so the old code ran the unarchive path on
+                // every ordinary asset and left the whole mirror switched off.
                 if (array_key_exists('archived_at', $a)) {
                     ES_Form_Repo::set_archived_at($new_id, empty($a['archived_at']) ? null : (string) $a['archived_at']);
                 }
             }
         }
 
+        // Delete-sync: a locally-synced asset whose SaaS counterpart is gone
+        // (deleted in the SaaS → absent from this full list) is trashed here too.
         $received = [];
         foreach ($data['assets'] as $a) {
             if (is_array($a) && ! empty($a['saas_form_id'])) {
@@ -1468,6 +1967,10 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
+        // Report this pass's id mapping back — pure bookkeeping, never a content
+        // mirror-up (mirror_forms() still refuses to send a SaaS-origin row's
+        // content back). Sent every pull so a first-ever local id, or a changed
+        // one after a trash/restore reassigns rows, always reaches the SaaS.
         if ($wp_ids) {
             $mappings = [];
             foreach ($wp_ids as $saas_form_id => $wp_form_id) {
@@ -1481,6 +1984,14 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Upsert every SaaS display-rule preset into the local presets table
+     * (SER-899 phase 2) — match by the wp_preset_id it was mirrored up as
+     * (so a preset just pushed up in this same pass gets its saas_preset_id
+     * written back), else by the saas_preset_id stored on a prior pull, else
+     * create. Same convergence pattern as pull_assets(). Full set every time,
+     * no cursor — a site's preset catalog is small.
+     */
     private static function pull_presets(array $cfg): void
     {
         if (! class_exists('ES_Preset_Repo')) {
@@ -1521,6 +2032,9 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
+        // Delete-sync: a locally-synced preset whose SaaS counterpart is gone
+        // (deleted in the SaaS → absent from this full list) is deleted here
+        // too — un-linking any shell still following it, same as a manual delete.
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $t is a prefixed constant name.
         foreach ((array) $wpdb->get_results("SELECT id, saas_preset_id FROM {$t} WHERE saas_preset_id IS NOT NULL") as $row) {
             if (! in_array((int) $row->saas_preset_id, $received, true)) {
@@ -1529,6 +2043,23 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Honour a stats wipe performed in the SaaS.
+     *
+     * The SaaS stamps `reset_at` when someone wipes a site's stats, and hands it
+     * back on every stats export. If it is newer than the one we last acted on,
+     * the wipe has not reached us yet: drop our events, rewind the pull cursor to
+     * zero so anything recorded AFTER the wipe comes back down, and record the
+     * mark so we only ever do this once per wipe.
+     *
+     * We clear the whole table, not just the rows we pulled. A reset means the
+     * numbers start again on both sides; keeping our own pre-connect history here
+     * would leave WordPress reporting figures the SaaS no longer has, which is the
+     * disagreement the wipe was meant to end. (The SaaS deletes its copy of that
+     * same history in the same operation.)
+     *
+     * Returns the cursor to continue from — rewound to 0 on a fresh wipe.
+     */
     private static function apply_stats_reset(array $data, int $after): int
     {
         $mark = isset($data['reset_at']) && is_string($data['reset_at']) ? $data['reset_at'] : '';
@@ -1536,6 +2067,8 @@ final class Emblem_Studio_SaaS_Connector
             return $after;
         }
 
+        // The same call the plugin's own "reset stats" button makes — one wipe
+        // path, not two that could drift.
         if (class_exists('ES_Reports')) {
             ES_Reports::reset_stats();
         } else {
@@ -1551,6 +2084,17 @@ final class Emblem_Studio_SaaS_Connector
         return 0;
     }
 
+    /**
+     * Pull SaaS-native events down, mapped by saas_form_id; dedupe by saas_event_id.
+     *
+     * @param  int|null  $deadline  When given (SER-950's post-decouple catch-up),
+     *                              stop looping once time() reaches it, leaving the
+     *                              cursor exactly where it is for the next pass to
+     *                              resume from. Omitted (the normal hourly refresh)
+     *                              behaves exactly as before — loops until caught up.
+     * @return bool  True once fully caught up; false if it stopped early because
+     *               the deadline hit while a full batch (more likely pending) remained.
+     */
     private static function pull_stats(array $cfg, ?int $deadline = null): bool
     {
         global $wpdb;
@@ -1563,9 +2107,16 @@ final class Emblem_Studio_SaaS_Connector
         do {
             $data = self::pull_post($cfg, '/v1/embed/export/stats', ['after_id' => $after]);
             if (! is_array($data)) {
+                // A refused or failed export is incomplete work, not an empty
+                // successful batch. Keep the cursor unchanged and retry later.
                 return false;
             }
 
+            // A wipe over there cannot reach us as rows — this pull only ever
+            // inserts, so an emptied SaaS and a SaaS with nothing new look exactly
+            // the same from here. The mark is what tells them apart, and it has to
+            // be read BEFORE the empty-events return below: after a wipe, the
+            // empty response is the only response there is.
             $after = self::apply_stats_reset($data, $after);
 
             if (empty($data['events']) || ! is_array($data['events'])) {
@@ -1588,6 +2139,10 @@ final class Emblem_Studio_SaaS_Connector
                     'ua'            => $e['ua'] ?? null,
                     'ip'            => $e['ip'] ?? null,
                     'visitor'       => $e['visitor'] ?? null,
+                    // Same conversion as pull_leads(): the export sends UTC, and
+                    // every locally recorded event in this table is WP local time.
+                    // Mixing the two puts mirrored stats in the wrong day for any
+                    // site that isn't on UTC, which quietly skews the reports.
                     'created_at'    => isset($e['created_at'])
                         ? get_date_from_gmt((string) $e['created_at'])
                         : current_time('mysql'),
@@ -1604,6 +2159,10 @@ final class Emblem_Studio_SaaS_Connector
         return false;
     }
 
+    /**
+     * Pull SaaS-native leads down, mapped by saas_form_id; dedupe by saas_lead_id.
+     * See pull_stats() for the $deadline / return-value contract — identical here.
+     */
     private static function pull_leads(array $cfg, ?int $deadline = null): bool
     {
         global $wpdb;
@@ -1644,11 +2203,23 @@ final class Emblem_Studio_SaaS_Connector
                     'is_bot'               => ! empty($l['is_bot']) ? 1 : 0,
                     'bot_signals'          => $signals,
                     'ip'                   => $l['ip'] ?? null,
+                    // The export sends UTC. Everything else in this table is WP
+                    // local time (a WordPress-captured lead uses current_time),
+                    // and the Leads screen renders the column as local either
+                    // way. Storing the raw UTC put every mirrored lead out by the
+                    // site's offset, sitting next to native rows that were right.
                     'created_at'           => isset($l['created_at'])
                         ? get_date_from_gmt((string) $l['created_at'])
                         : current_time('mysql'),
                 ]);
 
+                // The row is already here from a pull that ran before we carried
+                // the bot-check evidence down (the DB v37 upgrade rewinds the
+                // cursor once so those rows come past again). Fill ONLY that one
+                // column, and only while it is still empty. A plain upsert would
+                // be simpler and wrong: it would clobber a lead someone
+                // reclassified here, which is a local decision the SaaS copy
+                // does not know about.
                 if ($inserted === false && $signals !== null) {
                     $wpdb->query($wpdb->prepare(
                         "UPDATE $leads SET bot_signals = %s WHERE saas_lead_id = %d AND bot_signals IS NULL",
@@ -1668,6 +2239,15 @@ final class Emblem_Studio_SaaS_Connector
         return false;
     }
 
+    /**
+     * Periodic safety net for lead-deletion sync — the instant delete route
+     * (handle_lead_delete()) is the primary path; this catches whatever it
+     * missed (site was offline, the SaaS-side job exhausted its retries, or
+     * this site wasn't even connected yet when the lead was deleted). Same
+     * cursor pattern as pull_leads(), over the tombstone log instead of the
+     * leads themselves — each row deletes at most one local lead, matched the
+     * same way the instant route matches it.
+     */
     private static function pull_lead_deletions(array $cfg): void
     {
         if (! class_exists('ES_Leads')) {
@@ -1694,6 +2274,7 @@ final class Emblem_Studio_SaaS_Connector
         } while (count($data['deletions']) >= 500);
     }
 
+    /** saas_form_id → local form id (only rows we've mapped on a prior asset pull). */
     private static function saas_form_map(): array
     {
         global $wpdb;
@@ -1707,6 +2288,7 @@ final class Emblem_Studio_SaaS_Connector
         return $map;
     }
 
+    /** A locally-unique slug (keeps $desired if free, else suffixes; ignores $own_id). */
     private static function unique_slug(string $desired, int $own_id): string
     {
         global $wpdb;
@@ -1727,6 +2309,7 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /** A form's revision history (newest first) for the mirror payload. */
     private static function form_revisions(int $form_id): array
     {
         if (! class_exists('ES_Form_Revisions')) {
@@ -1755,6 +2338,24 @@ final class Emblem_Studio_SaaS_Connector
         return $out;
     }
 
+    /**
+     * Remove the stored connection — revert to the Lite plugin, immediately.
+     *
+     * SER-950: this used to do "one last copy-down" (pull_all — assets, presets,
+     * stats, leads, all in one request) synchronously, before severing anything.
+     * On a site with enough queued history that single request could outrun PHP's
+     * execution limit and fatal — leaving WordPress stuck holding a connection
+     * config that could no longer sign in or cleanly finish decoupling either
+     * (exactly what happened on tstprep.com, 2026-07-27).
+     *
+     * Now: sever the LOCAL side first — clearing cron hooks and deleting one
+     * option can't meaningfully fail or time out, so the admin reverts to Lite
+     * reliably, every time. The copy-down (and revoking the SaaS-side token)
+     * moves to a resumable background job (run_postdecouple_pull()) that starts
+     * right after, using the same bounded-pass pattern as the connect-time
+     * import — safe to take several passes on a site with real history, and it
+     * never blocks this action from completing.
+     */
     public static function handle_decouple(): void
     {
         if (! current_user_can('manage_options')) {
@@ -1766,6 +2367,8 @@ final class Emblem_Studio_SaaS_Connector
 
         wp_clear_scheduled_hook('es_saas_pull');
         wp_clear_scheduled_hook(self::FK_SYNC_HOOK);
+        // Stop any in-flight import and forget its cursor, so a later reconnect
+        // starts a clean run instead of resuming into a severed connection.
         wp_clear_scheduled_hook('es_saas_import');
 
         delete_option(self::OPTION);
@@ -1775,6 +2378,9 @@ final class Emblem_Studio_SaaS_Connector
         delete_option(self::EMBED_COPY_OPTION);
         delete_transient(self::IMPORT_LOCK);
 
+        // The SaaS-side token stays valid until the background job below either
+        // finishes or gives up — deliberately, so it can keep authenticating
+        // across passes even though the local connection config is already gone.
         if ($cfg) {
             self::start_postdecouple_pull($cfg);
         }
@@ -1783,6 +2389,7 @@ final class Emblem_Studio_SaaS_Connector
         exit;
     }
 
+    /** Arm the post-decouple background catch-up and kick its first pass immediately. */
     private static function start_postdecouple_pull(array $cfg): void
     {
         update_option(self::POSTDECOUPLE_OPTION, $cfg, false);
@@ -1793,11 +2400,20 @@ final class Emblem_Studio_SaaS_Connector
         }
     }
 
+    /**
+     * Best-effort, resumable: finish copying the site's history down to
+     * WordPress after decoupling, then revoke the SaaS-side token. Runs
+     * entirely in the background — the admin already saw the disconnected/Lite
+     * screen before this ever starts, so nothing here can block or crash it.
+     * Bounded to IMPORT_PASS_SECONDS per pass, same as the connect-time import,
+     * and gives up (revoking anyway) after POSTDECOUPLE_MAX_ATTEMPTS passes so a
+     * stuck pull can't leave the token valid indefinitely.
+     */
     public static function run_postdecouple_pull(): void
     {
         $cfg = get_option(self::POSTDECOUPLE_OPTION);
         if (! is_array($cfg) || empty($cfg['site_token'])) {
-            return;
+            return; // nothing queued, or a prior pass already finished + cleaned up
         }
         $state = get_option(self::POSTDECOUPLE_STATE);
         if (! is_array($state) || empty($state['stage'])) {
@@ -1828,6 +2444,8 @@ final class Emblem_Studio_SaaS_Connector
                 }
             }
         } catch (\Throwable $e) {
+            // Best-effort only — fall through; a later pass (or the attempts cap
+            // below) resolves it either way, so nothing here can wedge forever.
         }
 
         if ($state['stage'] === 'done' || $state['attempts'] >= self::POSTDECOUPLE_MAX_ATTEMPTS) {
@@ -1842,6 +2460,7 @@ final class Emblem_Studio_SaaS_Connector
         wp_schedule_single_event(time() + 5, self::POSTDECOUPLE_HOOK);
     }
 
+    /** Ask the SaaS to sever this site's connection (rotate its secret). Best-effort. */
     private static function revoke_connection(?array $cfg): void
     {
         if (! $cfg || empty($cfg['api_base']) || empty($cfg['site_id']) || empty($cfg['site_token'])) {
@@ -1856,6 +2475,7 @@ final class Emblem_Studio_SaaS_Connector
         ]);
     }
 
+    /** A gentle nudge to connect, shown on Emblem Studio admin pages when not connected. */
     public static function connect_notice(): void
     {
         if (self::is_connected() || ! current_user_can('manage_options')) {
@@ -1866,7 +2486,7 @@ final class Emblem_Studio_SaaS_Connector
             return;
         }
         if (isset($_GET['page']) && $_GET['page'] === 'emblem-studio-account') {
-            return;
+            return; // already on the connect screen
         }
         $url = admin_url('admin.php?page=emblem-studio-account');
         echo '<div class="notice notice-info"><p>'
@@ -1874,13 +2494,18 @@ final class Emblem_Studio_SaaS_Connector
             .' <a href="'.esc_url($url).'">'.esc_html__('Sign in', 'emblem-studio').'</a></p></div>';
     }
 
+    /* ── Front-end: context + form slots + embed.js ────────────────────── */
+
+    /** Shells that place themselves on the page instead of sitting where an author put them. */
     private const AUTO_SHELLS = ['popup-auto', 'ribbon', 'slide-in'];
 
+    /** Is FunnelKit Automations available to write contacts in-process? */
     private static function funnelkit_available(): bool
     {
         return class_exists('BWFCRM_Contact');
     }
 
+    /** The site's live role registry — [{slug,label}, …], custom roles included. */
     private static function roles(): array
     {
         if (! function_exists('wp_roles')) {
@@ -1898,17 +2523,24 @@ final class Emblem_Studio_SaaS_Connector
     {
         $cfg = self::config();
         if (! $cfg) {
-            return;
+            return; // not connected — nothing to inject.
         }
         if (is_admin() || is_feed() || is_embed()) {
             return;
         }
+        // Don't interfere with the free plugin's own form-preview page.
         if (! empty($_GET['es_preview'])) {
             return;
         }
 
         $forms = self::forms($cfg);
 
+        // A page builder opens its canvas as an <iframe> pointing at the real
+        // page, so is_admin() above is false inside it and the self-placing
+        // shells would land on top of the widgets the author is editing. See
+        // ES_Display_Rules::is_admin_frame() for how that is spotted without a
+        // list of builders. Inline placements still go out: the author put those
+        // on the page, and they are part of what is being laid out.
         $admin_frame = class_exists('ES_Display_Rules') && ES_Display_Rules::is_admin_frame();
 
         $config = [
@@ -1916,22 +2548,56 @@ final class Emblem_Studio_SaaS_Connector
             'wpContext' => self::context(),
         ];
 
+        // Where the shop half listens (SER-1348). Only on a site with a shop, and
+        // only used when a visitor is actually carrying a tag: it is the safety net
+        // for a basket filled by a path the page could not see.
         if (class_exists('WooCommerce')) {
             $config['ajax'] = admin_url('admin-ajax.php');
         }
 
+        // The site's public code, which is what lets the SaaS runtime ask for the
+        // whole page in one request instead of downloading every asset and only
+        // then deciding which ones belong (SaaS SER-1230). Without it that runtime
+        // falls back to the old path, so WordPress would have been the one
+        // platform still paying seven requests to show three assets — and it is
+        // the platform the problem was reported on.
+        //
+        // Not a secret: it is this site's segment in every dashboard URL, and it
+        // already sits in the page source of any plain site using the script tag.
+        //
+        // The placements printed below ride along as the page's own keys, so an
+        // asset already in the page is matched rather than added a second time.
+        // Paired with wpContext above it also lets the server decide the
+        // WordPress-specific rules, which no plain site can give it.
         if (! empty($cfg['code'])) {
             $config['site'] = (string) $cfg['code'];
         }
 
+        // Speed plugins delay or defer third-party JavaScript by default, and
+        // several of them rewrite our tags so they only load once the visitor
+        // scrolls or moves the mouse. On a page whose asset is above the fold,
+        // that is the asset not loading until the visitor touches something,
+        // and never for a search engine, which touches nothing. ES_No_Delay
+        // holds each plugin's opt-out; the fallback is the older, shorter set
+        // for a connector running without the plugin's classes.
         $skip = class_exists('ES_No_Delay')
             ? ' '.ES_No_Delay::ATTRS
             : ' data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1"';
 
+        // Same opt-out on the config: an optimizer that encodes this inline
+        // script leaves embed.js with no api base to read.
         echo '<script'.$skip.'>window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
             .wp_json_encode($config).');</script>'."\n";
 
         foreach ($forms as $form) {
+            // Name the asset by its opaque public code, not the SaaS row id: the
+            // id is one counter shared across every account, so printing it into
+            // live page source leaks how much exists platform-wide and can be
+            // walked to enumerate a site (SER-1128). Falls back to the id when
+            // the SaaS hasn't sent a code — an older SaaS, or a cached embed
+            // payload from before it started sending one. The SaaS accepts both
+            // until stage 4, which only stops accepting the id for sites whose
+            // reported connector version proves they no longer emit it.
             $key = isset($form['public_key']) && $form['public_key'] !== ''
                 ? (string) $form['public_key']
                 : (string) (isset($form['id']) ? (int) $form['id'] : 0);
@@ -1951,9 +2617,17 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
+        // The same opt-outs ($skip, above) on embed.js. Plugins that exclude by
+        // URL instead are covered by no_delay_urls(). data-cfasync must stay
+        // before src: Rocket Loader ignores it after.
         printf('<script%s src="%s" defer></script>'."\n", $skip, esc_url($cfg['api_base'].'/embed/embed.js'));
     }
 
+    /**
+     * The page's WordPress context — a direct mirror of the matchers in the free
+     * plugin's ES_Display_Rules (specials / post type / terms / WooCommerce /
+     * logged-in + roles). embed.js evaluates the WP-context rules against this.
+     */
     private static function context(): array
     {
         $singular = is_singular();
@@ -1993,6 +2667,20 @@ final class Emblem_Studio_SaaS_Connector
         return $ctx;
     }
 
+    /**
+     * The site's embed payload from the SaaS: active auto-shell forms (`data`)
+     * plus the WP-id to SaaS-id `wp_map` (so shortcodes render from the SaaS).
+     *
+     * NEVER MAKES A VISITOR WAIT, once a first copy exists (audit P5). This used
+     * to fetch inside wp_footer whenever a five-minute cache ran out, so one
+     * visitor in every five minutes waited up to 5 seconds, and every minute
+     * while the web app was down. Now a copy older than five minutes is still
+     * served at once, and a background job fetches the new one. While the web
+     * app is down the last good copy keeps the site's assets showing.
+     *
+     * The one wait left is the very first page after connecting, when there is
+     * no copy at all to serve.
+     */
     private static function fetch_embed(array $cfg): array
     {
         $copy = get_option(self::EMBED_COPY_OPTION);
@@ -2004,6 +2692,9 @@ final class Emblem_Studio_SaaS_Connector
             return $copy['payload'];
         }
 
+        // No copy yet: nothing to serve, so this one request fetches. A failure
+        // is stored too, as an empty copy that goes stale in a minute, so a
+        // site that cannot reach the web app does not try on every page.
         $payload = self::download_embed($cfg);
         $failed = $payload === null;
         $payload ??= ['data' => [], 'wp_map' => [], 'wp_keys' => []];
@@ -2012,6 +2703,7 @@ final class Emblem_Studio_SaaS_Connector
         return $payload;
     }
 
+    /** WP-cron: fetch a new copy. On failure the old copy stays in use. */
     public static function refresh_embed(): void
     {
         $cfg = self::config();
@@ -2042,14 +2734,27 @@ final class Emblem_Studio_SaaS_Connector
         wp_schedule_single_event(time(), self::EMBED_REFRESH_HOOK);
     }
 
+    /**
+     * A failed first fetch is stored as already almost stale, so the next try
+     * comes about EMBED_RETRY_SECONDS later, in the background.
+     */
     private static function store_embed_copy(array $payload, bool $failed): void
     {
         $at = $failed ? time() - self::EMBED_FRESH_SECONDS + self::EMBED_RETRY_SECONDS : time();
         update_option(self::EMBED_COPY_OPTION, ['at' => $at, 'payload' => $payload], false);
     }
 
+    /** One fetch of the embed payload, or null on any failure. */
     private static function download_embed(array $cfg): ?array
     {
+        // `v` rides the heartbeat this call already carries, so the SaaS knows
+        // which connector build a site is actually running. That's what lets
+        // SER-1128 stage 4 stop accepting the SaaS row id per-site, for sites
+        // proven to have stopped emitting it, instead of one global switch that
+        // would take down every site that hasn't updated yet.
+        //
+        // The site token goes in the X-ESS-Token header, never the query string:
+        // a URL lands in proxy, CDN and server access logs, a header does not.
         $url = $cfg['api_base'].'/v1/sites/'.$cfg['site_id']
             .'/embed?funnelkit='.(self::funnelkit_available() ? '1' : '0')
             .'&v='.rawurlencode(self::VERSION);
@@ -2070,15 +2775,22 @@ final class Emblem_Studio_SaaS_Connector
         return [
             'data'    => (is_array($body) && isset($body['data']) && is_array($body['data'])) ? $body['data'] : [],
             'wp_map'  => (is_array($body) && isset($body['wp_map']) && is_array($body['wp_map'])) ? $body['wp_map'] : [],
+            // WP id to public code (SER-1235): what a shortcode placeholder carries.
             'wp_keys' => (is_array($body) && isset($body['wp_keys']) && is_array($body['wp_keys'])) ? $body['wp_keys'] : [],
         ];
     }
 
+    /** Active auto-shell forms to place as slots. */
     private static function forms(array $cfg): array
     {
         return self::fetch_embed($cfg)['data'];
     }
 
+    /**
+     * Resolve a WordPress form id to its SaaS id, or 0 if not connected / unmapped.
+     * Used by ES_Shortcode so an `[es-inline-N]` placed on a page renders the SaaS
+     * form (live dashboard edits) instead of the local copy.
+     */
     public static function saas_form_id(int $wp_id): int
     {
         $cfg = self::config();
@@ -2090,6 +2802,14 @@ final class Emblem_Studio_SaaS_Connector
         return isset($map[$wp_id]) ? (int) $map[$wp_id] : 0;
     }
 
+    /**
+     * A WordPress form id's public code in Emblem Studio, or '' if not known.
+     *
+     * The shortcode placeholder must carry this, never the row id from
+     * saas_form_id(): public pages stopped answering to row ids (SER-1128
+     * stage 4) for every site whose connector version said it was current, so
+     * shortcodes on exactly those sites rendered nothing (SER-1235).
+     */
     public static function saas_form_key(int $wp_id): string
     {
         $cfg = self::config();
@@ -2102,6 +2822,12 @@ final class Emblem_Studio_SaaS_Connector
         return preg_match('/^[A-Za-z0-9_-]{4,64}$/', $key) ? $key : '';
     }
 
+    /**
+     * Every WordPress form id Emblem Studio knows this site by, so a shortcode
+     * for an asset whose local copy has not synced down yet still registers.
+     *
+     * @return array<int, int>
+     */
     public static function mapped_wp_ids(): array
     {
         $cfg = self::config();
@@ -2116,6 +2842,8 @@ final class Emblem_Studio_SaaS_Connector
         ))));
     }
 
+    /* ── Inbound lead relay → local FunnelKit ──────────────────────────── */
+
     public static function register_routes(): void
     {
         register_rest_route('emblem-studio-saas/v1', '/lead', [
@@ -2124,6 +2852,10 @@ final class Emblem_Studio_SaaS_Connector
             'callback'            => [__CLASS__, 'receive_lead'],
         ]);
 
+        // Instant half of lead-deletion sync — fired the moment a lead is
+        // deleted in the SaaS (see Lead::booted() there). The periodic
+        // pull_lead_deletions() reconciliation is the fallback if this never
+        // arrives.
         register_rest_route('emblem-studio-saas/v1', '/lead/delete', [
             'methods'             => 'POST',
             'permission_callback' => [__CLASS__, 'authorize'],
@@ -2142,12 +2874,17 @@ final class Emblem_Studio_SaaS_Connector
             'callback'            => [__CLASS__, 'dispatch_funnelkit'],
         ]);
 
+        // Read this site's own content (post types, terms, pages) for the SaaS's
+        // display-rule pickers and strategist. See read_wp() for why this exists.
         register_rest_route('emblem-studio-saas/v1', '/wp/(?P<path>[a-z]+(?:/\d+)?)', [
             'methods'             => 'GET',
             'permission_callback' => [__CLASS__, 'authorize'],
             'callback'            => [__CLASS__, 'read_wp'],
         ]);
 
+        // Read the store's prices (SER-1345). Two routes, because "which product
+        // is that" and "what does that one cost" are different questions, and the
+        // first is asked by name.
         register_rest_route('emblem-studio-saas/v1', '/commerce/products', [
             'methods'             => 'GET',
             'permission_callback' => [__CLASS__, 'authorize'],
@@ -2160,6 +2897,8 @@ final class Emblem_Studio_SaaS_Connector
             'callback'            => [__CLASS__, 'read_product'],
         ]);
 
+        // What a coupon really takes off one product. Measured by applying it,
+        // never by reading its settings. See ES_Commerce::coupon_value().
         register_rest_route('emblem-studio-saas/v1', '/commerce/coupon', [
             'methods'             => 'GET',
             'permission_callback' => [__CLASS__, 'authorize'],
@@ -2167,6 +2906,7 @@ final class Emblem_Studio_SaaS_Connector
         ]);
     }
 
+    /** Authenticate the SaaS by the shared site token (constant-time compare). */
     public static function authorize(WP_REST_Request $request): bool
     {
         $cfg = self::config();
@@ -2178,12 +2918,39 @@ final class Emblem_Studio_SaaS_Connector
         return $token !== '' && hash_equals($cfg['site_token'], $token);
     }
 
+    /* ── Inbound content read → this site's own wp/v2 ──────────────────── */
+
+    /**
+     * The only wp/v2 routes the SaaS reads, and the only ones this will serve.
+     * An allowlist, not a proxy: the site token authenticates Emblem Studio, and
+     * Emblem Studio has no business reading anything else through it.
+     */
     private const WP_READ_PATHS = [ 'types', 'categories', 'tags', 'pages', 'posts' ];
 
+    /**
+     * Serve this site's own content to the SaaS, authenticated by the site token.
+     *
+     * Why this route exists at all, when wp/v2 already exists: the SaaS used to
+     * read wp/v2 over HTTP with a WordPress Application Password, which meant a
+     * paired site STILL had to be handed a password before its display-rule
+     * pickers or the strategist could see a single page. That is a credential the
+     * plugin makes unnecessary — it is already inside WordPress, already
+     * authenticated by the site token it was paired with.
+     *
+     * So: dispatch to wp/v2 IN-PROCESS via rest_do_request() and hand back its
+     * response verbatim. No password, and the SaaS keeps parsing the exact wp/v2
+     * shapes it always did — the transport changes, the contract doesn't. Reading
+     * internally also survives the security plugins that block /wp-json to the
+     * outside world, which is the other half of why the password was there.
+     *
+     * Runs as no user, so WordPress applies public visibility: published content
+     * only. That is all the SaaS ever asked for (every call passes status=publish)
+     * and it means this route cannot leak a draft.
+     */
     public static function read_wp(WP_REST_Request $request)
     {
         $path = (string) $request->get_param('path');
-        $base = strtok($path, '/');
+        $base = strtok($path, '/'); // 'pages/12' → 'pages'
 
         if (! in_array($base, self::WP_READ_PATHS, true)) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Unsupported path'], 404);
@@ -2209,6 +2976,17 @@ final class Emblem_Studio_SaaS_Connector
         return new WP_REST_Response($res->get_data(), (int) $res->get_status());
     }
 
+    /* ── Inbound store read → WooCommerce (SER-1345) ───────────────────── */
+
+    /**
+     * HTTP status here answers "did the call work", not "is there a shop".
+     *
+     * A site with no WooCommerce is a perfectly good answer to the question, and
+     * the SaaS needs to be able to say so in plain words. If that came back as a
+     * 404, the relay would throw away the body and report a transport failure, so
+     * the dashboard would blame the connection instead of the missing shop. A
+     * product id that does not exist IS a 404, because that one is a bad ask.
+     */
     private static function commerce_status(array $result): int
     {
         if ($result['ok'] ?? false) {
@@ -2218,6 +2996,20 @@ final class Emblem_Studio_SaaS_Connector
         return ($result['error'] ?? '') === 'not_found' ? 404 : 200;
     }
 
+    /**
+     * Run one store read and turn it into a response nobody may cache.
+     *
+     * NO CACHING, because a cached price is a wrong price. TST Prep runs Cloudflare
+     * and a page-caching plugin, and a CDN rule that caches GET under /wp-json
+     * would hand the SaaS yesterday's tier with today's timestamp missing. The
+     * site token rides in a header most caches do not key on, so the risk is real
+     * even though the route is authenticated.
+     *
+     * GUARDED, because reading a price runs every price filter every plugin on
+     * the site registered, and one of them failing outside a checkout must not
+     * become a 500 that the dashboard reports as a broken connection. Measuring a
+     * coupon has its own guard inside ES_Commerce; this covers the plain reads.
+     */
     private static function commerce_response(callable $read): WP_REST_Response
     {
         try {
@@ -2236,6 +3028,12 @@ final class Emblem_Studio_SaaS_Connector
         return $response;
     }
 
+    /**
+     * Find products by name, so the caller can turn "Group Classes" into an id.
+     *
+     * An empty search lists the shop's products, which is what somebody meeting a
+     * new site does first.
+     */
     public static function read_products(WP_REST_Request $request)
     {
         if (! class_exists('ES_Commerce')) {
@@ -2248,6 +3046,15 @@ final class Emblem_Studio_SaaS_Connector
         return self::commerce_response(fn () => ES_Commerce::search($term, $limit));
     }
 
+    /**
+     * What a coupon code takes off a product. The code is passed through as
+     * typed: WooCommerce normalises coupon codes itself, and doing it twice is
+     * how a code with a capital letter stops matching.
+     *
+     * There is deliberately no route that LISTS coupons. A shop's codes include
+     * ones meant for staff, partners and apologies, and the caller has to already
+     * know a code to ask about it.
+     */
     public static function read_coupon(WP_REST_Request $request)
     {
         if (! class_exists('ES_Commerce')) {
@@ -2261,6 +3068,7 @@ final class Emblem_Studio_SaaS_Connector
         return self::commerce_response(fn () => ES_Commerce::coupon_value($code, $product, $quantity));
     }
 
+    /** One product's prices, its sale window, and its variations if it has any. */
     public static function read_product(WP_REST_Request $request)
     {
         if (! class_exists('ES_Commerce')) {
@@ -2272,11 +3080,18 @@ final class Emblem_Studio_SaaS_Connector
         return self::commerce_response(fn () => ES_Commerce::product($id));
     }
 
+    /** Versioned local FunnelKit capabilities and runtime Form Feed state. */
     public static function funnelkit_meta(WP_REST_Request $request)
     {
         return new WP_REST_Response(self::funnelkit_meta_payload(), 200);
     }
 
+    /**
+     * The catalog itself: what funnelkit/meta answers, and what sync_funnelkit()
+     * sends up when the SaaS cannot ask for it.
+     *
+     * @return array<string, mixed>
+     */
     private static function funnelkit_meta_payload(): array
     {
         $catalog = class_exists('ES_FunnelKit_Form_Feed') ? ES_FunnelKit_Form_Feed::catalog() : [];
@@ -2300,7 +3115,7 @@ final class Emblem_Studio_SaaS_Connector
         return [
             'ok'               => true,
             'contract_version' => 1,
-            'connector_version'=> self::VERSION,
+            'connector_version'=> self::VERSION, // was a frozen '1.0.24-beta' (audit J7)
             'funnelkit'        => [
                 'available' => self::funnelkit_available(),
                 'pro'       => defined('BWFAN_PRO_VERSION') || class_exists('BWFAN_Pro'),
@@ -2317,6 +3132,7 @@ final class Emblem_Studio_SaaS_Connector
         ];
     }
 
+    /** Unified local dispatch: an active native feed wins; direct sync is fallback. */
     public static function dispatch_funnelkit(WP_REST_Request $request)
     {
         [$body, $status] = self::run_dispatch((array) $request->get_json_params());
@@ -2324,6 +3140,14 @@ final class Emblem_Studio_SaaS_Connector
         return new WP_REST_Response($body, $status);
     }
 
+    /**
+     * One FunnelKit delivery, wherever it came from: pushed by the SaaS through
+     * dispatch_funnelkit(), or collected by sync_funnelkit(). The same replay
+     * memory and lock cover both, so a lead that arrives both ways lands once.
+     *
+     * @param array<string, mixed> $p
+     * @return array{0: array<string, mixed>, 1: int} The reply body and its HTTP status.
+     */
     private static function run_dispatch(array $p): array
     {
         if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Delivery')) {
@@ -2406,6 +3230,17 @@ final class Emblem_Studio_SaaS_Connector
         return $clean;
     }
 
+    /**
+     * One answer the SaaS forwards for FunnelKit. A ticked checkbox group is a
+     * LIST and must stay one all the way to ES_FunnelKit_Upsert, which turns it
+     * into what FunnelKit stores (SER-1370). Same rule and caps as a submission
+     * taken on this site: each item cleaned, 100 items, 5000 characters each,
+     * and its line breaks kept (SER-1384), so a long answer written in paragraphs
+     * reaches FunnelKit in paragraphs.
+     *
+     * @param mixed $value
+     * @return string|array<int, string>
+     */
     private static function sanitize_field_value($value)
     {
         return ES_Ajax::sanitize_field_value($value);
@@ -2432,10 +3267,16 @@ final class Emblem_Studio_SaaS_Connector
             'lists'      => array_values(array_filter(array_map('absint', (array) ($p['lists'] ?? [])))),
             'slugs'      => self::sanitize_submission_fields((array) ($p['slugs'] ?? [])),
             'custom'     => $custom,
+            // The asset's "add new contacts as" choice. Only the two known
+            // values travel; anything else is the default, 'subscribed'.
             'contact_status' => (string) ($p['contact_status'] ?? '') === 'unsubscribed' ? 'unsubscribed' : 'subscribed',
         ];
     }
 
+    /**
+     * Create the contact in FunnelKit in-process — mirrors the autonami-app
+     * create-contact route, so the payload is identical to the SaaS REST push.
+     */
     public static function receive_lead(WP_REST_Request $request)
     {
         if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Upsert')) {
@@ -2469,6 +3310,15 @@ final class Emblem_Studio_SaaS_Connector
         return new WP_REST_Response($result, ! empty($result['ok']) ? 200 : 500);
     }
 
+    /**
+     * Delete the local copy of one lead, pushed instantly from the SaaS the
+     * moment it's deleted there. Whichever id is present is matched: wp_lead_id
+     * when this lead originated in WordPress (its own local id), saas_lead_id
+     * when it didn't but was mirrored down here by pull_leads(). Idempotent —
+     * deleting an already-gone or never-mirrored row is a harmless no-op, since
+     * the periodic pull_lead_deletions() reconciliation may also reach the same
+     * row independently.
+     */
     public static function handle_lead_delete(WP_REST_Request $request)
     {
         if (! class_exists('ES_Leads')) {

@@ -3,6 +3,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Integrates with WordPress's built-in privacy framework (Tools → Export
+ * Personal Data / Erase Personal Data). When an admin processes a data
+ * request keyed by email, our exporter returns every lead row we hold,
+ * and our eraser removes them.
+ */
 class ES_Privacy {
 
 	public function __construct() {
@@ -55,6 +61,8 @@ class ES_Privacy {
 				$item_data[] = [ 'name' => __( 'Measurement export limitation', 'emblem-studio' ), 'value' => __( 'Legacy or malformed measurement cannot be deterministically associated. Only exactly associated events are included; measurement completeness cannot be confirmed.', 'emblem-studio' ) ];
 			}
 
+			// What they bought afterwards, where the shop told us (SER-1346). It is
+			// a fact about this person, so it belongs in their own copy of the file.
 			if ( class_exists( 'ES_Purchases' ) ) {
 				$purchases = ES_Purchases::for_lead( (int) $r->id );
 				if ( is_wp_error( $purchases ) ) {
@@ -120,6 +128,8 @@ class ES_Privacy {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [ __( 'Connected or external erasure cannot be committed atomically by this measurement API. No capture was erased and no external callback was dispatched.', 'emblem-studio' ) ], 'done' => false, 'atomic_scope' => false ];
 		}
 		if ( $external ) {
+			// Preserve the pre-existing connected legacy workflow. It does not
+			// gain the strict API's local atomicity or privacy-completeness claim.
 			$result = $this->eraser_locked( $email, false );
 			$result['atomic_scope'] = false;
 			return $result;
@@ -149,6 +159,8 @@ class ES_Privacy {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 		}
 		if ( ! $atomic ) {
+			// Recheck the actual mutable snapshot, not only the earlier routing
+			// read. A newly captured strict lead must never enter legacy dispatch.
 			foreach ( $leads as $lead ) {
 				$events = ES_Measurement::events_for_lead( (int) $lead->id );
 				$context = [ 'form_id' => (int) $lead->form_id, 'event_type' => 'privacy', 'lead_id' => (int) $lead->id ];
@@ -173,6 +185,10 @@ class ES_Privacy {
 			$measurement_removed += $count;
 		}
 
+		// Take this person out of the purchase records BEFORE the leads go, while
+		// there is still a lead id to find them by. An order stays with the shop,
+		// which has its own rules about keeping it; what goes is the line joining
+		// that order to this person.
 		if ( class_exists( 'ES_Purchases' ) ) {
 			foreach ( $lead_ids as $lead_id ) {
 				if ( ES_Purchases::forget_lead( $lead_id, ! $atomic ) === false ) {
@@ -181,6 +197,10 @@ class ES_Privacy {
 			}
 		}
 
+		// The proof of what they agreed to goes too (SER-1431). A normal lead
+		// delete keeps it; a request like this one is the only thing that
+		// removes it. Also found by lead id, for records written before the
+		// address was stored on them.
 		$consents = ES_Consent_Log::erase( $email, $lead_ids );
 		if ( $consents === false || ES_Measurement_Transaction::query_failed() ) {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
@@ -192,6 +212,8 @@ class ES_Privacy {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 		}
 
+		// On a site connected to Emblem Studio the leads live there, and this
+		// site holds only a mirror. Erasing the mirror alone would erase nothing.
 		$messages = [];
 		if ( $measurement_retained ) {
 			$messages[] = __( 'Legacy measurement has no deterministic capture association. Those records were not attributed to this person or erased; measurement erasure completeness cannot be confirmed.', 'emblem-studio' );
@@ -199,6 +221,9 @@ class ES_Privacy {
 		if ( class_exists( 'Emblem_Studio_SaaS_Connector' ) && Emblem_Studio_SaaS_Connector::is_connected() ) {
 			self::queue_saas_erasure( $email );
 			do_action( 'es_erasure_ready' );
+			// Said either way. On a connected site the leads are mostly held in
+			// Emblem Studio, so "nothing removed here" alone would read as
+			// "nothing found", which is not true.
 			$messages[] = in_array( strtolower( trim( $email ) ), self::queued_saas_erasures(), true )
 				? __( 'Emblem Studio will also erase this person from your connected dashboard the next time this site syncs.', 'emblem-studio' )
 				: __( 'Emblem Studio also erased this person from your connected dashboard.', 'emblem-studio' );
@@ -221,6 +246,13 @@ class ES_Privacy {
 		];
 	}
 
+	/**
+	 * Addresses erased here that Emblem Studio still has to erase (SER-1431).
+	 *
+	 * Held only until Emblem Studio confirms, then cleared. Kept only while the
+	 * site is connected, so an address is never parked here with nobody to
+	 * send it to.
+	 */
 	public const SAAS_ERASE_OPTION = 'emblem_studio_saas_erasures';
 
 	public static function queue_saas_erasure( string $email ): void {
@@ -235,10 +267,12 @@ class ES_Privacy {
 		}
 	}
 
+	/** @return array<int, string> */
 	public static function queued_saas_erasures(): array {
 		return array_values( array_filter( array_map( 'strval', (array) get_option( self::SAAS_ERASE_OPTION, [] ) ) ) );
 	}
 
+	/** @param array<int, string> $done */
 	public static function clear_saas_erasures( array $done ): void {
 		$left = array_values( array_diff( self::queued_saas_erasures(), array_map( 'strval', $done ) ) );
 		if ( $left === [] ) {

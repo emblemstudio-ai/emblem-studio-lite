@@ -1,11 +1,17 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
+/** Internal MySQL/MariaDB scope: never commit a caller's transaction. */
 final class ES_Measurement_Transaction {
+	/**
+	 * Reads mutable driver state after each query, not a cached pure predicate.
+	 * @phpstan-impure
+	 */
 	public static function query_failed(): bool {
 		global $wpdb;
 		return $wpdb->last_error !== '';
 	}
+	/** Unknown, missing or nontransactional native tables cannot promise rollback. */
 	public static function tables_transactional( array $tables ): bool {
 		global $wpdb;
 		$tables = array_values( array_unique( $tables ) );
@@ -17,6 +23,7 @@ final class ES_Measurement_Transaction {
 		return true;
 	}
 
+	/** Read-only transaction probe; null means the scope cannot be proven. */
 	public static function active(): ?bool {
 		global $wpdb;
 		$name = 'es_measurement_probe_' . bin2hex( random_bytes( 8 ) );

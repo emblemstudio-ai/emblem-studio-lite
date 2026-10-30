@@ -1,12 +1,27 @@
+/* =====================================================================
+ * Emblem Studio — Inspector (semi-builder) takeover.
+ *
+ * A full-screen workspace layered over the form-edit screen. Three
+ * columns: layer tree (left), live form (middle), relevant CSS (right).
+ * It edits the HTML/CSS held in the page's CodeMirror editors and writes
+ * back on close — it never saves to the DB itself.
+ *
+ * Step 1 ships the shell only: open/close, top bar, the three-column
+ * frame, and the middle live form. Tree + CSS panels are placeholders.
+ * ===================================================================== */
+
+/* The launch button sits in the inline-preview bar on the Design tab. */
 .es-inspector-open {
 	margin-left: auto;
 }
 
+/* Lock the underlying page from scrolling while the takeover is open. */
 html.es-inspector-locked,
 body.es-inspector-locked {
 	overflow: hidden !important;
 }
 
+/* ── Overlay + shell ───────────────────────────────────────────── */
 .es-inspector-overlay {
 	position: fixed;
 	inset: 0;
@@ -28,6 +43,7 @@ body.es-inspector-locked {
 	overflow: hidden;
 }
 
+/* ── Top bar ───────────────────────────────────────────────────── */
 .es-inspector-topbar {
 	display: flex;
 	align-items: center;
@@ -60,6 +76,9 @@ body.es-inspector-locked {
 	text-overflow: ellipsis;
 	max-width: 40vw;
 }
+/* ── Checks list in the top bar (SER-1358) ─────────────────────────
+   The overlay sits outside .emblem-studio-wrap, so the admin tokens are
+   read with their values as fallbacks. */
 .es-inspector-checks {
 	position: relative;
 	flex: 0 0 auto;
@@ -174,6 +193,7 @@ body.es-inspector-locked {
 	color: var(--es-accent, #E27D40);
 }
 
+/* ── Edit HTML panel ───────────────────────────────────────────── */
 .es-inspector-html {
 	position: absolute;
 	inset: 0;
@@ -241,6 +261,7 @@ body.es-inspector-locked {
 .es-inspector-html-error[hidden] { display: none; }
 .es-inspector-html-actions { margin-left: auto; display: flex; gap: 8px; flex: 0 0 auto; }
 
+/* ── Discard confirmation ──────────────────────────────────────── */
 .es-inspector-confirm {
 	position: absolute;
 	inset: 0;
@@ -278,6 +299,7 @@ body.es-inspector-locked {
 	gap: 8px;
 }
 
+/* ── Body: three columns ───────────────────────────────────────── */
 .es-inspector-body {
 	--es-tree-w: 320px;
 	--es-css-w: 320px;
@@ -286,6 +308,8 @@ body.es-inspector-locked {
 	flex: 1 1 auto;
 	min-height: 0;
 }
+/* Full screen: both side panels gone, the canvas takes everything —
+ * and the viewport fills it edge-to-edge (no stage margin or frame). */
 .es-inspector-body.is-fullscreen { grid-template-columns: minmax(0, 1fr); }
 .es-inspector-body.is-fullscreen .es-inspector-col-tree,
 .es-inspector-body.is-fullscreen .es-inspector-col-css { display: none; }
@@ -330,6 +354,7 @@ body.es-inspector-locked {
 	overflow: auto;
 }
 
+/* Placeholder copy for panels not built yet (steps 2+). */
 .es-inspector-placeholder {
 	padding: 18px 16px;
 	font-size: 12px;
@@ -337,6 +362,7 @@ body.es-inspector-locked {
 	color: #9aa0b0;
 }
 
+/* ── Left view toggle (HTML ⇄ Layers) ──────────────────────────── */
 .es-inspector-leftview { display: flex; gap: 2px; margin-left: auto; flex: 0 0 auto; }
 .es-inspector-leftview-btn {
 	border: 1px solid #e7ddcf;
@@ -359,6 +385,7 @@ body.es-inspector-locked {
 	color: #fff;
 }
 
+/* ── HTML view (formatted source, fills the column, scrolls inside) ── */
 .es-inspector-col-tree.is-htmlview .es-inspector-col-scroll {
 	display: flex;
 	flex-direction: column;
@@ -374,15 +401,19 @@ body.es-inspector-locked {
 	color: #353a52;
 }
 .es-inspector-htmlview .CodeMirror-lines { padding: 8px 14px; }
+/* The selected element's markup pops; everything else dims. */
 .es-inspector-htmlview .CodeMirror .es-inspector-dim-text { opacity: 0.3; }
 .es-inspector-htmlview .CodeMirror .es-inspector-html-sel { background: rgba(79, 70, 229, 0.12); }
+/* Markup that broke validation (unclosed/mismatched tag). */
 .es-inspector-htmlview .CodeMirror .es-inspector-html-err { background: rgba(220, 38, 38, 0.18); border-radius: 2px; }
 
+/* ── Layer tree (left column) ──────────────────────────────────── */
 .es-inspector-tree {
 	list-style: none;
 	margin: 0;
 	padding: 0;
 }
+/* Nested lists indent one notch and grow a guide rule. */
 .es-inspector-tree .es-inspector-tree {
 	margin-left: 9px;
 	padding-left: 6px;
@@ -405,6 +436,7 @@ body.es-inspector-locked {
 	user-select: none;
 }
 .es-inspector-node:hover { background: #fbf1e6; }
+/* Mirrors a hover happening in the middle live form. */
 .es-inspector-node.is-hovered { background: #f5efe6; box-shadow: inset 0 0 0 1px rgba(79,70,229,0.25); }
 .es-inspector-node.is-selected {
 	background: var(--es-accent-soft, #fbeede);
@@ -427,6 +459,7 @@ body.es-inspector-locked {
 .es-inspector-node-id { color: #0ea5e9; }
 .es-inspector-node-class { color: #6c7180; }
 
+/* ── Relevant-CSS panel (right column) ─────────────────────────── */
 .es-inspector-css-head {
 	padding: 10px 14px;
 	border-bottom: 1px solid #f5efe6;
@@ -488,6 +521,7 @@ body.es-inspector-locked {
 	padding: 1px 6px;
 	border-radius: 999px;
 }
+/* Delete-rule button, pushed to the right edge of the selector row. */
 .es-inspector-rule-del {
 	flex: 0 0 auto;
 	margin-left: auto;
@@ -518,12 +552,19 @@ body.es-inspector-locked {
 	overflow-x: auto;
 }
 
+/* Pinned (added but not-matching) rules read dimmer. */
 .es-inspector-rule.is-not-matching { opacity: 0.85; }
 .es-inspector-rule.is-not-matching .es-inspector-rule-sel { background: #fffaf0; }
 
+/* All-CSS view: rules that don't target the selected element are dimmed
+   (still fully interactive — just a visual cue). At-rules read distinct. */
 .es-inspector-rule.is-dimmed { opacity: 0.5; }
 .es-inspector-rule.is-at-rule .es-inspector-rule-sel-text { color: #b45309; }
 
+/* All-CSS view: the whole stylesheet as one plain editor (a real .css file
+   look). It fills the column and scrolls internally (virtualized), so even
+   a large sheet edits smoothly. Non-matching rules dim; overridden
+   declarations strike through. */
 .es-inspector-col-css.is-allview .es-inspector-col-scroll {
 	display: flex;
 	flex-direction: column;
@@ -544,10 +585,13 @@ body.es-inspector-locked {
 	background: #fff;
 	color: #353a52;
 }
+/* A bit of breathing room left/right (was flush to the edge). */
 .es-inspector-allcss .CodeMirror-lines { padding: 8px 14px; }
 .es-inspector-allcss .CodeMirror .es-inspector-dim-text { opacity: 0.3; }
+/* Rules that target the selected element get a soft fade background. */
 .es-inspector-allcss .CodeMirror .es-line-applies { background: rgba(79, 70, 229, 0.05); }
 
+/* Overview ruler — clickable markers for rules that target the selection. */
 .es-inspector-allcss-ruler {
 	position: absolute;
 	top: 0;
@@ -556,6 +600,7 @@ body.es-inspector-locked {
 	width: 9px;
 	pointer-events: none;
 	z-index: 6;
+	/* A very light tint of the marker color so the track itself reads. */
 	background: rgba(79, 70, 229, 0.08);
 	border-radius: 3px;
 }
@@ -572,6 +617,11 @@ body.es-inspector-locked {
 }
 .es-inspector-ruler-tick:hover { right: 0; width: 9px; background: var(--es-accent-hover, #cf6730); }
 
+/* The blinking caret AND the mouse I-beam can render white (Windows 11 ships
+   a white cursor by default). admin.css fixes these for .emblem-studio-wrap,
+   but the takeover is appended to <body> OUTSIDE that wrapper, so both the
+   variable and the rules have to be repeated here. Identical copy — see the
+   note in admin.css, and the SaaS repo's docs/WINDOWS-CARET-QUIRK.md. */
 .es-inspector-overlay {
 	--es-ibeam: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%3E%3Cg%20fill='none'%20stroke-linecap='round'%3E%3Cpath%20stroke='%23ffffff'%20stroke-width='2'%20stroke-opacity='0.85'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3Cpath%20stroke='%2352585b'%20stroke-width='1'%20d='M7%202.5h3M7%2014.5h3M8.5%202.5v12'/%3E%3C/g%3E%3C/svg%3E") 8 8, text;
 }
@@ -587,6 +637,7 @@ body.es-inspector-locked {
 	cursor: var(--es-ibeam);
 }
 
+/* CSS view toggle (Relevant ⇄ All) in the panel header. */
 .es-inspector-cssview { display: flex; gap: 2px; margin-left: auto; flex: 0 0 auto; }
 .es-inspector-cssview-btn {
 	border: 1px solid #e7ddcf;
@@ -615,6 +666,7 @@ body.es-inspector-locked {
 	color: #6c7180;
 }
 
+/* ── Editable rule body ────────────────────────────────────────── */
 .es-inspector-rule-editor { font-size: 11.5px; }
 .es-inspector-rule-editor .CodeMirror {
 	height: auto;
@@ -625,6 +677,8 @@ body.es-inspector-locked {
 	background: #fff;
 }
 .es-inspector-rule-editor .CodeMirror-lines { padding: 4px 0; }
+/* Hanging indent: when a declaration wraps onto more lines, the
+ * continuation lines line up indented instead of dropping to column 0. */
 .es-inspector-rule-editor .CodeMirror pre.CodeMirror-line,
 .es-inspector-rule-editor .CodeMirror pre.CodeMirror-line-like {
 	padding-left: 2.2em;
@@ -643,12 +697,16 @@ body.es-inspector-locked {
 }
 .es-inspector-rule-textarea:focus { outline: 2px solid var(--es-accent-soft, #f0d9c4); outline-offset: -2px; }
 
+/* Overridden declaration (lost the cascade) — struck through, dimmed. */
 .es-inspector-decl-crossed {
 	text-decoration: line-through;
 	text-decoration-color: rgba(220, 38, 38, 0.7);
 	opacity: 0.55;
 }
 
+/* Inline color swatch shown right before a color value in the editor. Rendered
+   as a ::before on a white-space:nowrap mark over the color token, so the swatch
+   can never wrap to a different row than its color code. --sw carries the color. */
 .es-color-mark { white-space: nowrap; }
 .es-color-mark::before {
 	content: '';
@@ -666,6 +724,7 @@ body.es-inspector-locked {
 }
 .es-color-mark:hover::before { transform: scale(1.12); }
 
+/* ── Add-selector control ──────────────────────────────────────── */
 .es-inspector-add-rule {
 	display: flex;
 	gap: 6px;
@@ -697,6 +756,7 @@ body.es-inspector-locked {
 }
 .es-inspector-add-btn:hover { background: var(--es-accent-hover, #cf6730); }
 
+/* ── Color picker popover ──────────────────────────────────────── */
 .es-color-popover {
 	position: fixed;
 	z-index: 100002;
@@ -775,6 +835,7 @@ body.es-inspector-locked {
 	color: #22273f;
 }
 .es-color-text:focus { outline: none; border-color: var(--es-accent, #E27D40); }
+/* HEX / RGBA notation switcher. */
 .es-color-modes {
 	display: flex;
 	flex: 0 0 auto;
@@ -796,7 +857,13 @@ body.es-inspector-locked {
 .es-color-mode + .es-color-mode { border-left: 1px solid #e7ddcf; }
 .es-color-mode.is-active { background: var(--es-accent, #E27D40); color: #fff; }
 
+/* ── Middle: live form stage ───────────────────────────────────── */
+/* Neutral gray (NOT the warm chrome) so the live asset preview reads
+ * true — a warm backdrop would tint the user's own design. The viewport
+ * itself stays white. */
 .es-inspector-col-stage { background: #f3f3f4; min-width: 0; }
+/* The viewport always sits in a framed container on a darker stage —
+ * for both Fluid and fixed widths. */
 .es-inspector-stage-wrap {
 	position: relative;
 	flex: 1 1 auto;
@@ -809,6 +876,7 @@ body.es-inspector-locked {
 	padding: 18px;
 	background: #e8e8ea;
 }
+/* Loading overlay — centered spinner until the frame reports ready. */
 .es-inspector-loader {
 	position: absolute;
 	inset: 0;
@@ -840,6 +908,7 @@ body.es-inspector-locked {
 	background: #fff;
 }
 
+/* Shell switcher (left, after the Live form title). */
 .es-inspector-col-stage .es-inspector-col-title { flex: 0 0 auto; }
 .es-inspector-shells { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .es-inspector-shell-tab {
@@ -862,6 +931,7 @@ body.es-inspector-locked {
 	color: #fff;
 }
 
+/* Width toolbar (right side of the Live form header). */
 .es-inspector-width { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
 .es-inspector-width-slider { width: 120px; accent-color: var(--es-accent, #E27D40); }
 .es-inspector-width-label {
@@ -893,6 +963,7 @@ body.es-inspector-locked {
 	color: #fff;
 }
 
+/* ── Responsive shrink ─────────────────────────────────────────── */
 @media (max-width: 1100px) {
 	.es-inspector-body { --es-tree-w: 280px; --es-css-w: 280px; }
 }

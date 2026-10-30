@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.3.111-beta
+ * Version:           1.3.112-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,12 +14,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.3.111-beta' );
+define( 'EMBLEM_STUDIO_VERSION', '1.3.112-beta' );
 define( 'EMBLEM_STUDIO_DB_VERSION', '48' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'EMBLEM_STUDIO_URL', plugin_dir_url( __FILE__ ) );
 
+// Edition gate (P5). The full plugin is 'full' (everything on); the generated
+// Lite build sets this to 'lite' in its own main file and ships without the
+// gated module files below. Loaded first so the requires can consult it.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-caps.php';
 if ( ! defined( 'EMBLEM_STUDIO_EDITION' ) ) {
 	define( 'EMBLEM_STUDIO_EDITION', 'lite' );
@@ -31,13 +34,25 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-logger.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-repo.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-repo.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-ajax.php';
+// Revisions: loaded in EVERY edition. Lite RECORDS revisions (they quietly
+// accumulate in the DB, ready the moment a free account is connected) but gates
+// the VIEW — the editor shows a locked Revisions tab with a connect upsell. The
+// viewing/restore admin handlers stay behind the 'revisions' capability.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-revisions.php';
+// Scheduling, on the other hand, ships ONLY where somebody can use it. Lite has
+// no schedule screen and no scheduled changes, so it now has neither file. They
+// used to travel with the free build switched off, which meant the free download
+// carried a paid feature's code and created two tables it never wrote a row to.
+// A queued change can only be made from a screen Lite does not have, so nothing
+// is left stranded by dropping the runner with it.
 if ( ES_Caps::has( 'revisions' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-scheduled-revisions.php';
 }
 if ( ES_Caps::has( 'schedule_window' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-schedule.php';
 }
+// Consent proof (SER-853): loaded in EVERY edition, same reasoning as
+// revisions above — this is compliance infrastructure, not a paid feature.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-consent-log.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-templates.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-event-recorder.php';
@@ -57,10 +72,18 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-measurement-transaction.php
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-measurement.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-privacy.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-display-rules.php';
+// Reading the store (SER-1345): loaded in EVERY edition, because the site that
+// needs it most runs Lite. It does nothing at all where WooCommerce is absent.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-commerce.php';
+// Live values (SER-1351): a price or discount in an asset that stays true by
+// itself. Every edition, for the same reason as the store reader above.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-live-values.php';
+// Which asset sent somebody to the shop, and what they bought after it
+// (SER-1346, SER-1348). Every edition, and inert where WooCommerce is absent.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-click-tag.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-purchases.php';
+// Real recent orders for the "after an order" trigger (SER-1689). Every edition,
+// inert unless the connector says the web app wants them.
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-recent-orders.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-rest.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-no-delay.php';
@@ -68,10 +91,16 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-shortcode.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preview.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-plugin.php';
 
+// Lite edition bundles the Emblem Studio SaaS connector (built in), dormant
+// until the site is connected to a free account. The full plugin never ships
+// this file, so the guard is doubly safe.
 if ( ES_Caps::is_lite() && file_exists( EMBLEM_STUDIO_PATH . 'includes/connector.php' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/connector.php';
 }
 
+// Account-gated modules (Free/Paid). The Lite build omits these files; the
+// `ES_Caps` checks here skip the require so Lite never looks for them, and the
+// matching class_exists() guards at the call sites keep the core safe.
 if ( ES_Caps::has( 'ab' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-ab.php';
 }
@@ -84,14 +113,24 @@ if ( ES_Caps::has( 'linked_forms' ) ) {
 if ( ES_Caps::has( 'auto_shells' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-auto-shells.php';
 }
+// Design System (Pro/full only) — shared per-install CSS every form inherits.
+// Lite omits these files; class_exists() guards at the render call sites keep
+// the core safe when they're absent.
 if ( ES_Caps::has( 'design_system' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-design-system-revisions.php';
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-design-system.php';
 }
 
+// Admin-only classes — skip the parse + load cost on front-end page
+// views. is_admin() is true for wp-admin, admin-ajax and admin-post,
+// which covers everywhere ES_Admin's handlers actually run. ES_Admin
+// (the plugin's largest file) is never touched by the front end, so a
+// normal page view no longer loads it.
 if ( is_admin() ) {
 	require_once EMBLEM_STUDIO_PATH . 'admin/class-es-admin.php';
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-authoring.php';
+	// The editor's Checks list (SER-1358). Every edition: a broken form in the
+	// free plugin loses leads exactly the way one in the full plugin does.
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-asset-checks.php';
 }
 
@@ -99,4 +138,7 @@ register_activation_hook( __FILE__, [ 'ES_Install', 'activate' ] );
 
 add_action( 'plugins_loaded', [ 'ES_Install', 'maybe_migrate' ], 5 );
 add_action( 'admin_notices', [ 'ES_Install', 'migration_notice' ] );
+// Wrapped in a closure so nothing is returned to the action dispatcher
+// — ES_Plugin::instance() hands back the singleton, which an action
+// callback shouldn't do.
 add_action( 'plugins_loaded', static function () { ES_Plugin::instance(); } );

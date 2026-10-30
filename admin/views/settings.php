@@ -133,6 +133,9 @@ $logs   = ES_Logger::recent( 50 );
 
 		</table>
 
+		<?php /* The purchase switches live in the web app (SER-1747). Only the web app shows what they
+		   measure, so here they would switch on something nobody can see. */ ?>
+
 		<h2 style="margin-top:2em;"><?php esc_html_e( 'Data &amp; uninstall', 'emblem-studio' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>

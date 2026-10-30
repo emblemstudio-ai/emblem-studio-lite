@@ -3,6 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/** FunnelKit Pro provider implementation for Emblem Studio assets. */
 final class ES_FunnelKit_Form_Provider extends BWFCRM_Form_Base {
 	private string $asset_key = '';
 	private array $entry = [];
@@ -38,6 +39,10 @@ final class ES_FunnelKit_Form_Provider extends BWFCRM_Form_Base {
 	public function prepare_contact_data_from_feed_entry( $mapped_fields ) {
 		$out = [];
 		foreach ( (array) $mapped_fields as $source => $target ) {
+			// The catalog lists a checkbox group as `interests[]` (its HTML name),
+			// but the submission carries it as `interests`: PHP strips the `[]`
+			// from a posted key, and the SaaS stores it the same way. Without the
+			// fallback a mapped checkbox group reached FunnelKit as nothing.
 			$source = (string) $source;
 			if ( ! array_key_exists( $source, $this->entry ) && substr( $source, -2 ) === '[]' ) {
 				$source = substr( $source, 0, -2 );

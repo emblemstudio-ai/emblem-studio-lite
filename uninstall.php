@@ -3,9 +3,33 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
+/*
+ * What gets removed is listed once, in includes/es-owned-data.php (audit S4).
+ * This used to name eight tables and two settings by hand, so seven tables,
+ * about twenty-five settings and ten scheduled jobs stayed behind, the web
+ * app connection key among them.
+ *
+ * ALWAYS, on every uninstall:
+ *  - every scheduled job (its code is gone, so it can only fail);
+ *  - the stored credentials, the connection key first (a key left on a site
+ *    without the plugin is a loose password to another system).
+ *
+ * ONLY when the admin opted in beforehand, via Settings → "When the plugin is
+ * deleted → Also delete all Emblem Studio data": every table, setting and
+ * cached value. WordPress runs uninstall.php non-interactively, so there's no
+ * prompt at delete time — this stored preference is the "ask". It guards
+ * against an accidental delete (or a delete-then-reinstall) silently
+ * destroying every form, lead, and stat.
+ *
+ * NOTE: keep the option key in sync with admin/class-es-admin.php +
+ * admin/views/settings.php (uninstall.php runs without the plugin loaded, so it
+ * can't share a class constant).
+ */
+
 $es_owned = require __DIR__ . '/includes/es-owned-data.php';
 
 if ( ! function_exists( 'emblem_studio_uninstall_site' ) ) {
+	/** Clean one site. On a network, this runs for each site. */
 	function emblem_studio_uninstall_site( array $owned ): void {
 		global $wpdb;
 
@@ -31,7 +55,7 @@ if ( ! function_exists( 'emblem_studio_uninstall_site' ) ) {
 		}
 
 		if ( get_option( 'emblem_studio_delete_data_on_uninstall' ) !== '1' ) {
-			return;
+			return; // keep tables + settings intact for a possible reinstall
 		}
 
 		$like   = $wpdb->esc_like( $wpdb->prefix . $owned['table_prefix'] ) . '%';

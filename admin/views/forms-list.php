@@ -19,8 +19,14 @@ $prev = ES_Reports::aggregate_kpis( $prev_from, $prev_to );
 $cur_leads  = ES_Reports::leads_in_range( $cur_from, $cur_to );
 $prev_leads = ES_Reports::leads_in_range( $prev_from, $prev_to );
 
+// Form IDs with a running A/B test — one query, used to badge rows below.
+// A/B is account-gated; the Lite build omits ES_AB, so there are simply none.
 $ab_running_ids = class_exists( 'ES_AB' ) ? ES_AB::form_ids_with_running_tests() : [];
 
+/**
+ * Render a delta sub-line: arrow + percent + tooltip with prior period value.
+ * No prior data → render "—".
+ */
 function es_delta_line( int $current, int $prior ): string {
 	if ( $prior === 0 && $current === 0 ) {
 		return '<div class="es-kpi-sub es-kpi-delta es-kpi-delta-flat">— ' . esc_html__( 'no prior data', 'emblem-studio' ) . '</div>';
@@ -36,6 +42,11 @@ function es_delta_line( int $current, int $prior ): string {
 	return '<div class="es-kpi-sub es-kpi-delta ' . esc_attr( $cls ) . '" title="' . esc_attr( $tip ) . '">' . $arr . ' ' . esc_html( $sign . number_format_i18n( $pct, 1 ) ) . '% ' . esc_html__( 'vs prev 7d', 'emblem-studio' ) . '</div>';
 }
 
+/**
+ * A KPI card's own rate line (e.g. "12.4% click rate"), with its own
+ * current-vs-prior-7-days delta underneath — separate from es_delta_line()
+ * because the tooltip/format here is a percentage, not a plain count.
+ */
 function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_label ): string {
 	$out  = '<div class="es-kpi-rate">';
 	$out .= '<span class="es-kpi-rate-value">' . esc_html( number_format_i18n( $cur_rate, 1 ) ) . '% ' . esc_html( $rate_label ) . '</span>';
@@ -139,6 +150,9 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 	<?php endif; ?>
 
 	<?php
+	// Schedule-window heads-up: assets set Active but outside their schedule
+	// window render nowhere, yet still list as Active. Surface them once at the
+	// top so "why isn't my popup showing?" is answered without opening settings.
 	$sched_out = [];
 	foreach ( ES_Form_Repo::all( 'active' ) as $af ) {
 		$st = ES_Form_Repo::effective_state( $af );
@@ -163,6 +177,13 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 	<?php endif; ?>
 
 	<?php
+	// Six states, six tabs, and every form in exactly one of them (SER-1270).
+	// Scheduled and Expired are not filters over Active — they are where a form
+	// IS while it waits for a start date or sits past an end date. Both are
+	// hidden where schedule windows are not available (Lite), because a form
+	// that cannot have a window cannot be in either state.
+	// Ordered by a form's life, not alphabetically: Active, then the two states
+	// the dates put it in, then the three ways a person puts it away.
 	$views = [
 		'all'    => __( 'All',    'emblem-studio' ),
 		'active' => __( 'Active', 'emblem-studio' ),
@@ -230,7 +251,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 			return '[es-popup-' . $form_id . ']Click here[/es-popup-' . $form_id . ']';
 		}
 		if ( $shell === 'popup-auto' || $shell === 'ribbon' || $shell === 'slide-in' ) {
-			return '';
+			return ''; // no shortcode — these inject via wp_footer
 		}
 		return '[es-inline-' . $form_id . ']';
 	};
@@ -330,6 +351,9 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 			<?php $form_index = 0; foreach ( $forms as $f ) :
 				$form_index++;
 				$enabled_types = ES_Form_Repo::types_for( $f );
+				// Copy-down: shells the SaaS uses that Lite can't run (shown struck
+				// through), and whether the whole asset is Lite-deactivated. Set by
+				// the connector's pull; empty for locally-authored / never-synced forms.
 				$lite_meta   = json_decode( (string) ( $f->lite_disabled ?? '' ), true );
 				$lite_shells = ( is_array( $lite_meta ) && ! empty( $lite_meta['shells'] ) && is_array( $lite_meta['shells'] ) ) ? $lite_meta['shells'] : [];
 				$lite_off    = is_array( $lite_meta ) && ! empty( $lite_meta['asset_off'] );
@@ -337,9 +361,13 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 				foreach ( $lite_shells as $ls ) {
 					$lite_shell_labels[] = $shell_labels[ $ls ] ?? $ls;
 				}
+				// Form-vs-asset: a non-form asset (no <form> element) has no
+				// conversions, so its conversion cells read "—" not "0".
 				$has_form      = ES_Form_Repo::primary_metric( (string) $f->html ) === 'conversions';
 				$data_types    = ES_Reports::shells_with_data( (int) $f->id );
+				// Render row for every enabled shell plus every shell with historical data.
 				$render_types  = array_values( array_unique( array_merge( $enabled_types, $data_types ) ) );
+				// Keep canonical order: inline, then click popup, then auto popup, then ribbon, then slide-in.
 				usort( $render_types, function ( $a, $b ) {
 					$order = [ 'inline' => 0, 'popup-click' => 1, 'popup-auto' => 2, 'ribbon' => 3, 'slide-in' => 4 ];
 					return ( $order[ $a ] ?? 99 ) <=> ( $order[ $b ] ?? 99 );
@@ -378,10 +406,29 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 					$k = $row_blank ? null : ES_Reports::all_time( (int) $f->id, $shell );
 					$has_data = $k && ( (int) $k['page_views'] + (int) $k['trigger_views'] + (int) $k['views'] + (int) $k['conversions'] ) > 0;
 					$is_enabled = ! $row_blank && in_array( $shell, $enabled_types, true );
+					// Status semantics: if form isn't "active", it's inactive — that label
+					// applies to every shell row. For active forms, enabled shells read
+					// "Active" — unless the schedule window says otherwise, in which case
+					// the *effective* state (Scheduled before active_from / Expired after
+					// active_until) is surfaced so an admin isn't told "Active" while the
+					// asset silently isn't rendering. Derived only; stored status is untouched.
 					$eff          = ES_Form_Repo::effective_state( $f );
 					$status_class = 'es-status-inactive';
 					$status_title = '';
 					$dt_fmt       = get_option( 'date_format' ) . ' g:i A';
+					/*
+					 * A verb and a date, matching the queued-change badge next to
+					 * the form's name ("Changes Sep 7"). Three of the states below
+					 * are ABOUT a date, so naming the state without naming the date
+					 * left the one useful fact in a tooltip nobody hovers.
+					 *
+					 * "Starts" and "Ends" rather than "Scheduled" and "Scheduled to
+					 * end": the shorter word says the same thing, and it stops this
+					 * screen spending "scheduled" on three different ideas. The
+					 * filter tabs still say Scheduled and Expired, which is where a
+					 * category name belongs, and the badge colour still ties each
+					 * one back to its tab. The full date and time stay in the title.
+					 */
 					$short_fmt = 'M j';
 					if ( ! empty( $f->archived_at ) ) {
 						$status_label = __( 'Archived', 'emblem-studio' );
@@ -391,6 +438,9 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 					} elseif ( $row_blank || ! $is_enabled ) {
 						$status_label = __( 'Inactive', 'emblem-studio' );
 					} elseif ( $eff === 'scheduled' ) {
+						// Scheduled covers a GAP between periods as well as "not
+						// started yet", so the date is the NEXT start, which is a
+						// different period from the one that just finished.
 						$es_next  = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::next( (int) $f->id ) : null;
 						$es_start = ( $es_next && ! empty( $es_next->starts_at ) ) ? (string) $es_next->starts_at : (string) $f->active_from;
 
@@ -398,6 +448,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						$status_class = 'es-status-scheduled';
 						$status_title = sprintf( __( 'Set Active, but its schedule starts %s — not showing yet.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_start ) );
 					} elseif ( $eff === 'expired' ) {
+						// Past the LAST period, so the date is that one's end.
 						$es_live = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::live( (int) $f->id ) : [];
 						$es_last = ! empty( $es_live ) ? end( $es_live ) : null;
 						$es_gone = ( $es_last && ! empty( $es_last->ends_at ) ) ? (string) $es_last->ends_at : (string) $f->active_until;
@@ -406,6 +457,10 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						$status_class = 'es-status-expired';
 						$status_title = sprintf( __( 'Set Active, but its schedule ended %s — no longer showing.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_gone ) );
 					} elseif ( $eff === 'ending' ) {
+						// With a LIST of periods, the end of the one running now is
+						// only half the story: if another is coming, the form is
+						// not finished, and a badge naming only the end says it is
+						// (SER-1292).
 						$es_cur  = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::current( (int) $f->id ) : null;
 						$es_next = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::next( (int) $f->id ) : null;
 						$es_end  = ( $es_cur && ! empty( $es_cur->ends_at ) ) ? (string) $es_cur->ends_at : (string) $f->active_until;
@@ -420,10 +475,22 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						$status_label = __( 'Active', 'emblem-studio' );
 						$status_class = 'es-status-active';
 					}
+					// A row gets the "inactive" greyed-out treatment whenever the
+					// shell won't actually render on the frontend — Inactive overall,
+					// a data-only (unchecked) row, a blank row, OR Active-but-outside
+					// its schedule window (scheduled / expired). "ending" still renders.
 					$row_will_render = ( in_array( $eff, array( 'active', 'ending' ), true ) && ! $row_blank && $is_enabled );
 					$row_class = $row_will_render ? '' : 'es-shell-row-inactive';
 				?>
 					<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?>>
+						<?php
+						// Pinned identity lane (drag / checkbox / name): a cell on EVERY shell row,
+						// content on the first only — NOT one rowspanned cell. A sticky + rowspan
+						// cell does not stay opaque over the rows it spans when the table scrolls
+						// sideways, so an asset's extra shell rows would show through the pinned
+						// column. A real cell per row can't. (Empty sub-row cells keep the lane
+						// opaque; border-collapse hides their seams so it still reads as one block.)
+						?>
 						<?php if ( $filter === 'all' ) : ?>
 							<td class="col-drag es-form-drag-handle" aria-label="<?php esc_attr_e( 'Drag to reorder', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Drag to reorder', 'emblem-studio' ); ?>">
 								<?php if ( $first_row ) : ?><span class="dashicons dashicons-menu" aria-hidden="true"></span><?php endif; ?>
@@ -455,6 +522,17 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 									</a>
 								<?php endif; ?>
 								<?php
+								/*
+								 * A queued CONTENT change (SER-1287). Next to the asset NAME,
+								 * never in the shell rows: a content change belongs to the
+								 * asset, and one with three shells would otherwise show it
+								 * three times.
+								 *
+								 * It deliberately avoids the word "scheduled". This screen
+								 * already spends that word twice, on "Scheduled" and
+								 * "Scheduled to end", and both of those are about WHETHER an
+								 * asset shows rather than WHAT it says.
+								 */
 								$sched_n = ( ! $is_trash && class_exists( 'ES_Form_Scheduled_Revisions' ) ) ? ES_Form_Scheduled_Revisions::queued_count( (int) $f->id ) : 0;
 								if ( $sched_n > 0 ) :
 									$sched_next = ES_Form_Scheduled_Revisions::next_at( (int) $f->id );
@@ -473,6 +551,10 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 									</a>
 								<?php endif; ?>
 								<?php
+								// "Edit lock" indicator — someone currently has this asset open.
+								// Always rendered, empty when free, so the list can fill or clear
+								// it as locks change (admin.js, initLockLabels). It used to be
+								// drawn once at page load and never updated (item 7).
 								$lock_uid = $is_trash ? 0 : ES_Locks::holder_of_row( $f );
 								?>
 								<span class="es-lock-slot">
@@ -525,6 +607,9 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						<td class="col-stat es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? (int) $k['dropoffs'] : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<?php
+						// Clicks + click rate. Per-form click tracking can be off
+						// (the track_clicks toggle); when it is there's no data, so
+						// show an em dash rather than a misleading 0.
 						$clicks_tracked = ! empty( $f->track_clicks );
 						?>
 						<td class="col-stat es-col-click"><?php
@@ -537,6 +622,8 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 							echo ! $k ? '—' : ( (int) $k['bot_filtered'] > 0 ? esc_html( number_format_i18n( (int) $k['bot_filtered'] ) ) : '<span style="color:#8a8a8a;">—</span>' );
 						?></td>
 						<td class="col-stat"><?php
+							// Honeypot blocks only make sense when the asset has a
+							// <form>; non-form assets get em-dash regardless.
 							if ( ! $k ) {
 								echo '—';
 							} elseif ( ! $has_form ) {

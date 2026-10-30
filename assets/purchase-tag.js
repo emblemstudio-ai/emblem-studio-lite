@@ -1,11 +1,43 @@
+/**
+ * Which asset sent somebody to the shop (SER-1348) — the browser half.
+ *
+ * TWIN FILE. The same logic lives in the SaaS at public/embed/embed.js, because a
+ * connected site is served by that one instead of this. Change one, change both.
+ *
+ * WHAT IT DOES, IN ONE BREATH. Somebody clicks a link inside an asset that has
+ * purchase tracking switched on. This writes a short tag into the address, after
+ * the `#`, and carries it from page to page. When they put something in the basket,
+ * the tag goes along and WordPress writes it on that basket line, hidden from the
+ * customer. If they buy, the shop can say which asset brought them.
+ *
+ * WHY AFTER THE `#`. Everything after a `#` stays inside the browser. The server
+ * never receives it, so no page cache can make a second copy of a page because of
+ * it, and no visitor ever sees a link with tracking bolted onto the end. This was
+ * the whole reason for the design (Alex, 2026-09-16): a query string would have
+ * split the cache on every page of the site.
+ *
+ * WHAT IS NOT HERE, DELIBERATELY. No cookie, no local storage, no fingerprint,
+ * nothing written to the visitor's device, and nothing about the person. The tag
+ * names the ASSET and the moment, and it lasts for the visit.
+ *
+ * OFF UNLESS ASKED FOR. Nothing happens for an asset whose switch is off, and a
+ * single link can opt out with data-es-buy="off". Not data-es-track, which the
+ * click-tracking already uses to name a button.
+ */
 (function () {
 	'use strict';
 
 	var CFG = window.EmblemStudioBuy || {};
 	var KEY = 'es';
 
+	/* A tag older than this has stopped meaning anything. Somebody who clicked a
+	 * ribbon at breakfast and buys after lunch was not sent by the ribbon, and the
+	 * question being asked is about the visit, not the week (Alex: "within a limited
+	 * time span"). The basket line keeps whatever tag it was given, so a slow
+	 * checkout is safe; this only limits how long the tag keeps travelling. */
 	var MAX_AGE = 6 * 3600;
 
+	/* What a tag may contain. Anything else is not ours and is ignored. */
 	var SAFE = /^[A-Za-z0-9_\-.:]{1,120}$/;
 
 	var tag = '';
@@ -13,6 +45,7 @@
 
 	function now() { return Math.floor(Date.now() / 1000); }
 
+	/** Fresh enough to still be travelling? An undated tag is taken at face value. */
 	function fresh(value) {
 		var m = /\.(\d{9,12})$/.exec(value);
 		if (!m) { return true; }
@@ -22,6 +55,14 @@
 		return age >= -3600 && age <= MAX_AGE;
 	}
 
+	/**
+	 * Read the tag out of the address and take our part of it back out again.
+	 *
+	 * The address the visitor sees stays clean: they arrive, this reads it, and the
+	 * `#es=…` is gone before they look. A real anchor in the same fragment is put
+	 * back, and jumped to by hand, because the browser will not jump to one that had
+	 * our part stuck on the end.
+	 */
 	function readAddress() {
 		var raw = (window.location.hash || '').replace(/^#/, '');
 		if (raw.indexOf(KEY + '=') < 0) { return; }
@@ -65,6 +106,9 @@
 		el.scrollIntoView();
 	}
 
+	/* ── Where a tag comes from ─────────────────────────────────────────────── */
+
+	/** The Emblem Studio asset this click came out of, if it came out of one. */
 	function hostOf(path) {
 		for (var i = 0; i < path.length; i++) {
 			var node = path[i];
@@ -74,6 +118,13 @@
 		return null;
 	}
 
+	/**
+	 * This link, or something it sits inside, said "not this one".
+	 *
+	 * The walk stops by itself at an asset's edge, because the top element inside a
+	 * shadow root has no parent element. So the same walk answers for a link in an
+	 * asset and a link anywhere else on the page.
+	 */
 	function optedOut(el) {
 		var node = el;
 		while (node && node.getAttribute) {
@@ -85,6 +136,14 @@
 		return false;
 	}
 
+	/**
+	 * A click inside a tracked asset mints a new tag, and THE NEWEST CLICK WINS.
+	 *
+	 * Somebody who left a class in their basket last week and came back through a
+	 * slide-in was brought back by the slide-in, so the newer asset takes the credit
+	 * (Alex, 2026-09-16). Everywhere else on the site, the tag already in hand is
+	 * simply carried along.
+	 */
 	function tagFor(path) {
 		var host = hostOf(path);
 		if (!host) { return tag; }
@@ -97,6 +156,8 @@
 		return tag;
 	}
 
+	/* ── Carrying it ────────────────────────────────────────────────────────── */
+
 	function sameSite(url) {
 		try {
 			var u = new URL(url, window.location.href);
@@ -105,6 +166,7 @@
 		} catch (e) { return false; }
 	}
 
+	/** The address with our tag in the fragment, and an existing anchor kept. */
 	function withTag(url, value) {
 		var u;
 		try { u = new URL(url, window.location.href); } catch (e) { return url; }
@@ -115,6 +177,9 @@
 		parts.push(KEY + '=' + encodeURIComponent(value));
 		u.hash = parts.join('&');
 
+		// An add-to-cart link is a request the shop acts on, never a cached page, so
+		// this one may also travel as an ordinary parameter — which is what lets
+		// WordPress write the tag on the line it is about to create.
 		if (u.searchParams.has('add-to-cart')) {
 			u.searchParams.set('es_source', value);
 		}
@@ -142,10 +207,12 @@
 		var value = tagFor(path);
 		if (!value) { return; }
 
+		// The shop's own quick-add button sends its data-* attributes with the
+		// request, so the tag rides along and the line is stamped as it is made.
 		if (addButton) {
 			addButton.setAttribute('data-es_source', value);
 			if (window.jQuery) {
-				try { window.jQuery(addButton).data('es_source', value); } catch (err) { }
+				try { window.jQuery(addButton).data('es_source', value); } catch (err) { /* keep going */ }
 			}
 		}
 
@@ -154,6 +221,14 @@
 		}
 	}
 
+	/**
+	 * The classic add-to-cart form, posted rather than followed.
+	 *
+	 * Two things at once: a hidden field so the request itself carries the tag, and
+	 * the tag on the form's own address so the page the shop sends them back to
+	 * still has it. Without the second one the tag is lost on the first add, which
+	 * is exactly what the first test caught.
+	 */
 	function onSubmit(e) {
 		if (!tag) { return; }
 		var form = e.target;
@@ -176,6 +251,14 @@
 		}
 	}
 
+	/* ── The safety net ─────────────────────────────────────────────────────── */
+
+	/**
+	 * Some baskets are filled by a path this cannot see: a block-built shop talking
+	 * to the Store API, a theme's own quick-add, a funnel plugin. The browser says
+	 * "the thing that just went in belongs to this asset" and WordPress stamps the
+	 * matching line. A missing tag is silent, so this is worth the one request.
+	 */
 	function stampLastLine(productId) {
 		if (!tag || !CFG.ajaxUrl) { return; }
 		try {
@@ -184,7 +267,7 @@
 			body.append('es_source', tag);
 			if (productId) { body.append('product_id', String(productId)); }
 			fetch(CFG.ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin', keepalive: true });
-		} catch (e) { }
+		} catch (e) { /* the sale still happens; the credit is what is lost */ }
 	}
 
 	function watchAjaxAdds() {
@@ -194,9 +277,11 @@
 					var id = button && window.jQuery(button).data('product_id');
 					stampLastLine(id);
 				});
-			} catch (e) { }
+			} catch (e) { /* keep going */ }
 		}
 
+		// A block-built shop adds through the Store API, which fires none of the
+		// old events. Watching the request is the only way to know it happened.
 		if (typeof window.fetch !== 'function') { return; }
 		var original = window.fetch;
 		window.fetch = function (input, init) {
@@ -213,6 +298,8 @@
 			});
 		};
 	}
+
+	/* ── Start ──────────────────────────────────────────────────────────────── */
 
 	readAddress();
 	window.addEventListener('hashchange', readAddress);

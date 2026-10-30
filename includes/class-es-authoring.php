@@ -3,10 +3,36 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Copy-paste authoring aids for the form editor's Design tab.
+ *
+ *   - human_spec()   the short reference a person reads before writing an
+ *                    asset by hand. Backs "Copy form specifications".
+ *   - ai_preprompt() one line the user pastes into their own ChatGPT / Claude.
+ *                    It points that AI at the hosted prompt on emblemstudio.ai.
+ *
+ * The SaaS hands out exactly the same two things (resources/js/lib/authoring.ts
+ * HUMAN_SPEC and PROMPT_LINE). Keep human_spec() word for word identical to
+ * HUMAN_SPEC. There used to be a full ai_spec() here as well: an old snapshot of
+ * the SaaS spec that had fallen about two dozen rules behind. The hosted prompt
+ * replaces it, so a spec change reaches plugin users the moment the SaaS deploys.
+ *
+ * That makes one rule binding on the SaaS side: a spec rule that depends on
+ * runtime behaviour must land in this plugin's assets/frontend.js before it lands
+ * in the hosted prompt, or standalone sites get told about a feature they lack.
+ *
+ * Nothing is fetched. The plugin only shows a URL that the user chooses to paste.
+ * Admin-only, loaded behind the is_admin() gate.
+ */
 class ES_Authoring {
 
+	/** Where the hosted authoring prompt lives. */
 	const PROMPT_BASE = 'https://emblemstudio.ai';
 
+	/**
+	 * Short form reference for a person to read. Backs the
+	 * "Copy form specifications" link. Identical to the SaaS HUMAN_SPEC.
+	 */
 	public static function human_spec(): string {
 		return <<<'SPEC'
 EMBLEM STUDIO: FORM SPEC
@@ -114,10 +140,15 @@ NOTES
 SPEC;
 	}
 
+	/** The human-readable page about the hosted prompt. */
 	public static function prompt_page_url(): string {
 		return self::PROMPT_BASE . '/prompt';
 	}
 
+	/**
+	 * The line a user pastes into their own AI. Same text as the SaaS
+	 * AuthoringPrompt::oneLiner(), pointing at the same hosted spec.
+	 */
 	public static function ai_preprompt(): string {
 		return 'Read ' . self::PROMPT_BASE . '/prompt.md and follow it. I want you to build me an opt-in form for my website.';
 	}

@@ -3,8 +3,32 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Immutable per-submission consent logging (SER-853) — ported from the SaaS
+ * (emblem-studio-saas app/Services/ConsentLog.php; keep both in sync). Finds
+ * the consent checkbox in the exact HTML rendered to the visitor, hashes its
+ * label text + policy-link target, and records the affirmative act — same
+ * detection rule as ES_Ajax::find_missing_consent_fields (kept in sync
+ * deliberately: a required checkbox, or one marked data-esf-consent).
+ *
+ * The wording is stored once, content-addressed by hash
+ * (emblemstudio_consent_texts); the tiny per-submission row
+ * (emblemstudio_lead_consents) just references that hash. Neither table
+ * depends on emblemstudio_form_revisions or emblemstudio_forms, so a record
+ * survives ordinary revision pruning (ES_Form_Revisions::prune) and form
+ * deletion.
+ *
+ * A form with no consent control simply has nothing to log — record() is
+ * then a no-op, not an error. No IP is stored, matching the plugin's
+ * existing no-IP-for-genuine-subscribers stance. Loaded in every edition
+ * (like revisions) — this is compliance infrastructure, not a paid feature.
+ */
 class ES_Consent_Log {
 
+	/**
+	 * @param array<string, mixed> $fields the collected POST fields (an unchecked
+	 *                                     checkbox is simply absent, per HTML form semantics)
+	 */
 	public static function record( int $form_id, string $form_html, int $lead_id, array $fields, ?int $post_id, ?string $variant_slot = null ): void {
 		$html     = self::rendered_html( $form_id, $form_html, $variant_slot );
 		$consents = self::extract_consents( $html );
@@ -15,8 +39,15 @@ class ES_Consent_Log {
 		global $wpdb;
 		$texts_table   = ES_Install::table( 'consent_texts' );
 		$consent_table = ES_Install::table( 'lead_consents' );
+		// Best-effort convenience pointer only — form_revisions is pruned to the
+		// last 50 per form (ES_Form_Revisions::KEEP_PER_FORM), so this can go
+		// dangling. Never load-bearing; the hash is the durable proof. Resolved
+		// once for all of them.
 		$revision_id = self::latest_revision_id( $form_id );
 		$page_url    = $post_id ? (string) get_permalink( $post_id ) : null;
+		// The address travels with the proof (SER-1431), so it can still be found
+		// after the lead is deleted, and an erasure can find it by address. The
+		// lead row already holds it normalised, so it is read from there.
 		$leads_table = ES_Install::table( 'leads' );
 		$email       = $wpdb->get_var( $wpdb->prepare( "SELECT email FROM {$leads_table} WHERE id = %d", $lead_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$email       = is_string( $email ) && $email !== '' ? $email : null;
@@ -33,6 +64,9 @@ class ES_Consent_Log {
 				] );
 			}
 
+			// A replayed submission must never append a second row for the same
+			// agreement, nor overwrite the first — this table is evidence and is
+			// append-only. The unique index is (lead_id, field_name).
 			$already = $wpdb->get_var( $wpdb->prepare(
 				"SELECT id FROM {$consent_table} WHERE lead_id = %d AND field_name = %s",
 				$lead_id,
@@ -42,6 +76,8 @@ class ES_Consent_Log {
 				continue;
 			}
 
+			// Same reading as the submit guard: `agree[]` arrives as `agree`, and a
+			// ticked group arrives as a list rather than one string.
 			$checked = ES_Ajax::checkbox_value_is_ticked( ES_Ajax::posted_value( $fields, $consent['field'] ) );
 
 			$wpdb->insert( $consent_table, [
@@ -57,6 +93,17 @@ class ES_Consent_Log {
 		}
 	}
 
+	/**
+	 * A person asked to have their data deleted (SER-1431): remove every consent
+	 * record for the address, and every one belonging to their leads.
+	 *
+	 * Deleting a lead does NOT call this. The person may still be on the email
+	 * list, and the proof of what they agreed to is needed exactly then. Only an
+	 * erasure removes it.
+	 *
+	 * @param array<int, int> $lead_ids the person's leads, found before they go
+	 * @return int|false consent records removed, false on the first SQL failure
+	 */
 	public static function erase( string $email, array $lead_ids ) {
 		global $wpdb;
 		$table = ES_Install::table( 'lead_consents' );
@@ -75,6 +122,7 @@ class ES_Consent_Log {
 		return $removed;
 	}
 
+	/** The HTML actually served to this visitor: their A/B slot if one was live, else the form's own. */
 	private static function rendered_html( int $form_id, string $form_html, ?string $variant_slot ): string {
 		if ( $variant_slot ) {
 			global $wpdb;
@@ -100,6 +148,26 @@ class ES_Consent_Log {
 		return $id ? (int) $id : null;
 	}
 
+	/**
+	 * Every consent checkbox in the form — each one's field name plus the exact
+	 * text the visitor saw: the enclosing <label>'s text, with any link's href
+	 * appended so a changed policy target changes the hash too.
+	 *
+	 * ALL of them, not the first: a visitor can agree to several separate things
+	 * in one submission (store my data / email me about the beta), and recording
+	 * only one misrepresents what they actually agreed to.
+	 *
+	 * The data-esf-consent marker is the ONLY thing that makes a checkbox a
+	 * consent. This used to also treat any required checkbox as one, which was
+	 * wrong in both directions: an optional "email me" IS an agreement and was
+	 * missed, while a required "I have read the instructions" is NOT one and was
+	 * recorded as if it were. Whether something is an agreement is the author's
+	 * call, so it belongs on the checkbox, not in a guess here.
+	 *
+	 * Same detection rule as the SaaS's ConsentLog — kept in sync deliberately.
+	 *
+	 * @return array<int, array{field: string, text: string}>
+	 */
 	private static function extract_consents( string $html ): array {
 		if ( trim( $html ) === '' ) {
 			return [];
@@ -120,7 +188,7 @@ class ES_Consent_Log {
 				continue;
 			}
 			if ( isset( $seen[ $name ] ) ) {
-				continue;
+				continue; // one record per field name, matching the unique index
 			}
 
 			$label = self::closest_label( $input );
@@ -129,7 +197,7 @@ class ES_Consent_Log {
 			$text  = trim( $text . ( $href ? " ({$href})" : '' ) );
 
 			if ( $text === '' ) {
-				continue;
+				continue; // no wording to prove — skip rather than log an empty hash
 			}
 
 			$seen[ $name ] = true;
@@ -142,6 +210,19 @@ class ES_Consent_Log {
 		return $found;
 	}
 
+	/**
+	 * Required checkboxes in this form that are NOT marked as consents.
+	 *
+	 * The marker is now the only thing that records a consent, which is the
+	 * correct rule but a silent one: a form that relied on "required" simply
+	 * stops being logged, and nobody finds out until they need the evidence and
+	 * it isn't there.
+	 *
+	 * Not every required checkbox is a miss — "I have read the instructions" is
+	 * a legitimately unmarked required box — so this reports, it never assumes.
+	 *
+	 * @return array<int, string> field names
+	 */
 	public static function unmarked_required_checkboxes( string $html ): array {
 		if ( trim( $html ) === '' ) {
 			return [];
@@ -189,6 +270,27 @@ class ES_Consent_Log {
 		return $links->length > 0 ? $links->item( 0 )->getAttribute( 'href' ) : null;
 	}
 
+	/**
+	 * The consent recorded for a set of leads, keyed by lead id — the read side
+	 * of everything above.
+	 *
+	 * Recording proof nobody can see is not proof. Until this existed the
+	 * evidence could only be reached by querying the database by hand, which is
+	 * exactly the situation it was built to avoid: the point is being able to
+	 * show, on demand, the wording someone agreed to at the moment they
+	 * submitted, not the wording the form carries today.
+	 *
+	 * A lead simply absent from the result had no consent control on its form,
+	 * which is legitimate — a checkbox isn't always the right lawful basis —
+	 * and is a different fact from someone declining. Callers must keep those
+	 * apart rather than defaulting a missing row to "no".
+	 *
+	 * Each lead maps to a LIST: a visitor can agree to several separate things
+	 * in one submission, and each is recorded against its own checkbox.
+	 *
+	 * @param array<int,int> $lead_ids
+	 * @return array<int, array<int, array{field: string, agreed: bool, text: string}>>
+	 */
 	public static function for_leads( array $lead_ids ): array {
 		$lead_ids = array_values( array_unique( array_filter( array_map( 'intval', $lead_ids ) ) ) );
 		if ( ! $lead_ids ) {

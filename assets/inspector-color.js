@@ -1,6 +1,17 @@
+/* =====================================================================
+ * Emblem Studio — Inspector color utilities + picker.
+ *
+ * Self-contained helper for the relevant-CSS panel: parse/format CSS
+ * colors, find color tokens inside CSS text, and pop a compact HSVA
+ * picker (hue + saturation/value square + alpha) anchored to a swatch.
+ *
+ * Exposes window.ESInspectorColor = { parse, format, detect, openPicker }.
+ * Vanilla JS, no dependencies.
+ * ===================================================================== */
 (function () {
 	'use strict';
 
+	// ── Color math ────────────────────────────────────────────────
 	function clamp01(n) { return n < 0 ? 0 : n > 1 ? 1 : n; }
 	function clamp255(n) { n = Math.round(n); return n < 0 ? 0 : n > 255 ? 255 : n; }
 	function to2(n) { var s = clamp255(n).toString(16); return s.length === 1 ? '0' + s : s; }
@@ -47,6 +58,7 @@
 		return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
 	}
 
+	// ── Parsing ───────────────────────────────────────────────────
 	var _ctx = null;
 	function normalizeViaCanvas(str) {
 		try {
@@ -57,7 +69,7 @@
 			_ctx.fillStyle = '#fff';
 			_ctx.fillStyle = str;
 			var b = _ctx.fillStyle;
-			return a === b ? a : null;
+			return a === b ? a : null; // differ → the value didn't apply (invalid)
 		} catch (e) { return null; }
 	}
 	function chan(tok) {
@@ -67,6 +79,7 @@
 	}
 	function pct(tok) { return clamp01(parseFloat(tok) / 100); }
 
+	// Returns { r, g, b, a } (r/g/b 0-255, a 0-1) or null.
 	function parse(str) {
 		if (!str && str !== 0) return null;
 		str = String(str).trim();
@@ -100,6 +113,9 @@
 		return null;
 	}
 
+	// Format { r,g,b,a } back to a string. With `mode` ('hex' | 'rgba') the
+	// notation is forced (the picker's HEX/RGBA switcher); otherwise it preserves
+	// the author's notation family where we can (hex stays hex, rgb stays rgb).
 	function format(c, original, mode) {
 		var r = clamp255(c.r), g = clamp255(c.g), b = clamp255(c.b), a = clamp01(c.a);
 		if (mode === 'rgba') {
@@ -113,6 +129,7 @@
 		var isRgb = orig.indexOf('rgb') === 0;
 		if (a >= 1) {
 			if (isRgb) return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+			// hsl()/named/hex all settle to hex when opaque.
 			return '#' + to2(r) + to2(g) + to2(b);
 		}
 		var av = Math.round(a * 1000) / 1000;
@@ -120,6 +137,7 @@
 		return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + av + ')';
 	}
 
+	// ── Detection (find color tokens in CSS text) ─────────────────
 	var NAMED = ('transparent currentcolor aliceblue antiquewhite aqua aquamarine azure beige bisque black ' +
 		'blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue ' +
 		'cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta ' +
@@ -153,7 +171,8 @@
 		return out;
 	}
 
-	var active = null;
+	// ── Picker popover ────────────────────────────────────────────
+	var active = null; // { el, onChange, onClose, h, s, v, a, original }
 
 	function closeActive() {
 		if (!active) return;
@@ -247,6 +266,7 @@
 			onClose: opts.onClose,
 			original: opts.value,
 			current: opts.value,
+			// Output notation. Seeded from the value; the HEX/RGBA switcher forces it.
 			mode: /^\s*(rgb|hsl)/i.test(String(opts.value || '')) ? 'rgba' : 'hex',
 			h: hsv.h, s: hsv.s, v: hsv.v, a: parsed.a,
 			sv: pop.querySelector('.es-color-sv'),
@@ -259,6 +279,7 @@
 			text: pop.querySelector('.es-color-text')
 		};
 
+		// Position near the anchor, kept on-screen.
 		var ar = (opts.anchor && opts.anchor.getBoundingClientRect) ? opts.anchor.getBoundingClientRect() : { left: 100, bottom: 100 };
 		var top = ar.bottom + 6, left = ar.left;
 		pop.style.visibility = 'hidden';
@@ -288,12 +309,14 @@
 			var hv = rgbToHsv(p.r, p.g, p.b);
 			active.h = hv.h; active.s = hv.s; active.v = hv.v; active.a = p.a;
 			active.original = active.text.value;
+			// Respect the notation the author typed.
 			active.mode = /^\s*(rgb|hsl)/i.test(active.text.value) ? 'rgba' : 'hex';
 			reflectMode();
 			updateUI();
 			if (active.onChange) active.onChange(active.text.value);
 		});
 
+		// HEX / RGBA switcher — force the output notation, then re-emit.
 		var modeBtns = pop.querySelectorAll('.es-color-mode');
 		function reflectMode() {
 			for (var mi = 0; mi < modeBtns.length; mi++) {
