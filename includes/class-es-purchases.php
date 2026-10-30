@@ -15,8 +15,11 @@ class ES_Purchases {
 
 	const BACKFILL_HOOK = 'es_purchases_backfill';
 
+	const HOOK_PUSH = 'es_purchases_push';
+
 	public static function init(): void {
 		add_action( self::BACKFILL_HOOK, [ __CLASS__, 'run_backfill' ] );
+		add_action( self::HOOK_PUSH, [ __CLASS__, 'fire_ready' ] );
 		add_action( 'update_option_' . self::ENABLED_OPTION, [ __CLASS__, 'on_switch' ], 10, 2 );
 		add_action( 'add_option_' . self::ENABLED_OPTION, [ __CLASS__, 'on_switch' ], 10, 2 );
 
@@ -109,6 +112,12 @@ class ES_Purchases {
 			$wpdb->insert( $table, $row );
 		}
 
+		if ( ! wp_next_scheduled( self::HOOK_PUSH ) ) {
+			wp_schedule_single_event( time(), self::HOOK_PUSH );
+		}
+	}
+
+	public static function fire_ready(): void {
 		do_action( self::HOOK_READY );
 	}
 

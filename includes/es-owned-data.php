@@ -26,6 +26,7 @@ return [
 		'es_saas_pull_stats_after',
 		'es_saas_stats_reset_at',
 		'ess_connection',
+		'ess_embed_copy',
 		'ess_recent_orders_wanted',
 		'ess_timezone_reported',
 	],

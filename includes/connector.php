@@ -6,9 +6,14 @@ if (! defined('ABSPATH')) {
 
 final class Emblem_Studio_SaaS_Connector
 {
-    const VERSION = '1.3.33-beta';
+    const VERSION = '1.3.34-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
+
+    const EMBED_COPY_OPTION = 'ess_embed_copy';
+    const EMBED_REFRESH_HOOK = 'es_saas_refresh_embed';
+    const EMBED_FRESH_SECONDS = 300;
+    const EMBED_RETRY_SECONDS = 60;
     const OPTION = 'ess_connection';
 
     const DEFAULT_API_BASE = 'https://emblemstudio.ai';
@@ -46,6 +51,7 @@ final class Emblem_Studio_SaaS_Connector
         add_action('admin_post_es_decouple', [__CLASS__, 'handle_decouple']);
         add_action('admin_notices', [__CLASS__, 'connect_notice']);
         add_action('es_saas_pull', [__CLASS__, 'cron_pull']);
+        add_action(self::EMBED_REFRESH_HOOK, [__CLASS__, 'refresh_embed']);
         add_filter('cron_schedules', [__CLASS__, 'cron_schedules']);
         add_action(self::FK_SYNC_HOOK, [__CLASS__, 'sync_funnelkit']);
         add_action('init', [__CLASS__, 'schedule_funnelkit_sync']);
@@ -814,6 +820,7 @@ final class Emblem_Studio_SaaS_Connector
             'connected_at' => time(),
         ]);
         delete_transient(self::FORMS_TRANSIENT);
+        delete_option(self::EMBED_COPY_OPTION);
 
         self::start_import();
 
@@ -1765,6 +1772,7 @@ final class Emblem_Studio_SaaS_Connector
         delete_option('es_import_state');
         delete_option('es_import_status');
         delete_transient(self::FORMS_TRANSIENT);
+        delete_option(self::EMBED_COPY_OPTION);
         delete_transient(self::IMPORT_LOCK);
 
         if ($cfg) {
@@ -1987,11 +1995,61 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function fetch_embed(array $cfg): array
     {
-        $cached = get_transient(self::FORMS_TRANSIENT);
-        if (is_array($cached) && isset($cached['data'])) {
-            return $cached;
+        $copy = get_option(self::EMBED_COPY_OPTION);
+        if (is_array($copy) && isset($copy['payload']['data'])) {
+            if (time() - (int) ($copy['at'] ?? 0) >= self::EMBED_FRESH_SECONDS) {
+                self::schedule_embed_refresh($copy);
+            }
+
+            return $copy['payload'];
         }
 
+        $payload = self::download_embed($cfg);
+        $failed = $payload === null;
+        $payload ??= ['data' => [], 'wp_map' => [], 'wp_keys' => []];
+        self::store_embed_copy($payload, $failed);
+
+        return $payload;
+    }
+
+    public static function refresh_embed(): void
+    {
+        $cfg = self::config();
+        if (! $cfg) {
+            return;
+        }
+        $payload = self::download_embed($cfg);
+        if ($payload !== null) {
+            self::store_embed_copy($payload, false);
+
+            return;
+        }
+        $copy = get_option(self::EMBED_COPY_OPTION);
+        if (is_array($copy)) {
+            $copy['tried_at'] = time();
+            update_option(self::EMBED_COPY_OPTION, $copy, false);
+        }
+    }
+
+    private static function schedule_embed_refresh(array $copy): void
+    {
+        if (time() - (int) ($copy['tried_at'] ?? 0) < self::EMBED_RETRY_SECONDS) {
+            return;
+        }
+        if (wp_next_scheduled(self::EMBED_REFRESH_HOOK)) {
+            return;
+        }
+        wp_schedule_single_event(time(), self::EMBED_REFRESH_HOOK);
+    }
+
+    private static function store_embed_copy(array $payload, bool $failed): void
+    {
+        $at = $failed ? time() - self::EMBED_FRESH_SECONDS + self::EMBED_RETRY_SECONDS : time();
+        update_option(self::EMBED_COPY_OPTION, ['at' => $at, 'payload' => $payload], false);
+    }
+
+    private static function download_embed(array $cfg): ?array
+    {
         $url = $cfg['api_base'].'/v1/sites/'.$cfg['site_id']
             .'/embed?funnelkit='.(self::funnelkit_available() ? '1' : '0')
             .'&v='.rawurlencode(self::VERSION);
@@ -2004,21 +2062,16 @@ final class Emblem_Studio_SaaS_Connector
             ],
         ]);
         if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
-            $empty = ['data' => [], 'wp_map' => [], 'wp_keys' => []];
-            set_transient(self::FORMS_TRANSIENT, $empty, 60);
-
-            return $empty;
+            return null;
         }
 
         $body = json_decode((string) wp_remote_retrieve_body($res), true);
-        $out  = [
+
+        return [
             'data'    => (is_array($body) && isset($body['data']) && is_array($body['data'])) ? $body['data'] : [],
             'wp_map'  => (is_array($body) && isset($body['wp_map']) && is_array($body['wp_map'])) ? $body['wp_map'] : [],
             'wp_keys' => (is_array($body) && isset($body['wp_keys']) && is_array($body['wp_keys'])) ? $body['wp_keys'] : [],
         ];
-        set_transient(self::FORMS_TRANSIENT, $out, 5 * MINUTE_IN_SECONDS);
-
-        return $out;
     }
 
     private static function forms(array $cfg): array
