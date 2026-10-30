@@ -701,35 +701,52 @@
 			}
 
 			function diffLines(oldText, newText) {
+				var MAX_CELLS = 4000000;
 				var a = normalizeForDiff(oldText).split('\n');
 				var b = normalizeForDiff(newText).split('\n');
-				var m = a.length, n = b.length;
-				var L = new Array(m + 1);
-				for (var i = 0; i <= m; i++) {
-					L[i] = new Int32Array(n + 1);
-				}
-				for (var i = 1; i <= m; i++) {
-					for (var j = 1; j <= n; j++) {
-						L[i][j] = a[i - 1] === b[j - 1] ? L[i - 1][j - 1] + 1 : Math.max(L[i - 1][j], L[i][j - 1]);
-					}
-				}
+				var head = 0;
+				while (head < a.length && head < b.length && a[head] === b[head]) head++;
+				var tail = 0;
+				while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
 				var out = [];
-				var i = m, j = n;
-				while (i > 0 && j > 0) {
-					if (a[i - 1] === b[j - 1]) {
-						out.push({ type: 'common', oldLine: a[i - 1], newLine: b[j - 1] });
-						i--; j--;
-					} else if (L[i - 1][j] >= L[i][j - 1]) {
-						out.push({ type: 'removed', oldLine: a[i - 1] });
-						i--;
-					} else {
-						out.push({ type: 'added', newLine: b[j - 1] });
-						j--;
+				var k;
+				for (k = 0; k < head; k++) out.push({ type: 'common', oldLine: a[k], newLine: b[k] });
+				var am = a.slice(head, a.length - tail);
+				var bm = b.slice(head, b.length - tail);
+				var m = am.length, n = bm.length;
+				if (m * n > MAX_CELLS) {
+					for (k = 0; k < m; k++) out.push({ type: 'removed', oldLine: am[k] });
+					for (k = 0; k < n; k++) out.push({ type: 'added', newLine: bm[k] });
+				} else {
+					var L = new Array(m + 1);
+					for (var i = 0; i <= m; i++) {
+						L[i] = new Int32Array(n + 1);
 					}
+					for (var i = 1; i <= m; i++) {
+						for (var j = 1; j <= n; j++) {
+							L[i][j] = am[i - 1] === bm[j - 1] ? L[i - 1][j - 1] + 1 : Math.max(L[i - 1][j], L[i][j - 1]);
+						}
+					}
+					var mid = [];
+					var i = m, j = n;
+					while (i > 0 && j > 0) {
+						if (am[i - 1] === bm[j - 1]) {
+							mid.push({ type: 'common', oldLine: am[i - 1], newLine: bm[j - 1] });
+							i--; j--;
+						} else if (L[i - 1][j] >= L[i][j - 1]) {
+							mid.push({ type: 'removed', oldLine: am[i - 1] });
+							i--;
+						} else {
+							mid.push({ type: 'added', newLine: bm[j - 1] });
+							j--;
+						}
+					}
+					while (i > 0) { mid.push({ type: 'removed', oldLine: am[i - 1] }); i--; }
+					while (j > 0) { mid.push({ type: 'added',   newLine: bm[j - 1] }); j--; }
+					mid.reverse();
+					out = out.concat(mid);
 				}
-				while (i > 0) { out.push({ type: 'removed', oldLine: a[i - 1] }); i--; }
-				while (j > 0) { out.push({ type: 'added',   newLine: b[j - 1] }); j--; }
-				out.reverse();
+				for (k = a.length - tail; k < a.length; k++) out.push({ type: 'common', oldLine: a[k], newLine: b[k - a.length + b.length] });
 				return out;
 			}
 
@@ -881,7 +898,16 @@
 				fd.append('revision_id', this.getAttribute('data-revision-id'));
 				fd.append('note', this.value);
 				fd.append('_wpnonce', this.getAttribute('data-nonce'));
-				fetch('/wp-admin/admin-post.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+				var postUrl = (typeof window.ajaxurl === 'string' ? window.ajaxurl : '/wp-admin/admin-ajax.php').replace(/admin-ajax\.php.*$/, 'admin-post.php');
+				var input = this;
+				input.classList.remove('es-note-failed');
+				input.removeAttribute('title');
+				fetch(postUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+					.then(function (r) { if (!r.ok) throw new Error(String(r.status)); })
+					.catch(function () {
+						input.classList.add('es-note-failed');
+						input.title = 'This note was not saved. Edit it again to retry.';
+					});
 			});
 			$(list).on('keydown', '.es-revision-note-input', function (e) {
 				if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
@@ -1126,9 +1152,11 @@
 			fetchSuggestions(search.value.trim());
 		});
 
-		document.addEventListener('click', function (e) {
+		function onOutsideClick(e) {
+			if (!root.isConnected) { document.removeEventListener('click', onOutsideClick); return; }
 			if (!root.contains(e.target)) hideSuggestions();
-		});
+		}
+		document.addEventListener('click', onOutsideClick);
 
 		root._escpApi = {
 			setSelection: function (items) {

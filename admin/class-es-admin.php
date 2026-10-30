@@ -1119,6 +1119,16 @@ class ES_Admin {
 		exit;
 	}
 
+	public const CORE_NOTICES = [
+		'update_nag',
+		'maintenance_nag',
+		'new_user_email_admin_notice',
+		'site_admin_notice',
+		'wp_recovery_mode_nag',
+		'paused_plugins_notice',
+		'paused_themes_notice',
+	];
+
 	public function maybe_suppress_admin_notices(): void {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( ! $screen ) {
@@ -1127,10 +1137,30 @@ class ES_Admin {
 		if ( strpos( $screen->id, 'emblem-studio' ) === false ) {
 			return;
 		}
-		remove_all_actions( 'admin_notices' );
-		remove_all_actions( 'all_admin_notices' );
-		remove_all_actions( 'user_admin_notices' );
-		remove_all_actions( 'network_admin_notices' );
+		global $wp_filter;
+		foreach ( [ 'admin_notices', 'all_admin_notices', 'user_admin_notices', 'network_admin_notices' ] as $hook ) {
+			if ( empty( $wp_filter[ $hook ] ) || ! is_object( $wp_filter[ $hook ] ) ) {
+				continue;
+			}
+			foreach ( $wp_filter[ $hook ]->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $cb ) {
+					if ( ! self::keeps_notice( $cb['function'] ) ) {
+						remove_action( $hook, $cb['function'], (int) $priority );
+					}
+				}
+			}
+		}
+	}
+
+	public static function keeps_notice( $fn ): bool {
+		if ( is_string( $fn ) ) {
+			return in_array( $fn, self::CORE_NOTICES, true );
+		}
+		if ( is_array( $fn ) && isset( $fn[0] ) ) {
+			$class = is_object( $fn[0] ) ? get_class( $fn[0] ) : (string) $fn[0];
+			return strpos( $class, 'ES_' ) === 0 || strpos( $class, 'Emblem_Studio' ) === 0;
+		}
+		return false;
 	}
 
 	public function assets( string $hook ): void {

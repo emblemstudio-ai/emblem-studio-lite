@@ -1419,7 +1419,11 @@
 		return -1;
 	}
 
-	function cssAttrEscape(s) { return String(s).replace(/"/g, '\\"'); }
+	function cssAttrEscape(s) {
+		s = String(s);
+		if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(s);
+		return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+	}
 
 	function ruleCard(rule, opts) {
 		opts = opts || {};

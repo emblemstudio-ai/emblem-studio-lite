@@ -6,7 +6,7 @@ if (! defined('ABSPATH')) {
 
 final class Emblem_Studio_SaaS_Connector
 {
-    const VERSION = '1.3.34-beta';
+    const VERSION = '1.3.35-beta';
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
 
@@ -2300,7 +2300,7 @@ final class Emblem_Studio_SaaS_Connector
         return [
             'ok'               => true,
             'contract_version' => 1,
-            'connector_version'=> '1.0.24-beta',
+            'connector_version'=> self::VERSION,
             'funnelkit'        => [
                 'available' => self::funnelkit_available(),
                 'pro'       => defined('BWFAN_PRO_VERSION') || class_exists('BWFAN_Pro'),

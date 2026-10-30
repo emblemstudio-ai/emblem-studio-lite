@@ -30,10 +30,8 @@ class ES_Form_Repo {
 			$wpdb->dbname,
 			$t
 		) );
-		if ( $ai ) {
-			return (int) $ai;
-		}
-		return ( (int) $wpdb->get_var( "SELECT MAX(id) FROM $t" ) ) + 1; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$after_max = ( (int) $wpdb->get_var( "SELECT MAX(id) FROM $t" ) ) + 1; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return max( (int) $ai, $after_max );
 	}
 
 	public static function all_funnelkit_tags(): array {

@@ -339,6 +339,31 @@ class ES_Install {
 		}
 	}
 
+	public const MIGRATION_ERROR_OPTION = 'emblem_studio_migration_error';
+
+	private static function record_migration_failure( string $step, string $error ): void {
+		update_option( self::MIGRATION_ERROR_OPTION, [ 'step' => $step, 'error' => $error, 'at' => time() ], false );
+	}
+
+	private static function migration_failed_recently( string $step ): bool {
+		$e = get_option( self::MIGRATION_ERROR_OPTION );
+		return is_array( $e ) && ( $e['step'] ?? '' ) === $step && time() - (int) ( $e['at'] ?? 0 ) < HOUR_IN_SECONDS;
+	}
+
+	public static function migration_notice(): void {
+		$e = get_option( self::MIGRATION_ERROR_OPTION );
+		if ( ! is_array( $e ) || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Emblem Studio could not finish a database update.', 'emblem-studio' ) . '</strong> ';
+		/* translators: %s: the update step number. */
+		echo esc_html( sprintf( __( 'Step %s did not complete, so some stats may be missing. It is tried again every hour. If this stays, ask your host whether the database user may change tables.', 'emblem-studio' ), (string) ( $e['step'] ?? '' ) ) );
+		if ( ! empty( $e['error'] ) ) {
+			echo ' <code>' . esc_html( (string) $e['error'] ) . '</code>';
+		}
+		echo '</p></div>';
+	}
+
 	public static function maybe_migrate(): void {
 		self::migrate_legacy_tables();
 
@@ -948,6 +973,9 @@ class ES_Install {
 		}
 
 		if ( version_compare( $current, '45', '<' ) ) {
+			if ( self::migration_failed_recently( '45' ) ) {
+				return;
+			}
 			global $wpdb;
 			$events = self::table( 'events' );
 			$cols = $wpdb->get_col( "SHOW COLUMNS FROM $events" );
@@ -960,6 +988,10 @@ class ES_Install {
 			$cols = $wpdb->get_col( "SHOW COLUMNS FROM $events" );
 			if ( in_array( 'lead_id', $cols, true ) && in_array( 'measurement_mode', $cols, true ) ) {
 				update_option( 'emblem_studio_db_version', '45' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '45', (string) $wpdb->last_error );
+				return;
 			}
 		}
 
