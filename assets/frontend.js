@@ -196,6 +196,7 @@
 			tpl.innerHTML = payload.html || '';
 			shadow.appendChild(tpl.content);
 			esLiveMounted(shadow, payload.live);
+			esPointerWatch(shadow);
 
 			return shadow;
 		}
@@ -209,6 +210,7 @@
 		tpl.innerHTML = payload.html || '';
 		host.appendChild(tpl.content);
 		esLiveMounted(host, payload.live);
+		esPointerWatch(host);
 		return host;
 	}
 
@@ -333,6 +335,124 @@
 			.catch(function () { });
 	}
 
+
+	const ES_POINTER = { els: [], x: 0, y: 0, seen: false, type: '', down: null, sx: 0, sy: 0, last: Date.now(), frame: 0, bound: false };
+
+	function esPointerWatch(root) {
+		if (!root || !root.querySelectorAll) return;
+		const found = root.querySelectorAll('[data-es-pointer]');
+		if (!found.length) return;
+		found.forEach(function (el) {
+			if (ES_POINTER.els.indexOf(el) < 0) ES_POINTER.els.push(el);
+		});
+		if (!ES_POINTER.bound) {
+			ES_POINTER.bound = true;
+			const opts = { passive: true, capture: true };
+			window.addEventListener('pointermove', esPointerMove, opts);
+			window.addEventListener('pointerdown', esPointerDown, opts);
+			window.addEventListener('pointerup', esPointerUp, opts);
+			window.addEventListener('pointercancel', esPointerUp, opts);
+			document.addEventListener('mouseout', function (e) {
+				if (!e.relatedTarget) { ES_POINTER.seen = false; esPointerQueue(); }
+			}, opts);
+			['scroll', 'resize'].forEach(function (t) { window.addEventListener(t, esPointerQueue, opts); });
+			['keydown', 'wheel', 'scroll', 'touchstart'].forEach(function (t) { window.addEventListener(t, esPointerWake, opts); });
+			setInterval(esPointerIdle, 500);
+		}
+		esPointerQueue();
+	}
+
+	function esPointerWake() {
+		ES_POINTER.last = Date.now();
+		esPointerIdle();
+	}
+
+	function esPointerMove(e) {
+		ES_POINTER.x = e.clientX;
+		ES_POINTER.y = e.clientY;
+		ES_POINTER.seen = true;
+		ES_POINTER.type = e.pointerType || 'mouse';
+		esPointerWake();
+		esPointerQueue();
+	}
+
+	function esPointerDown(e) {
+		esPointerMove(e);
+		const path = e.composedPath ? e.composedPath() : [];
+		ES_POINTER.down = null;
+		for (let i = 0; i < ES_POINTER.els.length; i++) {
+			if (path.indexOf(ES_POINTER.els[i]) >= 0) { ES_POINTER.down = ES_POINTER.els[i]; break; }
+		}
+		ES_POINTER.sx = e.clientX;
+		ES_POINTER.sy = e.clientY;
+		esPointerQueue();
+	}
+
+	function esPointerUp(e) {
+		if (e.type === 'pointerup') esPointerMove(e);
+		if (e.pointerType === 'touch' || e.type === 'pointercancel') ES_POINTER.seen = false;
+		ES_POINTER.down = null;
+		esPointerQueue();
+	}
+
+	function esPointerQueue() {
+		if (!ES_POINTER.frame) ES_POINTER.frame = requestAnimationFrame(esPointerFrame);
+	}
+
+	function esPointerFlag(el, name, on) {
+		if (on) { if (el.getAttribute(name) !== '1') el.setAttribute(name, '1'); }
+		else if (el.hasAttribute(name)) el.removeAttribute(name);
+	}
+
+	function esPointerFrame() {
+		ES_POINTER.frame = 0;
+		const P = ES_POINTER;
+		const r3 = function (n) { return String(Math.round(n * 1000) / 1000); };
+		P.els = P.els.filter(function (el) {
+			if (el.isConnected) { el.__esPointerShown = true; return true; }
+			return !el.__esPointerShown;
+		});
+		P.els.forEach(function (el) {
+			if (!el.isConnected) return;
+			const r = el.getBoundingClientRect();
+			if (!r.width || !r.height) return;
+			const s = el.style;
+			const down = P.down === el;
+			esPointerFlag(el, 'data-es-pointer-down', down);
+			if (!P.seen && !down) {
+				['x', 'y', 'dx', 'dy', 'distance', 'angle', 'drag-x', 'drag-y'].forEach(function (k) { s.setProperty('--es-pointer-' + k, '0'); });
+				s.setProperty('--es-pointer-fx', '0.5');
+				s.setProperty('--es-pointer-fy', '0.5');
+				esPointerFlag(el, 'data-es-pointer-over', false);
+				return;
+			}
+			const x = P.x - (r.left + r.width / 2);
+			const y = P.y - (r.top + r.height / 2);
+			const d = Math.hypot(x, y);
+			const reach = parseFloat(el.getAttribute('data-es-pointer-reach')) || Math.max(r.width, r.height);
+			const k = d ? Math.min(1, d / reach) / d : 0;
+			s.setProperty('--es-pointer-x', r3(x));
+			s.setProperty('--es-pointer-y', r3(y));
+			s.setProperty('--es-pointer-dx', r3(x * k));
+			s.setProperty('--es-pointer-dy', r3(y * k));
+			s.setProperty('--es-pointer-distance', r3(d));
+			s.setProperty('--es-pointer-angle', r3(Math.atan2(y, x) * 180 / Math.PI));
+			s.setProperty('--es-pointer-fx', r3(Math.min(1, Math.max(0, (P.x - r.left) / r.width))));
+			s.setProperty('--es-pointer-fy', r3(Math.min(1, Math.max(0, (P.y - r.top) / r.height))));
+			s.setProperty('--es-pointer-drag-x', down ? r3(P.x - P.sx) : '0');
+			s.setProperty('--es-pointer-drag-y', down ? r3(P.y - P.sy) : '0');
+			esPointerFlag(el, 'data-es-pointer-over', P.x >= r.left && P.x <= r.right && P.y >= r.top && P.y <= r.bottom);
+			if (P.type && el.getAttribute('data-es-pointer-type') !== P.type) el.setAttribute('data-es-pointer-type', P.type);
+		});
+	}
+
+	function esPointerIdle() {
+		const quiet = Date.now() - ES_POINTER.last;
+		ES_POINTER.els.forEach(function (el) {
+			const after = parseFloat(el.getAttribute('data-es-pointer-idle-after'));
+			esPointerFlag(el, 'data-es-pointer-idle', quiet >= (after > 0 ? after : 8) * 1000);
+		});
+	}
 
 	function fireEvent(host, action) {
 		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
