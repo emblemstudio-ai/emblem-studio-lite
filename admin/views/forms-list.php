@@ -255,7 +255,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 				'archive'  => __( 'Archive', 'emblem-studio' ),
 				'trash'    => __( 'Move to Trash', 'emblem-studio' ),
 			] );
-	$bulk_confirm_js = "var sel=this.querySelector('select[name=bulk_action]'); if(!sel||!sel.value){return false;} if(sel.value==='delete_permanent'){return confirm('" . esc_js( __( 'Permanently delete the selected forms? This cannot be undone.', 'emblem-studio' ) ) . "');} return true;";
+	$bulk_confirm_js = "var sel=this.querySelector('select[name=bulk_action]'); if(!sel||!sel.value){return false;} if(sel.value==='delete_permanent'){return confirm('" . esc_js( __( 'Permanently delete the selected forms? This also deletes their sign-ups and stats. Export the sign-ups first if you want to keep them. This cannot be undone.', 'emblem-studio' ) ) . "');} return true;";
 	?>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="<?php echo esc_attr( $bulk_confirm_js ); ?>">
 		<?php wp_nonce_field( 'es_bulk_forms' ); ?>
@@ -354,7 +354,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 				if ( $is_trash ) {
 					$actions_html = '<div class="es-actions-icons">'
 						. '<a class="es-action-icon" title="' . esc_attr__( 'Restore', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Restore', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_restore_form&id=' . $f->id ), 'es_restore_form_' . $f->id ) ) . '"><span class="dashicons dashicons-undo" aria-hidden="true"></span></a>'
-						. '<a class="es-action-icon es-action-danger" title="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_form&id=' . $f->id ), 'es_delete_form_' . $f->id ) ) . '" onclick="return confirm(\'' . esc_attr__( 'Permanently delete this form? This cannot be undone.', 'emblem-studio' ) . '\');"><span class="dashicons dashicons-trash" aria-hidden="true"></span></a>'
+						. '<a class="es-action-icon es-action-danger" title="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_form&id=' . $f->id ), 'es_delete_form_' . $f->id ) ) . '" onclick="return confirm(\'' . esc_attr__( 'Permanently delete this form? This also deletes its sign-ups and stats. Export the sign-ups first if you want to keep them. This cannot be undone.', 'emblem-studio' ) . '\');"><span class="dashicons dashicons-trash" aria-hidden="true"></span></a>'
 						. '</div>';
 				} elseif ( $is_archived ) {
 					$actions_html = '<div class="es-actions-icons">'

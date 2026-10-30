@@ -143,7 +143,7 @@ $logs   = ES_Logger::recent( 50 );
 						<?php esc_html_e( 'Also delete all Emblem Studio data (forms, leads, stats, revisions, A/B tests)', 'emblem-studio' ); ?>
 					</label>
 					<p class="description">
-						<?php esc_html_e( 'Off by default — deleting the plugin keeps your data, so you can reinstall later without losing anything. Turn this ON only if you want every form, lead and stat permanently removed when the plugin is deleted. This cannot be undone.', 'emblem-studio' ); ?>
+						<?php esc_html_e( 'Off by default. Deleting the plugin keeps your data, so you can reinstall later without losing anything. Either way, deleting the plugin removes its saved connection keys and background jobs, so after a reinstall you reconnect once. Turn this on only if you want every form, lead and stat permanently removed when the plugin is deleted. This cannot be undone.', 'emblem-studio' ); ?>
 					</p>
 				</td>
 			</tr>

@@ -592,6 +592,9 @@ class ES_Form_Repo {
 	public static function delete( int $id ): void {
 		global $wpdb;
 		$wpdb->delete( self::table(), [ 'id' => $id ] );
+		foreach ( [ 'leads', 'events', 'variants', 'tests' ] as $child ) {
+			$wpdb->delete( ES_Install::table( $child ), [ 'form_id' => $id ], [ '%d' ] );
+		}
 		if ( class_exists( 'ES_Form_Revisions' ) ) {
 			ES_Form_Revisions::delete_for_form( $id );
 		}
