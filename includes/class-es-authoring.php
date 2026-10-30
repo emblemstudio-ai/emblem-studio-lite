@@ -102,6 +102,14 @@ NOTES
   <span data-es-live="coupon.discount" data-es-product="ID"
   data-es-coupon="CODE">a discount</span>. The words inside show whenever
   the number isn't safe to show, so write them without digits.
+- An element marked data-es-pointer is told where the cursor is, so CSS
+  can react with no script: --es-pointer-dx / --es-pointer-dy (direction,
+  -1 to 1), --es-pointer-x / -y (px from its centre), --es-pointer-fx / -fy
+  (0 to 1 across it), --es-pointer-drag-x / -y (px dragged while pressed),
+  and the attributes data-es-pointer-over, -down and -idle (after
+  data-es-pointer-idle-after seconds, default 8). All numbers are plain, so
+  multiply by a unit: calc(var(--es-pointer-dx) * 6px). Use it for play,
+  never to hide something a phone visitor needs.
 - The shell adds the popup backdrop, positioning and close button. Don't
   build your own overlay, modal wrapper, close button or full-bleed
   background. Put the background, padding, border-radius and box-shadow on
