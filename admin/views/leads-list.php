@@ -297,6 +297,15 @@ $status_labels = [
 										<dt><?php esc_html_e( 'IP', 'emblem-studio' ); ?></dt>
 										<dd><code><?php echo esc_html( (string) $r->ip ); ?></code></dd>
 									<?php endif; ?>
+									<?php
+									$detail_source = ES_Visit_Source::decode( $r->source ?? null );
+									?>
+									<dt><?php esc_html_e( 'Came from', 'emblem-studio' ); ?></dt>
+									<dd><?php echo esc_html( ES_Visit_Source::label( $detail_source ) ?: '—' ); ?></dd>
+									<?php if ( ! empty( $detail_source['landing'] ) && is_string( $detail_source['landing'] ) ) : ?>
+										<dt><?php esc_html_e( 'First page', 'emblem-studio' ); ?></dt>
+										<dd><code><?php echo esc_html( $detail_source['landing'] ); ?></code></dd>
+									<?php endif; ?>
 								</dl>
 
 								<?php

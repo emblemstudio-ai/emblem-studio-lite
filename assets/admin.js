@@ -287,6 +287,24 @@
 			$roles.toggle($(this).val() === 'in');
 		});
 
+		$(document).on('change', 'input[data-source-mode]', function () {
+			$(this).closest('.es-dr-visitor-source').find('.es-dr-source-detail').toggle($(this).val() !== 'any');
+		});
+		$(document).on('click', '.es-dr-source-add', function () {
+			var $box  = $(this).closest('.es-dr-visitor-source');
+			var $tags = $box.find('.es-dr-source-tags');
+			var tpl   = $box.find('template.es-dr-source-tag-template')[0];
+			if (!tpl || $tags.children('.es-dr-source-tag').length >= 10) return;
+			$tags.append(document.importNode(tpl.content, true));
+			$tags.find('.es-dr-source-tag').last().find('input[type="text"]').trigger('focus');
+		});
+		$(document).on('click', '.es-dr-source-remove', function () {
+			var $row = $(this).closest('.es-dr-source-tag');
+			var $form = $row.closest('form');
+			$row.remove();
+			$form.trigger('change');
+		});
+
 		$(document).on('change', '.es-checkbox-pill input[type="checkbox"]', function () {
 			$(this).closest('.es-checkbox-pill').toggleClass('is-checked', this.checked);
 		});
@@ -1403,6 +1421,10 @@
 		setCheckboxGroup(body, 'display_' + key + '_visitor_roles', []);
 		var stateAny = body.querySelector('input[name="display_' + key + '_visitor_state"][value="any"]');
 		if (stateAny) stateAny.checked = true;
+		var sourceAny = body.querySelector('input[name="display_' + key + '_source_mode"][value="any"]');
+		if (sourceAny) { sourceAny.checked = true; sourceAny.dispatchEvent(new Event('change', { bubbles: true })); }
+		setCheckboxGroup(body, 'display_' + key + '_source_channels', []);
+		body.querySelectorAll('.es-dr-source-tags .es-dr-source-tag').forEach(function (row) { row.remove(); });
 		setCheckboxGroup(body, 'display_' + key + '_schedule_days', []);
 		var startField = body.querySelector('input[name="display_' + key + '_schedule_start_time"]');
 		if (startField) startField.value = '';

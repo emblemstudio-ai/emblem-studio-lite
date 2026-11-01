@@ -98,6 +98,21 @@ $device_labels = [
 $device_total = 0;
 foreach ( $device_break as $d ) { $device_total += (int) $d['views']; }
 
+$source_break  = ES_Reports::source_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
+$source_labels = [
+	'paid'     => __( 'Paid ads', 'emblem-studio' ),
+	'email'    => __( 'Email', 'emblem-studio' ),
+	'social'   => __( 'Social media', 'emblem-studio' ),
+	'ai'       => __( 'AI assistants', 'emblem-studio' ),
+	'search'   => __( 'Search engines', 'emblem-studio' ),
+	'campaign' => __( 'Tagged links', 'emblem-studio' ),
+	'referral' => __( 'Other websites', 'emblem-studio' ),
+	'direct'   => __( 'Direct', 'emblem-studio' ),
+	'unknown'  => __( 'Not recorded', 'emblem-studio' ),
+];
+$source_total = 0;
+foreach ( $source_break as $s ) { $source_total += (int) $s['views']; }
+
 $design = ( isset( $_GET['design'] ) && $_GET['design'] === 'grid' ) ? 'grid' : 'journey';
 $tier = ES_Caps::is_lite()
 	? 'lite'
@@ -216,6 +231,34 @@ $render_device = static function () use ( $device_break, $device_total, $device_
 							<span class="es-rep-vs"><?php echo esc_html( number_format_i18n( (int) $d['views'] ) ); ?> · <?php echo esc_html( (string) $d_pct ); ?>% ·<?php echo esc_html( number_format_i18n( $d_cr, 2 ) ); ?>% <?php esc_html_e( 'conv', 'emblem-studio' ); ?></span>
 						</div>
 						<div class="es-rep-bar"><span style="width:<?php echo esc_attr( (string) $d_pct ); ?>%"></span></div>
+					</div>
+				<?php endforeach; ?>
+			</div>
+		<?php endif; ?>
+	</div>
+	<?php
+};
+
+$render_source = static function () use ( $source_break, $source_total, $source_labels ) {
+	?>
+	<div class="es-rep-card">
+		<div class="es-rep-card-head">
+			<h2><?php esc_html_e( 'Where visitors came from', 'emblem-studio' ); ?></h2>
+			<span class="es-rep-card-sub"><?php esc_html_e( 'views and sign-ups in range', 'emblem-studio' ); ?></span>
+		</div>
+		<?php if ( 0 === $source_total ) : ?>
+			<p class="es-rep-empty"><?php esc_html_e( 'No source data yet. It builds up from now on.', 'emblem-studio' ); ?></p>
+		<?php else : ?>
+			<div class="es-rep-bars">
+				<?php foreach ( $source_break as $s ) :
+					$s_pct = (int) round( (int) $s['views'] / max( 1, $source_total ) * 100 );
+				?>
+					<div class="es-rep-bar-row">
+						<div class="es-rep-bar-top">
+							<span><?php echo esc_html( $source_labels[ $s['source'] ] ?? $s['source'] ); ?></span>
+							<span class="es-rep-vs"><?php echo esc_html( number_format_i18n( (int) $s['views'] ) ); ?> · <?php echo esc_html( (string) $s_pct ); ?>% · <?php echo esc_html( number_format_i18n( (int) $s['conversions'] ) ); ?> <?php esc_html_e( 'sign-ups', 'emblem-studio' ); ?> (<?php echo esc_html( number_format_i18n( (float) $s['conv_rate'], 2 ) ); ?>%)</span>
+						</div>
+						<div class="es-rep-bar"><span style="width:<?php echo esc_attr( (string) $s_pct ); ?>%"></span></div>
 					</div>
 				<?php endforeach; ?>
 			</div>
@@ -498,6 +541,7 @@ $render_gated = static function ( $required, $title, callable $render ) use ( $e
 			<?php $render_gated( 'free', __( 'By device', 'emblem-studio' ), $render_device ); ?>
 			<?php $render_gated( 'paid', __( 'By page', 'emblem-studio' ), $render_page ); ?>
 		</div>
+		<?php $render_gated( 'free', __( 'Where visitors came from', 'emblem-studio' ), $render_source ); ?>
 		<?php $render_gated( 'free', __( 'Bot traffic filtered', 'emblem-studio' ), $render_bot ); ?>
 	<?php else : ?>
 		<?php $render_gated( 'free', __( 'Visitors', 'emblem-studio' ), $render_visitors ); ?>
@@ -507,6 +551,7 @@ $render_gated = static function ( $required, $title, callable $render ) use ( $e
 			<?php $render_gated( 'paid', __( 'By page', 'emblem-studio' ), $render_page ); ?>
 			<?php $render_funnel(); ?>
 		</div>
+		<?php $render_gated( 'free', __( 'Where visitors came from', 'emblem-studio' ), $render_source ); ?>
 		<?php $render_gated( 'free', __( 'Bot traffic filtered', 'emblem-studio' ), $render_bot ); ?>
 	<?php endif; ?>
 

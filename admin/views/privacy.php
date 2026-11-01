@@ -24,6 +24,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php esc_html_e( 'One exception: if you\'re running an A/B test on a form, we also set a cookie (esf_ab_<form id>) on page load — same timing as esf_visitor above — to keep a visitor seeing the same version. Worth listing alongside it in your cookie policy if you use A/B testing.', 'emblem-studio' ); ?>
 	</p>
 	<p>
+		<?php esc_html_e( 'Not a cookie, but worth listing too: es_src. It is kept in the browser\'s session storage, for this tab only, and is gone when the tab closes. It notes where the visit came from: the kind of source (ad, email, social, search, AI assistant, other site, tagged link, direct), the link\'s campaign tags, the referring site and the first page. It decides which popups show, and it is saved with a sign-up. It holds the name of an ad click marker (such as gclid), never its value.', 'emblem-studio' ); ?>
+	</p>
+	<p>
 		<?php esc_html_e( 'It\'s your site and your banner, so the call is yours. We just make sure our code follows whatever your visitors decide.', 'emblem-studio' ); ?>
 	</p>
 
@@ -41,6 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php
 	};
 	$es_copybox( __( 'esf_visitor — an anonymous, first-party cookie (about 30 days) that lets us count unique visitors and tell new visitors from returning ones. No personal data.', 'emblem-studio' ) );
+	$es_copybox( __( 'es_src — session storage for this tab only, gone when the tab closes. Notes where the visit came from (campaign tags, the referring site, the first page) to choose which forms show and to keep with a sign-up. Never an ad click ID\'s value.', 'emblem-studio' ) );
 	?>
 	<p>
 		<?php esc_html_e( 'Most WordPress banners already speak a shared standard (the WP Consent API) — if yours does, this is handled automatically, nothing else to do.', 'emblem-studio' ); ?>

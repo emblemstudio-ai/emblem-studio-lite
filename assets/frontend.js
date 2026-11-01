@@ -466,6 +466,7 @@
 			body.append('post_id', postId);
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
+			appendSource(body);
 			fetch(ajax, { method: 'POST', body: body, credentials: 'same-origin', keepalive: true });
 		} catch (e) { }
 	}
@@ -522,6 +523,7 @@
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
 			body.append('target', label || '');
+			appendSource(body);
 			if (navigator.sendBeacon) {
 				const blob = new Blob([body.toString()], { type: 'application/x-www-form-urlencoded' });
 				navigator.sendBeacon(ajax, blob);
@@ -573,6 +575,7 @@
 			body.append('vid', esVisitorId());
 			body.append('type', shell);
 			if (step) body.append('step', step);
+			appendSource(body);
 			if (navigator.sendBeacon) {
 				const blob = new Blob([body.toString()], { type: 'application/x-www-form-urlencoded' });
 				navigator.sendBeacon(ajax, blob);
@@ -642,6 +645,79 @@
 		}
 		_esVid = v;
 		return v;
+	}
+
+	var ES_SRC_KEY = 'es_src';
+	var ES_SRC_TAGS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id', 'ref'];
+	var ES_SRC_CLICKS = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid', 'li_fat_id'];
+
+	function esSourceChannel(s) {
+		var m = String(s.utm_medium || '').toLowerCase();
+		var src = String(s.utm_source || '').toLowerCase();
+		var r = String(s.referrer || '').toLowerCase();
+		var on = function (list) { return list.some(function (d) { return r === d || r.slice(-(d.length + 1)) === '.' + d; }); };
+		if (s.click || /^(cpc|ppc|paid|paidsearch|paid_search|paid_social|paidsocial|display|cpm|cpv|banner)$/.test(m)) return 'paid';
+		if (/e-?mail|newsletter|^mail/.test(m) || /e-?mail|newsletter/.test(src)) return 'email';
+		if (m === 'social' || on(['facebook.com', 'fb.com', 'instagram.com', 'twitter.com', 'x.com', 't.co', 'linkedin.com', 'lnkd.in', 'pinterest.com', 'tiktok.com', 'youtube.com', 'reddit.com', 'threads.net', 'bsky.app'])) return 'social';
+		if (on(['chatgpt.com', 'chat.openai.com', 'claude.ai', 'perplexity.ai', 'gemini.google.com', 'copilot.microsoft.com', 'you.com'])) return 'ai';
+		if (/(^|\.)google\.[a-z.]+$/.test(r) || on(['bing.com', 'duckduckgo.com', 'yahoo.com', 'ecosia.org', 'search.brave.com', 'baidu.com', 'yandex.ru', 'yandex.com'])) return 'search';
+		if (ES_SRC_TAGS.some(function (k) { return s[k]; })) return 'campaign';
+		if (r) return 'referral';
+		return 'direct';
+	}
+
+	function esSourceRead() {
+		try { return JSON.parse(sessionStorage.getItem(ES_SRC_KEY) || 'null'); } catch (e) { return null; }
+	}
+
+	function esSourceCapture() {
+		if (IN_ADMIN_FRAME || (window.EmblemStudio && window.EmblemStudio.preview)) return;
+		try {
+			var q = new URLSearchParams(location.search);
+			var s = {};
+			ES_SRC_TAGS.forEach(function (k) { var v = q.get(k); if (v) s[k] = v.slice(0, 100); });
+			if (!s.ref && q.get('from')) s.ref = q.get('from').slice(0, 100);
+			for (var i = 0; i < ES_SRC_CLICKS.length; i++) { if (q.get(ES_SRC_CLICKS[i])) { s.click = ES_SRC_CLICKS[i]; break; } }
+			var host = '';
+			try { host = document.referrer ? new URL(document.referrer).hostname.toLowerCase() : ''; } catch (e) { host = ''; }
+			var self = location.hostname.toLowerCase().replace(/^www\./, '');
+			if (host && host.replace(/^www\./, '') !== self) s.referrer = host.slice(0, 100);
+			var stored = esSourceRead();
+			var fresh = Object.keys(s).length > 0;
+			if (!fresh && stored) return;
+			s.landing = String(location.pathname || '/').slice(0, 100);
+			s.channel = esSourceChannel(s);
+			sessionStorage.setItem(ES_SRC_KEY, JSON.stringify(s));
+		} catch (e) { }
+	}
+
+	function esSource() {
+		return esSourceRead() || { channel: 'direct' };
+	}
+
+	function esSourceMatches(rule, src) {
+		if ((rule.channels || []).indexOf(src.channel) !== -1) return true;
+		return (rule.tags || []).some(function (t) {
+			var have = String(src[t.key] || '').toLowerCase();
+			var want = String(t.value || '').toLowerCase();
+			if (!have || !want) return false;
+			if (t.op === 'contains') return have.indexOf(want) !== -1;
+			if (t.op === 'starts_with') return have.indexOf(want) === 0;
+			return have === want;
+		});
+	}
+
+	function esSourceAllows(boot) {
+		var rule;
+		try { rule = JSON.parse((boot && boot.getAttribute('data-esf-source-rule')) || 'null'); } catch (e) { return true; }
+		if (!rule || (rule.mode !== 'only' && rule.mode !== 'except')) return true;
+		var hit = esSourceMatches(rule, esSource());
+		return rule.mode === 'only' ? hit : !hit;
+	}
+	esSourceCapture();
+
+	function appendSource(body) {
+		try { body.append('src', esSource().channel || 'direct'); } catch (e) { }
 	}
 
 	function markSubscribed(host) {
@@ -972,6 +1048,7 @@
 
 		const shell = host.getAttribute('data-esf-type') || 'inline';
 		data.append('type', shell);
+		try { data.append('es_source', JSON.stringify(esSource())); } catch (e) { }
 
 		if (window.EmblemStudio && window.EmblemStudio.preview) data.append('es_preview', '1');
 
@@ -1129,6 +1206,8 @@
 		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
 		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(popupId, 'popup-auto')) return;
+
+		if (!(window.EmblemStudio && window.EmblemStudio.preview) && !esSourceAllows(boot)) return;
 
 		if (!isTemplateHostSubscribed('template.esf-popup-data[data-esf-popup-id="' + popupId + '"]')) {
 			fetchGeo();
@@ -1443,6 +1522,8 @@
 
 		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(ribbonId, 'ribbon')) return;
 
+		if (!(window.EmblemStudio && window.EmblemStudio.preview) && !esSourceAllows(boot)) return;
+
 		if (!isTemplateHostSubscribed('template.esf-ribbon-data[data-esf-ribbon-id="' + ribbonId + '"]')) {
 			fetchGeo();
 			fireEvent(boot, 'es_page_view');
@@ -1670,6 +1751,8 @@
 		if (!config.trigger && !(window.EmblemStudio && window.EmblemStudio.preview)) return;
 
 		if (!(window.EmblemStudio && window.EmblemStudio.preview) && isShellSuppressed(slideInId, 'slide-in')) return;
+
+		if (!(window.EmblemStudio && window.EmblemStudio.preview) && !esSourceAllows(boot)) return;
 
 		if (!isTemplateHostSubscribed('template.esf-slide-in-data[data-esf-slide-in-id="' + slideInId + '"]')) {
 			fetchGeo();

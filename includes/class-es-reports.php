@@ -543,6 +543,54 @@ class ES_Reports {
 		return $out;
 	}
 
+	public static function source_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
+		global $wpdb;
+		$events = ES_Install::table( 'events' );
+
+		$where  = "WHERE event_type IN ('view','conversion')";
+		$params = [];
+		if ( $form_id ) {
+			$where .= ' AND form_id = %d';
+			$params[] = $form_id;
+		}
+		if ( $from ) {
+			$where .= ' AND created_at >= %s';
+			$params[] = self::pad_dt( $from, 'start' );
+		}
+		if ( $to ) {
+			$where .= ' AND created_at <= %s';
+			$params[] = self::pad_dt( $to, 'end' );
+		}
+		if ( $shell ) {
+			$where .= ' AND type = %s';
+			$params[] = $shell;
+		}
+
+		$sql = "SELECT COALESCE(source, 'unknown') AS src,
+				SUM(CASE WHEN event_type = 'view'       THEN 1 ELSE 0 END) AS views,
+				SUM(CASE WHEN event_type = 'conversion' THEN 1 ELSE 0 END) AS conversions
+			FROM $events $where GROUP BY src";
+		$rows = $params ? $wpdb->get_results( $wpdb->prepare( $sql, $params ) ) : $wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		$out = [];
+		foreach ( (array) $rows as $r ) {
+			$views = (int) $r->views;
+			$conv  = (int) $r->conversions;
+			$out[] = [
+				'source'      => (string) $r->src,
+				'views'       => $views,
+				'conversions' => $conv,
+				'conv_rate'   => $views > 0 ? round( $conv / $views * 100, 2 ) : 0.0,
+			];
+		}
+		usort( $out, static function ( array $a, array $b ): int {
+			$au = $a['source'] === 'unknown' ? 1 : 0;
+			$bu = $b['source'] === 'unknown' ? 1 : 0;
+			return ( $au <=> $bu ) ?: ( $b['views'] <=> $a['views'] );
+		} );
+		return $out;
+	}
+
 	public static function page_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null, int $limit = 20 ): array {
 		global $wpdb;
 		$events = ES_Install::table( 'events' );

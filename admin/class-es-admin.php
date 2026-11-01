@@ -1456,6 +1456,22 @@ class ES_Admin {
 			$schedule_days         = $pick_array( 'display_' . $k . '_schedule_days', 'int' );
 			$schedule_start        = isset( $_POST[ 'display_' . $k . '_schedule_start_time' ] ) ? sanitize_text_field( wp_unslash( $_POST[ 'display_' . $k . '_schedule_start_time' ] ) ) : '';
 			$schedule_end          = isset( $_POST[ 'display_' . $k . '_schedule_end_time' ] )   ? sanitize_text_field( wp_unslash( $_POST[ 'display_' . $k . '_schedule_end_time' ] ) )   : '';
+			$source_tags = [];
+			$src_keys    = isset( $_POST[ 'display_' . $k . '_source_tag_key' ] ) && is_array( $_POST[ 'display_' . $k . '_source_tag_key' ] ) ? array_values( wp_unslash( $_POST[ 'display_' . $k . '_source_tag_key' ] ) ) : [];
+			$src_ops     = isset( $_POST[ 'display_' . $k . '_source_tag_op' ] ) && is_array( $_POST[ 'display_' . $k . '_source_tag_op' ] ) ? array_values( wp_unslash( $_POST[ 'display_' . $k . '_source_tag_op' ] ) ) : [];
+			$src_values  = isset( $_POST[ 'display_' . $k . '_source_tag_value' ] ) && is_array( $_POST[ 'display_' . $k . '_source_tag_value' ] ) ? array_values( wp_unslash( $_POST[ 'display_' . $k . '_source_tag_value' ] ) ) : [];
+			foreach ( $src_keys as $i => $src_key ) {
+				$source_tags[] = [
+					'key'   => sanitize_key( (string) $src_key ),
+					'op'    => sanitize_key( (string) ( $src_ops[ $i ] ?? 'is' ) ),
+					'value' => sanitize_text_field( (string) ( $src_values[ $i ] ?? '' ) ),
+				];
+			}
+			$visitor_source = [
+				'mode'     => sanitize_key( (string) ( $_POST[ 'display_' . $k . '_source_mode' ] ?? 'any' ) ),
+				'channels' => $pick_array( 'display_' . $k . '_source_channels', 'key' ),
+				'tags'     => $source_tags,
+			];
 			$urls_for = function ( string $side ) use ( $name ) {
 				$field = $name( $side, 'urls' );
 				if ( ! isset( $_POST[ $field ] ) ) {
@@ -1490,6 +1506,7 @@ class ES_Admin {
 				'visitor_logged_in' => $visitor_logged_in,
 				'visitor_roles'     => $visitor_roles,
 				'visitor_state'     => $visitor_state,
+				'visitor_source'    => $visitor_source,
 				'schedule'          => [
 					'days'       => $schedule_days,
 					'start_time' => $schedule_start,

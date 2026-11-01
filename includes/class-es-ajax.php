@@ -387,7 +387,7 @@ class ES_Ajax {
 
 		$reserved      = [
 			'email', 'first_name', 'last_name', 'name', 'phone',
-			'form_id', 'esf_hp', 'es_stamp', 'es_ts', 'es_el', 'esf_tag', 'esf_list',
+			'form_id', 'esf_hp', 'es_stamp', 'es_ts', 'es_el', 'esf_tag', 'esf_list', 'es_source',
 			'action', '_wpnonce', '_wp_http_referer',
 		];
 		$allowed       = $this->allowed_field_names( $form );
@@ -402,10 +402,13 @@ class ES_Ajax {
 			$custom_fields[ sanitize_key( $k ) ] = self::sanitize_field_value( $v );
 		}
 
+		$source = ES_Visit_Source::from_request( isset( $_POST['es_source'] ) ? wp_unslash( (string) $_POST['es_source'] ) : null );
+
 		global $wpdb;
 		$wpdb->insert( ES_Install::table( 'leads' ), [
 			'form_id'      => $form_id,
 			'email'        => $email,
+			'source'       => $source !== null ? wp_json_encode( $source ) : null,
 			'extra_fields' => wp_json_encode( array_merge(
 				[ 'first_name' => $first_name, 'last_name' => $last_name, 'phone' => $phone, 'tags' => $tags ],
 				$custom_fields,
@@ -466,7 +469,7 @@ class ES_Ajax {
 			$shell = 'inline';
 		}
 		if ( ! $is_preview ) {
-			$recorded = ES_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ), $lead_id );
+			$recorded = ES_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ), $lead_id, null, $source['channel'] ?? null );
 
 			if ( $recorded && class_exists( 'ES_AB' ) ) {
 				ES_AB::auto_winner_check( $form_id );
@@ -482,7 +485,8 @@ class ES_Ajax {
 				$last_name,
 				$phone,
 				$custom_fields,
-				$push['contact_id'] ?? null
+				$push['contact_id'] ?? null,
+				$source
 			);
 			ES_Webhooks::send_for_form( $form_for_hooks, $webhook_payload );
 		}
@@ -662,7 +666,7 @@ class ES_Ajax {
 	private function collect_fields(): array {
 		$out = [];
 		foreach ( $_POST as $k => $v ) {
-			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_stamp', 'es_ts', 'es_el' ], true ) ) {
+			if ( in_array( $k, [ 'action', '_wpnonce', '_wp_http_referer', 'form_id', 'post_id', 'esf_hp', 'es_stamp', 'es_ts', 'es_el', 'es_source' ], true ) ) {
 				continue;
 			}
 			$out[ $k ] = self::sanitize_field_value( wp_unslash( $v ) );

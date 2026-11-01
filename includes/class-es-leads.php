@@ -120,7 +120,7 @@ class ES_Leads {
 
 		$rows_sql = "SELECT l.id, l.created_at, l.email, l.extra_fields,
 				l.funnelkit_pushed, l.funnelkit_contact_id, l.error,
-				l.is_bot, l.bot_signals, l.ip,
+				l.is_bot, l.bot_signals, l.ip, l.source,
 				f.id AS form_id, f.name AS form_name, f.slug AS form_slug
 			FROM $leads l
 			LEFT JOIN $forms f ON f.id = l.form_id
@@ -349,7 +349,7 @@ class ES_Leads {
 		}
 
 		if ( class_exists( 'ES_Webhooks' ) ) {
-			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null );
+			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null, ES_Visit_Source::decode( $lead->source ?? null ) );
 			ES_Webhooks::send_for_form( $form, $payload );
 		}
 
@@ -428,10 +428,11 @@ class ES_Leads {
 		fputcsv( $out, array_merge(
 			[ 'id', 'created_at', 'form', 'form_slug', 'email', 'first_name', 'last_name', 'phone', 'tags' ],
 			array_map( [ self::class, 'humanize_custom_key' ], $custom_keys ),
-			[ 'funnelkit_pushed', 'funnelkit_contact_id', 'error', 'consent', 'consent_wording' ]
+			[ 'funnelkit_pushed', 'funnelkit_contact_id', 'error', 'consent', 'consent_wording' ],
+			ES_Visit_Source::CSV_HEADERS
 		) );
 
-		$columns = 'l.id, l.created_at, l.email, l.extra_fields, l.funnelkit_pushed, l.funnelkit_contact_id, l.error, f.name AS form_name, f.slug AS form_slug';
+		$columns = 'l.id, l.created_at, l.email, l.extra_fields, l.funnelkit_pushed, l.funnelkit_contact_id, l.error, l.source, f.name AS form_name, f.slug AS form_slug';
 		$before  = PHP_INT_MAX;
 		do {
 			$batch = self::csv_batch( $where, $columns, $before );
@@ -460,7 +461,8 @@ class ES_Leads {
 						$r['error'],
 						implode( '; ', array_map( static fn( $c ) => $c['field'] . ': ' . ( $c['agreed'] ? 'yes' : 'no' ), $cs ) ),
 						implode( ' | ', array_map( static fn( $c ) => $c['text'], array_filter( $cs, static fn( $c ) => '' !== $c['text'] ) ) ),
-					]
+					],
+					ES_Visit_Source::csv_cells( ES_Visit_Source::decode( $r['source'] ?? null ) )
 				);
 				fputcsv( $out, array_map( [ self::class, 'neutralize_formula' ], $row ) );
 				$before = (int) $r['id'];

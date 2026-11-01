@@ -5,11 +5,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ES_Event_Recorder {
 
-	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null, ?int $lead_id = null, ?string $step = null ): bool {
+	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null, ?int $lead_id = null, ?string $step = null, ?string $source = null ): bool {
 		$step    = $event_type === 'dropoff' ? self::clean_step( $step ) : '';
+		$source  = ES_Visit_Source::event_channel( $source ?? ( isset( $_POST['src'] ) ? (string) wp_unslash( $_POST['src'] ) : null ) );
 		$context = [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => $lead_id ];
 		if ( ES_Measurement::policy( $context ) === 'strict' ) {
-			return ES_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id, $step ): bool {
+			return ES_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id, $step, $source ): bool {
 				global $wpdb;
 				$personal = $decision['personal'];
 				$row = [
@@ -23,6 +24,9 @@ class ES_Event_Recorder {
 				}
 				if ( $step !== '' ) {
 					$row['step'] = $step;
+				}
+				if ( $source !== null ) {
+					$row['source'] = $source;
 				}
 				if ( $personal ) {
 					foreach ( [ 'visitor' => 40, 'ua' => 255 ] as $key => $limit ) {
@@ -62,6 +66,9 @@ class ES_Event_Recorder {
 		}
 		if ( $step !== '' ) {
 			$row['step'] = $step;
+		}
+		if ( $source !== null ) {
+			$row['source'] = $source;
 		}
 		return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
 	}

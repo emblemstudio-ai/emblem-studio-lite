@@ -90,8 +90,49 @@ class ES_Display_Rules {
 			'visitor_logged_in' => 'any',
 			'visitor_roles'     => [],
 			'visitor_state'     => 'any',
+			'visitor_source'    => self::empty_source(),
 			'schedule'          => self::empty_schedule(),
 		];
+	}
+
+	public const SOURCE_CHANNELS = [ 'paid', 'email', 'social', 'ai', 'search', 'campaign', 'referral', 'direct' ];
+
+	public const SOURCE_KEYS = [ 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'ref', 'referrer', 'landing' ];
+
+	public const SOURCE_OPS = [ 'is', 'contains', 'starts_with' ];
+
+	public static function empty_source(): array {
+		return [ 'mode' => 'any', 'channels' => [], 'tags' => [] ];
+	}
+
+	public static function sanitize_source( $raw ): array {
+		if ( ! is_array( $raw ) ) {
+			return self::empty_source();
+		}
+		$mode     = in_array( $raw['mode'] ?? 'any', [ 'any', 'only', 'except' ], true ) ? (string) $raw['mode'] : 'any';
+		$channels = array_values( array_intersect( self::SOURCE_CHANNELS, array_map( 'strval', (array) ( $raw['channels'] ?? [] ) ) ) );
+		$tags     = [];
+		foreach ( array_slice( (array) ( $raw['tags'] ?? [] ), 0, 10 ) as $t ) {
+			if ( ! is_array( $t ) ) {
+				continue;
+			}
+			$key   = is_scalar( $t['key'] ?? null ) ? (string) $t['key'] : '';
+			$op    = is_scalar( $t['op'] ?? null ) ? (string) $t['op'] : 'is';
+			$value = is_scalar( $t['value'] ?? null ) ? mb_substr( trim( (string) $t['value'] ), 0, 100 ) : '';
+			if ( in_array( $key, self::SOURCE_KEYS, true ) && in_array( $op, self::SOURCE_OPS, true ) && $value !== '' ) {
+				$tags[] = [ 'key' => $key, 'op' => $op, 'value' => $value ];
+			}
+		}
+		if ( $mode === 'any' || ( $channels === [] && $tags === [] ) ) {
+			return self::empty_source();
+		}
+
+		return [ 'mode' => $mode, 'channels' => $channels, 'tags' => $tags ];
+	}
+
+	public static function source_rule_for_browser( array $rules ): ?array {
+		$rule = self::sanitize_source( $rules['visitor_source'] ?? null );
+		return $rule['mode'] === 'any' ? null : $rule;
 	}
 
 	public const VISITOR_COOKIE = 'esf_visitor';
@@ -145,6 +186,7 @@ class ES_Display_Rules {
 			'visitor_logged_in' => $logged_in,
 			'visitor_roles'     => $role_keys,
 			'visitor_state'     => $visitor_state,
+			'visitor_source'    => self::sanitize_source( $raw['visitor_source'] ?? null ),
 			'schedule'          => self::sanitize_schedule( $raw['schedule'] ?? [] ),
 		];
 	}

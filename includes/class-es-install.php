@@ -77,6 +77,7 @@ class ES_Install {
 			lead_id BIGINT(20) UNSIGNED NULL,
 			measurement_mode VARCHAR(12) NULL,
 			step VARCHAR(64) NULL,
+			source VARCHAR(12) NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			KEY form_event_time (form_id, event_type, created_at),
@@ -100,6 +101,7 @@ class ES_Install {
 			is_bot TINYINT(1) NOT NULL DEFAULT 0,
 			bot_signals TEXT NULL,
 			ip VARCHAR(45) NULL,
+			source TEXT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			KEY form_id (form_id),
@@ -1030,6 +1032,25 @@ class ES_Install {
 					$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $prefix ) . '%' ) );
 				}
 				update_option( 'emblem_studio_db_version', '48' );
+			}
+		}
+
+		if ( version_compare( $current, '49', '<' ) ) {
+			global $wpdb;
+			$events = self::table( 'events' );
+			$leads  = self::table( 'leads' );
+			$ecols  = (array) $wpdb->get_col( "SHOW COLUMNS FROM $events" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! in_array( 'source', $ecols, true ) ) {
+				$wpdb->query( "ALTER TABLE $events ADD COLUMN source VARCHAR(12) NULL AFTER step" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			$lcols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $leads" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! in_array( 'source', $lcols, true ) ) {
+				$wpdb->query( "ALTER TABLE $leads ADD COLUMN source TEXT NULL AFTER ip" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			$ecols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $events" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$lcols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $leads" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( in_array( 'source', $ecols, true ) && in_array( 'source', $lcols, true ) ) {
+				update_option( 'emblem_studio_db_version', '49' );
 			}
 		}
 	}
