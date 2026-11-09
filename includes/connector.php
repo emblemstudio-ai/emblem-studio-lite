@@ -678,9 +678,9 @@ final class Emblem_Studio_SaaS_Connector
                 <p style="color:#646970;font-size:12px;margin:0 0 8px;">
                     <?php
                     printf(
-                        /* translators: %s: link to the beta application page */
-                        esc_html__('A secure Emblem Studio sign-in window will open. The beta is invite-only — %s if you don\'t have access yet.', 'emblem-studio'),
-                        '<a href="'.esc_url(rtrim($api, '/').'/#apply').'" target="_blank" rel="noopener">'.esc_html__('ask for beta access', 'emblem-studio').'</a>'
+                        /* translators: %s: link to the sign-up page */
+                        esc_html__('A secure Emblem Studio sign-in window will open. No account yet? %s.', 'emblem-studio'),
+                        '<a href="'.esc_url(rtrim($api, '/').'/signup').'" target="_blank" rel="noopener">'.esc_html__('Create one for free', 'emblem-studio').'</a>'
                     );
                     ?>
                 </p>
