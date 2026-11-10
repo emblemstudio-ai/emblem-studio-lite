@@ -254,6 +254,7 @@ class Emblem_Studio_Install {
 		dbDelta( $lead_consents );
 		dbDelta( $purchases );
 		self::create_rate_limits_table();
+		Emblem_Studio_Stats_Summary::create_tables();
 
 		update_option( 'emblem_studio_db_version', EMBLEM_STUDIO_DB_VERSION );
 	}
@@ -1051,6 +1052,21 @@ class Emblem_Studio_Install {
 			$lcols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $leads" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( in_array( 'source', $ecols, true ) && in_array( 'source', $lcols, true ) ) {
 				update_option( 'emblem_studio_db_version', '49' );
+			}
+		}
+
+		if ( version_compare( $current, '50', '<' ) ) {
+			if ( self::migration_failed_recently( '50' ) ) {
+				return;
+			}
+			global $wpdb;
+			Emblem_Studio_Stats_Summary::create_tables();
+			if ( Emblem_Studio_Stats_Summary::ready() ) {
+				update_option( 'emblem_studio_db_version', '50' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '50', (string) $wpdb->last_error );
+				return;
 			}
 		}
 	}

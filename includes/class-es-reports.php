@@ -369,6 +369,9 @@ class Emblem_Studio_Reports {
 	public static function reset_stats( ?int $form_id = null, ?string $shell = null ): int {
 		global $wpdb;
 		$events = Emblem_Studio_Install::table( 'events' );
+		if ( class_exists( 'Emblem_Studio_Stats_Summary' ) ) {
+			Emblem_Studio_Stats_Summary::forget( $form_id ? [ $form_id ] : null, $form_id ? $shell : null );
+		}
 		if ( $form_id && $shell ) {
 			return (int) $wpdb->query( $wpdb->prepare(
 				"DELETE FROM $events WHERE form_id = %d AND type = %s",
@@ -497,6 +500,18 @@ class Emblem_Studio_Reports {
 		];
 	}
 
+	public static function device_bucket_sql(): string {
+		$ua = 'LOWER(ua)';
+		$has = static function ( string $word ) use ( $ua ): string {
+			return "LOCATE('$word', $ua) > 0";
+		};
+		return "CASE
+			WHEN ua IS NULL OR ua = '' THEN 'unknown'
+			WHEN {$has('ipad')} OR {$has('tablet')} OR ({$has('android')} AND LOCATE('mobile', $ua) = 0) THEN 'tablet'
+			WHEN {$has('mobi')} OR {$has('iphone')} OR {$has('ipod')} OR {$has('android')} THEN 'mobile'
+			ELSE 'desktop' END";
+	}
+
 	public static function device_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
 		global $wpdb;
 		$events = Emblem_Studio_Install::table( 'events' );
@@ -520,11 +535,7 @@ class Emblem_Studio_Reports {
 			$params[] = $shell;
 		}
 
-		$bucket = "CASE
-			WHEN ua IS NULL OR ua = '' THEN 'unknown'
-			WHEN LOWER(ua) LIKE '%ipad%' OR LOWER(ua) LIKE '%tablet%' OR (LOWER(ua) LIKE '%android%' AND LOWER(ua) NOT LIKE '%mobile%') THEN 'tablet'
-			WHEN LOWER(ua) LIKE '%mobi%' OR LOWER(ua) LIKE '%iphone%' OR LOWER(ua) LIKE '%ipod%' OR LOWER(ua) LIKE '%android%' THEN 'mobile'
-			ELSE 'desktop' END";
+		$bucket = self::device_bucket_sql();
 
 		$sql = "SELECT $bucket AS device,
 				SUM(CASE WHEN event_type = 'view'       THEN 1 ELSE 0 END) AS views,

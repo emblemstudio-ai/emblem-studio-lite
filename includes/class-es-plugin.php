@@ -40,6 +40,11 @@ class Emblem_Studio_Plugin {
 		}
 		add_action( 'emblem_studio_daily_purge', [ $this, 'run_daily_purge' ] );
 
+		if ( ! wp_next_scheduled( Emblem_Studio_Stats_Summary::CRON_HOOK ) ) {
+			wp_schedule_event( time() + 2 * HOUR_IN_SECONDS, 'daily', Emblem_Studio_Stats_Summary::CRON_HOOK );
+		}
+		add_action( Emblem_Studio_Stats_Summary::CRON_HOOK, [ $this, 'run_stats_summary' ] );
+
 		add_filter( 'cron_schedules', [ $this, 'add_minute_schedule' ] );
 		if ( ! wp_next_scheduled( 'emblem_studio_reconcile_statuses' ) ) {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'emblem_studio_minute', 'emblem_studio_reconcile_statuses' );
@@ -84,6 +89,10 @@ class Emblem_Studio_Plugin {
 		}
 
 		Emblem_Studio_Rate_Limit::purge_stale();
+	}
+
+	public function run_stats_summary(): void {
+		Emblem_Studio_Stats_Summary::run_nightly();
 	}
 
 	public function run_status_reconcile(): void {

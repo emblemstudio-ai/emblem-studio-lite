@@ -1579,12 +1579,16 @@ final class Emblem_Studio_SaaS_Connector
                 return true;
             }
             $wpdb->suppress_errors(true);
+            $earliest = [];
             foreach ($data['events'] as $e) {
                 $form_id = $map[(int) ($e['saas_form_id'] ?? 0)] ?? 0;
                 if (! $form_id || empty($e['saas_event_id'])) {
                     continue;
                 }
-                $wpdb->insert($events, [
+                $created = isset($e['created_at'])
+                    ? get_date_from_gmt((string) $e['created_at'])
+                    : current_time('mysql');
+                $added = $wpdb->insert($events, [
                     'saas_event_id' => (int) $e['saas_event_id'],
                     'form_id'       => $form_id,
                     'event_type'    => (string) ($e['event_type'] ?? ''),
@@ -1595,12 +1599,16 @@ final class Emblem_Studio_SaaS_Connector
                     'ua'            => $e['ua'] ?? null,
                     'ip'            => $e['ip'] ?? null,
                     'visitor'       => $e['visitor'] ?? null,
-                    'created_at'    => isset($e['created_at'])
-                        ? get_date_from_gmt((string) $e['created_at'])
-                        : current_time('mysql'),
+                    'created_at'    => $created,
                 ]);
+                if ($added && (! isset($earliest[$form_id]) || $created < $earliest[$form_id])) {
+                    $earliest[$form_id] = $created;
+                }
             }
             $wpdb->suppress_errors(false);
+            if ($earliest && class_exists('Emblem_Studio_Stats_Summary')) {
+                Emblem_Studio_Stats_Summary::rewind($earliest);
+            }
             $after = (int) ($data['last_id'] ?? $after);
             update_option('es_saas_pull_stats_after', $after, false);
             if (count($data['events']) < 500) {
