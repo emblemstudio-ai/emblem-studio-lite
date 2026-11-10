@@ -1464,7 +1464,7 @@ $check_groups = [
 										<td class="num"><?php echo esc_html( number_format_i18n( (int) ( $row['clicks_a'] ?? 0 ) ) ); ?></td>
 										<td class="num"><?php echo esc_html( number_format_i18n( (int) ( $row['clicks_b'] ?? 0 ) ) ); ?></td>
 									<?php endif; ?>
-									<td><?php echo esc_html( mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $row['last_at'] ) ); ?></td>
+									<td><?php echo esc_html( mysql2date( strlen( (string) $row['last_at'] ) > 10 ? get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) : get_option( 'date_format' ), $row['last_at'] ) ); ?></td>
 								</tr>
 							<?php endforeach; ?>
 						</tbody>

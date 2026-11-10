@@ -166,6 +166,11 @@ class Emblem_Studio_Reports {
 			$where .= ' AND variant = %s';
 			$params[] = $variant;
 		}
+		$until = class_exists( 'Emblem_Studio_Stats_Summary' ) ? Emblem_Studio_Stats_Summary::cover_until( $form_id ) : null;
+		if ( $until !== null ) {
+			$where   .= ' AND created_at >= %s';
+			$params[] = $until;
+		}
 
 		$row = $wpdb->get_row( $wpdb->prepare(
 			"SELECT
@@ -189,6 +194,9 @@ class Emblem_Studio_Reports {
 			FROM $events $where",
 			$params
 		) );
+		if ( $until !== null ) {
+			$row = self::all_time_with_summary( (object) ( $row ?: [] ), $form_id, $shell, $variant, $until, $where, $params );
+		}
 
 		$pv  = (int) ( $row->page_views ?? 0 );
 		$tv  = (int) ( $row->trigger_views ?? 0 );
@@ -236,6 +244,59 @@ class Emblem_Studio_Reports {
 		];
 	}
 
+	private static function all_time_with_summary( object $row, int $form_id, ?string $shell, ?string $variant, string $until, string $where, array $params ): object {
+		global $wpdb;
+		$events = Emblem_Studio_Install::table( 'events' );
+		$map    = [
+			'page_view' => 'page_views', 'trigger_view' => 'trigger_views', 'view' => 'views',
+			'conversion' => 'conversions', 'engage' => 'engagements', 'dropoff' => 'dropoffs',
+			'bot_filtered' => 'bot_filtered', 'honeypot_blocked' => 'honeypot_blocked', 'click' => 'clicks_all',
+		];
+		$out = [];
+		foreach ( array_merge( array_values( $map ), [ 'clicks_meaningful', 'dismissals', 'labelled_conversions', 'unknown_views' ] ) as $k ) {
+			$out[ $k ] = (int) ( $row->$k ?? 0 );
+		}
+		$summary_clicks = 0;
+		foreach ( Emblem_Studio_Stats_Summary::sums( $form_id, 'base', $until, $shell, $variant, [ 'labelled' ] ) as $s ) {
+			$n = (int) $s->n;
+			if ( isset( $map[ $s->event_type ] ) ) {
+				$out[ $map[ $s->event_type ] ] += $n;
+			}
+			if ( $s->event_type === 'click' ) {
+				$summary_clicks += $n;
+			}
+			if ( $s->event_type === 'conversion' && (int) $s->labelled ) {
+				$out['labelled_conversions'] += $n;
+			}
+			if ( $s->event_type === 'view' && ! (int) $s->labelled ) {
+				$out['unknown_views'] += $n;
+			}
+		}
+		$dismissed = 0;
+		foreach ( Emblem_Studio_Stats_Summary::sums( $form_id, 'item', $until, $shell, $variant, [ 'click_target' ] ) as $s ) {
+			if ( $s->event_type === 'click' && in_array( $s->click_target, [ '__close__', '__backdrop__' ], true ) ) {
+				$dismissed += (int) $s->n;
+			}
+		}
+		$out['dismissals']        += $dismissed;
+		$out['clicks_meaningful'] += $summary_clicks - $dismissed;
+
+		$raw = static function ( string $extra ) use ( $wpdb, $events, $where, $params ): array {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT visitor FROM $events $where AND visitor IS NOT NULL AND visitor <> '' AND $extra", $params ) );
+		};
+		$people = [
+			'unique_visitors'    => [ 'viewers', "event_type = 'view'" ],
+			'unique_conversions' => [ 'signups', "event_type = 'conversion'" ],
+			'unique_clickers'    => [ 'clickers', "event_type = 'click' AND (click_target IS NULL OR click_target NOT IN ('__close__','__backdrop__'))" ],
+			'unique_droppers'    => [ 'leavers', "event_type = 'dropoff'" ],
+		];
+		foreach ( $people as $key => [ $kind, $extra ] ) {
+			$out[ $key ] = Emblem_Studio_Stats_Summary::people( $form_id, $kind, $until, $shell, $variant, $raw( $extra ) )->count();
+		}
+		return (object) $out;
+	}
+
 	public static function clicks_for_form( int $form_id, ?string $shell = null, ?string $from = null, ?string $to = null ): array {
 		global $wpdb;
 		$events = Emblem_Studio_Install::table( 'events' );
@@ -253,6 +314,11 @@ class Emblem_Studio_Reports {
 		if ( $to ) {
 			$where   .= ' AND created_at <= %s';
 			$params[] = self::pad_dt( $to, 'end' );
+		}
+		$until = ( ! $from && ! $to && class_exists( 'Emblem_Studio_Stats_Summary' ) ) ? Emblem_Studio_Stats_Summary::cover_until( $form_id ) : null;
+		if ( $until !== null ) {
+			$where   .= ' AND created_at >= %s';
+			$params[] = $until;
 		}
 
 		$rows = $wpdb->get_results( $wpdb->prepare(
@@ -272,7 +338,7 @@ class Emblem_Studio_Reports {
 
 		$out = [];
 		foreach ( (array) $rows as $r ) {
-			$out[] = [
+			$out[ $r->target . '|' . $r->shell ] = [
 				'target'   => (string) $r->target,
 				'shell'    => (string) $r->shell,
 				'clicks'   => (int) $r->clicks,
@@ -280,6 +346,53 @@ class Emblem_Studio_Reports {
 				'clicks_b' => (int) $r->clicks_b,
 				'last_at'  => (string) $r->last_at,
 			];
+		}
+		if ( $until !== null ) {
+			$out = self::clicks_with_summary( $out, $form_id, $shell, $until );
+			usort( $out, static function ( array $a, array $b ): int {
+				return ( $b['clicks'] <=> $a['clicks'] ) ?: strcmp( $b['last_at'], $a['last_at'] );
+			} );
+		}
+		return array_values( $out );
+	}
+
+	private static function clicks_with_summary( array $out, int $form_id, ?string $shell, string $until ): array {
+		global $wpdb;
+		$t      = Emblem_Studio_Install::table( 'daily_stats' );
+		$where  = "form_id = %d AND day < %s AND event_type = 'click'";
+		$params = [ $form_id, substr( $until, 0, 10 ) ];
+		if ( $shell ) {
+			$where   .= ' AND shell = %s';
+			$params[] = $shell;
+		}
+		$add = static function ( string $target, string $sh, string $variant, int $n, string $day ) use ( &$out ): void {
+			$key = $target . '|' . $sh;
+			if ( ! isset( $out[ $key ] ) ) {
+				$out[ $key ] = [ 'target' => $target, 'shell' => $sh, 'clicks' => 0, 'clicks_a' => 0, 'clicks_b' => 0, 'last_at' => '' ];
+			}
+			$out[ $key ]['clicks'] += $n;
+			if ( $variant === 'A' ) {
+				$out[ $key ]['clicks_a'] += $n;
+			} elseif ( $variant === 'B' ) {
+				$out[ $key ]['clicks_b'] += $n;
+			}
+			if ( $out[ $key ]['last_at'] === '' || strcmp( $day, $out[ $key ]['last_at'] ) > 0 ) {
+				$out[ $key ]['last_at'] = strlen( $out[ $key ]['last_at'] ) > 10 ? $out[ $key ]['last_at'] : $day;
+			}
+		};
+		$labelled = [];
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT click_target, shell, variant, SUM(events) AS n, MAX(day) AS last_day FROM $t WHERE $where AND breakdown = 'item' GROUP BY click_target, shell, variant", $params ) ) as $r ) {
+			$add( (string) $r->click_target, (string) $r->shell, (string) $r->variant, (int) $r->n, (string) $r->last_day );
+			$k              = $r->shell . '|' . $r->variant;
+			$labelled[ $k ] = ( $labelled[ $k ] ?? 0 ) + (int) $r->n;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT shell, variant, SUM(events) AS n, MAX(day) AS last_day FROM $t WHERE $where AND breakdown = 'base' GROUP BY shell, variant", $params ) ) as $r ) {
+			$untagged = (int) $r->n - ( $labelled[ $r->shell . '|' . $r->variant ] ?? 0 );
+			if ( $untagged > 0 ) {
+				$add( '__untagged__', (string) $r->shell, (string) $r->variant, $untagged, (string) $r->last_day );
+			}
 		}
 		return $out;
 	}
@@ -303,6 +416,12 @@ class Emblem_Studio_Reports {
 			$params[] = self::pad_dt( $to, 'end' );
 		}
 
+		$until = ( ! $from && ! $to && class_exists( 'Emblem_Studio_Stats_Summary' ) ) ? Emblem_Studio_Stats_Summary::cover_until( (int) $form->id ) : null;
+		if ( $until !== null ) {
+			$where   .= ' AND created_at >= %s';
+			$params[] = $until;
+		}
+
 		$rows = (array) $wpdb->get_results( $wpdb->prepare(
 			"SELECT
 				step,
@@ -314,6 +433,26 @@ class Emblem_Studio_Reports {
 			GROUP BY step",
 			$params
 		) );
+		if ( $until !== null ) {
+			$by = [];
+			foreach ( $rows as $r ) {
+				$k = (string) ( $r->step ?? '' );
+				$by[ $k ] = (object) [ 'step' => $k, 'n' => (int) $r->n, 'n_a' => (int) $r->n_a, 'n_b' => (int) $r->n_b ];
+			}
+			foreach ( Emblem_Studio_Stats_Summary::sums( (int) $form->id, 'step', $until, $shell, null, [ 'step', 'variant' ] ) as $s ) {
+				$k = (string) $s->step;
+				if ( ! isset( $by[ $k ] ) ) {
+					$by[ $k ] = (object) [ 'step' => $k, 'n' => 0, 'n_a' => 0, 'n_b' => 0 ];
+				}
+				$by[ $k ]->n += (int) $s->n;
+				if ( $s->variant === 'A' ) {
+					$by[ $k ]->n_a += (int) $s->n;
+				} elseif ( $s->variant === 'B' ) {
+					$by[ $k ]->n_b += (int) $s->n;
+				}
+			}
+			$rows = array_values( $by );
+		}
 
 		$total    = 0;
 		$unmarked = 0;
@@ -387,11 +526,20 @@ class Emblem_Studio_Reports {
 	public static function shells_with_data( int $form_id ): array {
 		global $wpdb;
 		$events = Emblem_Studio_Install::table( 'events' );
-		$rows = $wpdb->get_col( $wpdb->prepare(
-			"SELECT DISTINCT type FROM $events WHERE form_id = %d AND type <> ''",
-			$form_id
-		) );
-		return array_values( array_filter( (array) $rows, 'is_string' ) );
+		$until = class_exists( 'Emblem_Studio_Stats_Summary' ) ? Emblem_Studio_Stats_Summary::cover_until( $form_id ) : null;
+		if ( $until === null ) {
+			$rows = $wpdb->get_col( $wpdb->prepare(
+				"SELECT DISTINCT type FROM $events WHERE form_id = %d AND type <> ''",
+				$form_id
+			) );
+			return array_values( array_filter( (array) $rows, 'is_string' ) );
+		}
+		$stats = Emblem_Studio_Install::table( 'daily_stats' );
+		$rows  = array_merge(
+			(array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT type FROM $events WHERE form_id = %d AND type <> '' AND created_at >= %s", $form_id, $until ) ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			(array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT shell FROM $stats WHERE form_id = %d AND breakdown = 'base' AND shell <> ''", $form_id ) ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		);
+		return array_values( array_unique( array_filter( $rows, 'is_string' ) ) );
 	}
 
 	public static function aggregate_kpis( string $from, string $to ): array {
@@ -741,6 +889,11 @@ class Emblem_Studio_Reports {
 		$p     = [ $form_id ];
 		if ( $shell ) { $where .= ' AND type = %s'; $p[] = $shell; }
 
+		$until = class_exists( 'Emblem_Studio_Stats_Summary' ) ? Emblem_Studio_Stats_Summary::cover_until( $form_id ) : null;
+		if ( $until !== null ) {
+			return self::asset_visitors_with_summary( $form_id, $shell, $until, $where . ' AND created_at >= %s', array_merge( $p, [ $until ] ) );
+		}
+
 		$row = $wpdb->get_row( $wpdb->prepare(
 			"SELECT
 				COUNT(DISTINCT CASE WHEN visitor IS NOT NULL AND visitor <> '' THEN visitor END) AS uniques,
@@ -763,6 +916,31 @@ class Emblem_Studio_Reports {
 			'new_visitors'       => max( 0, $uniques - $returning ),
 			'returning_visitors' => $returning,
 			'unknown_views'      => (int) ( $row->unknown_views ?? 0 ),
+		];
+	}
+
+	private static function asset_visitors_with_summary( int $form_id, ?string $shell, string $until, string $where, array $p ): array {
+		global $wpdb;
+		$events = Emblem_Studio_Install::table( 'events' );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$ids     = (array) $wpdb->get_results( $wpdb->prepare( "SELECT visitor, COUNT(*) AS c FROM $events $where AND visitor IS NOT NULL AND visitor <> '' GROUP BY visitor", $p ) );
+		$all     = array_map( static fn ( $r ) => (string) $r->visitor, $ids );
+		$twice   = array_map( static fn ( $r ) => (string) $r->visitor, array_filter( $ids, static fn ( $r ) => (int) $r->c >= 2 ) );
+		$uniques = Emblem_Studio_Stats_Summary::people( $form_id, 'viewers', $until, $shell, null, $all )->count();
+		$back    = min( $uniques, Emblem_Studio_Stats_Summary::people( $form_id, 'returners', $until, $shell, null, $twice )->count() );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$unknown = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $events $where AND (visitor IS NULL OR visitor = '')", $p ) );
+		foreach ( Emblem_Studio_Stats_Summary::sums( $form_id, 'base', $until, $shell, null, [ 'labelled' ] ) as $s ) {
+			if ( $s->event_type === 'view' && ! (int) $s->labelled ) {
+				$unknown += (int) $s->n;
+			}
+		}
+		return [
+			'unique_visitors'    => $uniques,
+			'new_visitors'       => max( 0, $uniques - $back ),
+			'returning_visitors' => $back,
+			'unknown_views'      => $unknown,
 		];
 	}
 

@@ -76,6 +76,64 @@ final class Emblem_Studio_Stats_Summary {
 		return true;
 	}
 
+	public static function reads_enabled(): bool {
+		static $ready = null;
+		if ( $ready === null ) {
+			$ready = self::ready();
+		}
+		return $ready && (bool) apply_filters( 'emblem_studio_summary_reads', true );
+	}
+
+	public static function cover_until( int $form_id ): ?string {
+		if ( ! self::reads_enabled() ) {
+			return null;
+		}
+		$done = self::through( $form_id );
+		return $done === null ? null : ( new DateTimeImmutable( $done ) )->modify( '+1 day' )->format( 'Y-m-d 00:00:00' );
+	}
+
+	public static function sums( int $form_id, string $breakdown, string $until, ?string $shell = null, ?string $variant = null, array $group = [] ): array {
+		global $wpdb;
+		$t      = self::table( 'daily_stats' );
+		$where  = 'form_id = %d AND breakdown = %s AND day < %s';
+		$params = [ $form_id, $breakdown, substr( $until, 0, 10 ) ];
+		if ( $shell ) {
+			$where   .= ' AND shell = %s';
+			$params[] = $shell;
+		}
+		if ( $variant !== null && in_array( $variant, [ 'A', 'B' ], true ) ) {
+			$where   .= ' AND variant = %s';
+			$params[] = $variant;
+		}
+		$cols = implode( ', ', array_merge( [ 'event_type' ], $group ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $cols are column names from this class.
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT $cols, SUM(events) AS n FROM $t WHERE $where GROUP BY $cols", $params ) );
+	}
+
+	public static function people( int $form_id, string $kind, string $until, ?string $shell = null, ?string $variant = null, iterable $raw_visitors = [] ): Emblem_Studio_Hll {
+		global $wpdb;
+		$t      = self::table( 'daily_people' );
+		$where  = 'form_id = %d AND kind = %s AND day < %s';
+		$params = [ $form_id, $kind, substr( $until, 0, 10 ) ];
+		if ( $shell ) {
+			$where   .= ' AND shell = %s';
+			$params[] = $shell;
+		}
+		if ( $variant !== null && in_array( $variant, [ 'A', 'B' ], true ) ) {
+			$where   .= ' AND variant = %s';
+			$params[] = $variant;
+		}
+		$h = new Emblem_Studio_Hll();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT sketch FROM $t WHERE $where", $params ) ) as $sketch ) {
+			$h->merge( Emblem_Studio_Hll::decode( (string) $sketch ) );
+		}
+		foreach ( $raw_visitors as $v ) {
+			$h->add( (string) $v );
+		}
+		return $h;
+	}
+
 	public static function bounds( string $date ): array {
 		$d = new DateTimeImmutable( $date . ' 00:00:00' );
 		return [ $d->format( 'Y-m-d H:i:s' ), $d->modify( '+1 day' )->format( 'Y-m-d H:i:s' ) ];

@@ -85,6 +85,7 @@ class Emblem_Studio_Install {
 			KEY form_type_event_time (form_id, type, event_type, created_at),
 			KEY form_variant_event_time (form_id, variant, event_type, created_at),
 			KEY form_visitor_time (form_id, visitor, created_at),
+			KEY created_at (created_at),
 			KEY lead_id (lead_id),
 			UNIQUE KEY saas_event_id (saas_event_id)
 		) $charset_collate;";
@@ -1066,6 +1067,27 @@ class Emblem_Studio_Install {
 				delete_option( self::MIGRATION_ERROR_OPTION );
 			} else {
 				self::record_migration_failure( '50', (string) $wpdb->last_error );
+				return;
+			}
+		}
+
+		if ( version_compare( $current, '51', '<' ) ) {
+			if ( self::migration_failed_recently( '51' ) ) {
+				return;
+			}
+			global $wpdb;
+			$events = self::table( 'events' );
+			$has    = static function () use ( $wpdb, $events ): bool {
+				return (bool) $wpdb->get_var( "SHOW INDEX FROM $events WHERE Key_name = 'created_at'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			};
+			if ( ! $has() ) {
+				$wpdb->query( "ALTER TABLE $events ADD KEY created_at (created_at)" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			if ( $has() ) {
+				update_option( 'emblem_studio_db_version', '51' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '51', (string) $wpdb->last_error );
 				return;
 			}
 		}
