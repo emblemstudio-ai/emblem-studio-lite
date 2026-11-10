@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class ES_FunnelKit_Form_Feed {
+final class Emblem_Studio_FunnelKit_Form_Feed {
 	public const SOURCE = 'emblem-studio';
 
 	public static function dispatch( string $asset_key, array $fields ): array {
@@ -94,12 +94,12 @@ final class ES_FunnelKit_Form_Feed {
 		if ( ! class_exists( 'BWFCRM_Form_Base' ) || ! $controller || ! method_exists( $controller, 'register' ) ) {
 			return;
 		}
-		if ( ! class_exists( 'ES_FunnelKit_Form_Provider' ) ) {
+		if ( ! class_exists( 'Emblem_Studio_FunnelKit_Form_Provider' ) ) {
 			require_once __DIR__ . '/class-es-funnelkit-form-provider.php';
 		}
 		$controller->register(
 			self::SOURCE,
-			'ES_FunnelKit_Form_Provider',
+			'Emblem_Studio_FunnelKit_Form_Provider',
 			'Emblem Studio',
 			[ 'emblem_studio_form_submit' ]
 		);
@@ -117,15 +117,15 @@ final class ES_FunnelKit_Form_Feed {
 
 	private static function build_catalog(): array {
 		$catalog = [];
-		if ( class_exists( 'ES_Form_Repo' ) ) {
-			foreach ( (array) ES_Form_Repo::all( 'all' ) as $form ) {
+		if ( class_exists( 'Emblem_Studio_Form_Repo' ) ) {
+			foreach ( (array) Emblem_Studio_Form_Repo::all( 'all' ) as $form ) {
 				if ( ! is_object( $form ) || empty( $form->id ) ) {
 					continue;
 				}
 				$key    = ! empty( $form->saas_form_id ) ? 'saas:' . (int) $form->saas_form_id : 'wp:' . (int) $form->id;
 				$fields = [];
-				if ( class_exists( 'ES_Form_Parser' ) ) {
-					foreach ( ES_Form_Parser::extract_fields( (string) ( $form->html ?? '' ) ) as $field ) {
+				if ( class_exists( 'Emblem_Studio_Form_Parser' ) ) {
+					foreach ( Emblem_Studio_Form_Parser::extract_fields( (string) ( $form->html ?? '' ) ) as $field ) {
 						$name = (string) ( $field['name'] ?? '' );
 						if ( $name !== '' ) {
 							$fields[ $name ] = (string) ( $field['label'] ?? ucwords( str_replace( [ '_', '-' ], ' ', trim( $name, '[]' ) ) ) );
@@ -179,4 +179,4 @@ final class ES_FunnelKit_Form_Feed {
 	}
 }
 
-ES_FunnelKit_Form_Feed::bootstrap();
+Emblem_Studio_FunnelKit_Form_Feed::bootstrap();

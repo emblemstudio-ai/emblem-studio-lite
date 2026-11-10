@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Form_Repo {
+class Emblem_Studio_Form_Repo {
 
 	const CLOSE_THEMES = [ 'light', 'dark', 'auto' ];
 
@@ -19,7 +19,7 @@ class ES_Form_Repo {
 	}
 
 	public static function table(): string {
-		return ES_Install::table( 'forms' );
+		return Emblem_Studio_Install::table( 'forms' );
 	}
 
 	public static function next_id(): int {
@@ -116,7 +116,7 @@ class ES_Form_Repo {
 			return;
 		}
 		global $wpdb;
-		$sanitized = ES_Display_Rules::sanitize_all_shells( $rules );
+		$sanitized = Emblem_Studio_Display_Rules::sanitize_all_shells( $rules );
 		$wpdb->update(
 			self::table(),
 			[
@@ -174,7 +174,7 @@ class ES_Form_Repo {
 		$types       = isset( $data['form_types'] ) && is_array( $data['form_types'] )
 			? array_values( array_intersect( array_map( 'sanitize_text_field', $data['form_types'] ), $valid_types ) )
 			: [ 'inline' ];
-		if ( ! ES_Caps::has( 'auto_shells' ) ) {
+		if ( ! Emblem_Studio_Caps::has( 'auto_shells' ) ) {
 			$types = array_values( array_diff( $types, [ 'popup-auto', 'ribbon', 'slide-in' ] ) );
 			if ( empty( $types ) ) {
 				$types = [ 'inline' ];
@@ -191,8 +191,8 @@ class ES_Form_Repo {
 		$row = [
 			'name'                 => sanitize_text_field( (string) ( $data['name'] ?? '' ) ),
 			'slug'                 => $data['slug'] ?? '',
-			'html'                 => ES_HTML_Sanitizer::sanitize( (string) ( $data['html'] ?? '' ) ),
-			'css'                  => ES_HTML_Sanitizer::sanitize_css( (string) ( $data['css'] ?? '' ) ),
+			'html'                 => Emblem_Studio_HTML_Sanitizer::sanitize( (string) ( $data['html'] ?? '' ) ),
+			'css'                  => Emblem_Studio_HTML_Sanitizer::sanitize_css( (string) ( $data['css'] ?? '' ) ),
 			'enabled'              => $enabled ? 1 : 0,
 			'status'               => $enabled ? 'active' : 'inactive',
 			'funnelkit_list_id'    => $lists ? $lists[0] : null,
@@ -211,7 +211,7 @@ class ES_Form_Repo {
 		}
 
 		if ( isset( $data['display_rules'] ) && is_array( $data['display_rules'] ) ) {
-			$row['display_rules'] = wp_json_encode( ES_Display_Rules::sanitize_all_shells( $data['display_rules'] ) );
+			$row['display_rules'] = wp_json_encode( Emblem_Studio_Display_Rules::sanitize_all_shells( $data['display_rules'] ) );
 		}
 
 		if ( array_key_exists( 'use_shadow_dom', $data ) ) {
@@ -247,18 +247,18 @@ class ES_Form_Repo {
 		}
 
 		if ( array_key_exists( 'funnelkit_contact_status', $data ) ) {
-			$row['funnelkit_contact_status'] = ES_FunnelKit_Upsert::contact_status( $data['funnelkit_contact_status'] );
+			$row['funnelkit_contact_status'] = Emblem_Studio_FunnelKit_Upsert::contact_status( $data['funnelkit_contact_status'] );
 		}
 
-		if ( array_key_exists( 'webhooks', $data ) && is_array( $data['webhooks'] ) && class_exists( 'ES_Webhooks' ) ) {
-			$clean = ES_Webhooks::sanitize_array( $data['webhooks'] );
+		if ( array_key_exists( 'webhooks', $data ) && is_array( $data['webhooks'] ) && class_exists( 'Emblem_Studio_Webhooks' ) ) {
+			$clean = Emblem_Studio_Webhooks::sanitize_array( $data['webhooks'] );
 			$row['webhooks'] = $clean ? wp_json_encode( $clean ) : null;
 		}
 
-		if ( array_key_exists( 'connections', $data ) && class_exists( 'ES_Connections' ) ) {
-			$clean = ES_Connections::sanitize( is_array( $data['connections'] ) ? $data['connections'] : [] );
-			$row['connections'] = ES_Connections::is_active( $clean ) ? wp_json_encode( $clean ) : null;
-			ES_Connections::flush();
+		if ( array_key_exists( 'connections', $data ) && class_exists( 'Emblem_Studio_Connections' ) ) {
+			$clean = Emblem_Studio_Connections::sanitize( is_array( $data['connections'] ) ? $data['connections'] : [] );
+			$row['connections'] = Emblem_Studio_Connections::is_active( $clean ) ? wp_json_encode( $clean ) : null;
+			Emblem_Studio_Connections::flush();
 		}
 
 		if ( array_key_exists( 'active_from', $data ) ) {
@@ -324,10 +324,10 @@ class ES_Form_Repo {
 			self::record_pre_save_revision( $id, $row, $data );
 			$wpdb->update( $t, $row, [ 'id' => $id ] );
 			self::flush_caches();
-			if ( class_exists( 'ES_AB' ) ) {
+			if ( class_exists( 'Emblem_Studio_AB' ) ) {
 				$after = self::find( $id );
 				if ( $after ) {
-					ES_AB::sync_pause_with_form( $after );
+					Emblem_Studio_AB::sync_pause_with_form( $after );
 				}
 			}
 			return $id;
@@ -361,8 +361,8 @@ class ES_Form_Repo {
 			return;
 		}
 		$note = isset( $data['revision_note'] ) ? (string) $data['revision_note'] : null;
-		if ( class_exists( 'ES_Form_Revisions' ) ) {
-			ES_Form_Revisions::insert( $form_id, $old_html, $old_css, $note );
+		if ( class_exists( 'Emblem_Studio_Form_Revisions' ) ) {
+			Emblem_Studio_Form_Revisions::insert( $form_id, $old_html, $old_css, $note );
 		}
 	}
 
@@ -398,8 +398,8 @@ class ES_Form_Repo {
 			],
 			[ 'id' => $id ]
 		);
-		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
-			ES_Form_Scheduled_Revisions::cancel_for_form( $id, __( 'The form was moved to the trash.', 'emblem-studio' ) );
+		if ( class_exists( 'Emblem_Studio_Form_Scheduled_Revisions' ) ) {
+			Emblem_Studio_Form_Scheduled_Revisions::cancel_for_form( $id, __( 'The form was moved to the trash.', 'emblem-studio' ) );
 		}
 		self::flush_caches();
 	}
@@ -429,8 +429,8 @@ class ES_Form_Repo {
 			],
 			[ 'id' => $id ]
 		);
-		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
-			ES_Form_Scheduled_Revisions::cancel_for_form( $id, __( 'The form was archived.', 'emblem-studio' ) );
+		if ( class_exists( 'Emblem_Studio_Form_Scheduled_Revisions' ) ) {
+			Emblem_Studio_Form_Scheduled_Revisions::cancel_for_form( $id, __( 'The form was archived.', 'emblem-studio' ) );
 		}
 		self::flush_caches();
 	}
@@ -473,9 +473,9 @@ class ES_Form_Repo {
 		);
 		self::flush_caches();
 
-		if ( class_exists( 'ES_AB' ) ) {
+		if ( class_exists( 'Emblem_Studio_AB' ) ) {
 			$form->status = $status;
-			ES_AB::sync_pause_with_form( $form );
+			Emblem_Studio_AB::sync_pause_with_form( $form );
 		}
 		return true;
 	}
@@ -523,9 +523,9 @@ class ES_Form_Repo {
 			'track_clicks'         => ! empty( $form->track_clicks ) ? 1 : 0,
 			'track_purchases'      => ! empty( $form->track_purchases ) ? 1 : 0,
 			'funnelkit_enabled'    => ! empty( $form->funnelkit_enabled ) ? 1 : 0,
-			'funnelkit_contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
-			'webhooks'             => class_exists( 'ES_Webhooks' ) ? ES_Webhooks::for_form( $form ) : [],
-			'connections'          => class_exists( 'ES_Connections' ) ? ES_Connections::for_form( $form ) : null,
+			'funnelkit_contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
+			'webhooks'             => class_exists( 'Emblem_Studio_Webhooks' ) ? Emblem_Studio_Webhooks::for_form( $form ) : [],
+			'connections'          => class_exists( 'Emblem_Studio_Connections' ) ? Emblem_Studio_Connections::for_form( $form ) : null,
 			'active_from'          => $form->active_from  ? (string) $form->active_from  : null,
 			'active_until'         => $form->active_until ? (string) $form->active_until : null,
 		];
@@ -576,7 +576,7 @@ class ES_Form_Repo {
 			'track_clicks'         => array_key_exists( 'track_clicks', $data ) ? ( ! empty( $data['track_clicks'] ) ? 1 : 0 ) : 1,
 			'track_purchases'      => ! empty( $data['track_purchases'] ) ? 1 : 0,
 			'funnelkit_enabled'    => array_key_exists( 'funnelkit_enabled', $data ) ? ( ! empty( $data['funnelkit_enabled'] ) ? 1 : 0 ) : 0,
-			'funnelkit_contact_status' => ES_FunnelKit_Upsert::contact_status( $data['funnelkit_contact_status'] ?? null ),
+			'funnelkit_contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $data['funnelkit_contact_status'] ?? null ),
 			'webhooks'             => $decode_array( $data['webhooks'] ?? [] ),
 			'connections'          => $decode_array( $data['connections'] ?? [] ),
 			'active_from'          => isset( $data['active_from'] )  ? self::import_datetime( (string) $data['active_from'] )  : '',
@@ -590,14 +590,14 @@ class ES_Form_Repo {
 	public static function delete( int $id ): void {
 		global $wpdb;
 		$wpdb->delete( self::table(), [ 'id' => $id ] );
-		if ( class_exists( 'ES_Form_Revisions' ) ) {
-			ES_Form_Revisions::delete_for_form( $id );
+		if ( class_exists( 'Emblem_Studio_Form_Revisions' ) ) {
+			Emblem_Studio_Form_Revisions::delete_for_form( $id );
 		}
-		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
-			ES_Form_Scheduled_Revisions::delete_for_form( $id );
+		if ( class_exists( 'Emblem_Studio_Form_Scheduled_Revisions' ) ) {
+			Emblem_Studio_Form_Scheduled_Revisions::delete_for_form( $id );
 		}
-		if ( class_exists( 'ES_Form_Schedule' ) ) {
-			ES_Form_Schedule::delete_for_form( $id );
+		if ( class_exists( 'Emblem_Studio_Form_Schedule' ) ) {
+			Emblem_Studio_Form_Schedule::delete_for_form( $id );
 		}
 		self::flush_caches();
 	}
@@ -642,9 +642,9 @@ class ES_Form_Repo {
 		$data['track_clicks']     = ! empty( $source->track_clicks ) ? 1 : 0;
 		$data['track_purchases']  = ! empty( $source->track_purchases ) ? 1 : 0;
 		$data['funnelkit_enabled'] = ! empty( $source->funnelkit_enabled ) ? 1 : 0;
-		$data['funnelkit_contact_status'] = ES_FunnelKit_Upsert::contact_status( $source->funnelkit_contact_status ?? null );
-		$data['webhooks']         = class_exists( 'ES_Webhooks' ) ? ES_Webhooks::for_form( $source ) : [];
-		$data['connections']      = class_exists( 'ES_Connections' ) ? ES_Connections::for_form( $source ) : null;
+		$data['funnelkit_contact_status'] = Emblem_Studio_FunnelKit_Upsert::contact_status( $source->funnelkit_contact_status ?? null );
+		$data['webhooks']         = class_exists( 'Emblem_Studio_Webhooks' ) ? Emblem_Studio_Webhooks::for_form( $source ) : [];
+		$data['connections']      = class_exists( 'Emblem_Studio_Connections' ) ? Emblem_Studio_Connections::for_form( $source ) : null;
 
 		$new_id = self::save( $data );
 		return $new_id ?: null;
@@ -799,7 +799,7 @@ class ES_Form_Repo {
 	}
 
 	public static function is_in_schedule_window( object $form ): bool {
-		if ( class_exists( 'ES_Caps' ) && ! ES_Caps::has( 'schedule_window' ) ) {
+		if ( class_exists( 'Emblem_Studio_Caps' ) && ! Emblem_Studio_Caps::has( 'schedule_window' ) ) {
 			return true;
 		}
 		return self::schedule_window_contains(
@@ -828,7 +828,7 @@ class ES_Form_Repo {
 			? (bool) $form->enabled
 			: in_array( ( $form->status ?? 'inactive' ), [ 'active', 'scheduled', 'expired' ], true );
 
-		$ignore_window = class_exists( 'ES_Caps' ) && ! ES_Caps::has( 'schedule_window' );
+		$ignore_window = class_exists( 'Emblem_Studio_Caps' ) && ! Emblem_Studio_Caps::has( 'schedule_window' );
 
 		return self::resolve_status_at(
 			$enabled,
@@ -884,9 +884,9 @@ class ES_Form_Repo {
 			$wpdb->update( $t, [ 'status' => $resolved ], [ 'id' => (int) $row->id ] );
 			$moved++;
 
-			if ( class_exists( 'ES_AB' ) ) {
+			if ( class_exists( 'Emblem_Studio_AB' ) ) {
 				$row->status = $resolved;
-				ES_AB::sync_pause_with_form( $row );
+				Emblem_Studio_AB::sync_pause_with_form( $row );
 			}
 		}
 
@@ -898,16 +898,16 @@ class ES_Form_Repo {
 	}
 
 	public static function effective_state( object $form ): string {
-		$ignore_window = class_exists( 'ES_Caps' ) && ! ES_Caps::has( 'schedule_window' );
+		$ignore_window = class_exists( 'Emblem_Studio_Caps' ) && ! Emblem_Studio_Caps::has( 'schedule_window' );
 
-		if ( ! $ignore_window && class_exists( 'ES_Form_Schedule' ) && ! empty( $form->id ) ) {
-			$from_periods = ES_Form_Schedule::state_for( (int) $form->id );
+		if ( ! $ignore_window && class_exists( 'Emblem_Studio_Form_Schedule' ) && ! empty( $form->id ) ) {
+			$from_periods = Emblem_Studio_Form_Schedule::state_for( (int) $form->id );
 			if ( null !== $from_periods ) {
 				if ( ! empty( $form->trashed_at ) || ! empty( $form->archived_at ) || 'active' !== ( $form->status ?? 'inactive' ) ) {
 					return 'inactive';
 				}
 				if ( 'active' === $from_periods ) {
-					$current = ES_Form_Schedule::current( (int) $form->id );
+					$current = Emblem_Studio_Form_Schedule::current( (int) $form->id );
 					return ( $current && ! empty( $current->ends_at ) ) ? 'ending' : 'active';
 				}
 				return $from_periods;
@@ -1000,10 +1000,10 @@ class ES_Form_Repo {
 
 	private static function flush_caches(): void {
 		self::$reconciled = false;
-		if ( class_exists( 'ES_FunnelKit_Form_Feed' ) ) {
-			ES_FunnelKit_Form_Feed::forget_catalog();
+		if ( class_exists( 'Emblem_Studio_FunnelKit_Form_Feed' ) ) {
+			Emblem_Studio_FunnelKit_Form_Feed::forget_catalog();
 		}
-		ES_Display_Rules::flush_visitor_state_cache();
-		ES_Shortcode::flush_auto_shell_cache();
+		Emblem_Studio_Display_Rules::flush_visitor_state_cache();
+		Emblem_Studio_Shortcode::flush_auto_shell_cache();
 	}
 }

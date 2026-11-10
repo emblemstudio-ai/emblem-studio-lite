@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Field_Matcher {
+class Emblem_Studio_Field_Matcher {
 
 	public const EMAIL_NAME_VARIANTS  = [ 'email', 'your-email', 'email_address', 'user_email', 'e-mail' ];
 	public const FIRST_NAME_VARIANTS  = [ 'first_name', 'fname', 'firstname', 'first-name' ];

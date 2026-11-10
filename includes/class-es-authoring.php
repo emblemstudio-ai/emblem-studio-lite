@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Authoring {
+class Emblem_Studio_Authoring {
 
 	const PROMPT_BASE = 'https://emblemstudio.ai';
 

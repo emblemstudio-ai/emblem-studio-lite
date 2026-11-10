@@ -18,6 +18,11 @@ final class Emblem_Studio_SaaS_Connector
 
     const DEFAULT_API_BASE = 'https://emblemstudio.ai';
 
+    private static function connect_api(): string
+    {
+        return rtrim(defined('ESS_API_BASE') ? (string) ESS_API_BASE : self::DEFAULT_API_BASE, '/');
+    }
+
     const POSTDECOUPLE_OPTION = 'es_postdecouple_cfg';
     const POSTDECOUPLE_STATE = 'es_postdecouple_state';
     const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';
@@ -83,15 +88,15 @@ final class Emblem_Studio_SaaS_Connector
     public static function push_erasures(): void
     {
         $cfg = self::config();
-        if (! $cfg || ! class_exists('ES_Privacy')) {
+        if (! $cfg || ! class_exists('Emblem_Studio_Privacy')) {
             return;
         }
-        foreach (array_chunk(ES_Privacy::queued_saas_erasures(), 50) as $chunk) {
+        foreach (array_chunk(Emblem_Studio_Privacy::queued_saas_erasures(), 50) as $chunk) {
             $data = self::pull_post($cfg, '/v1/embed/erase', ['emails' => array_values($chunk)]);
             if (! is_array($data) || empty($data['ok'])) {
                 return;
             }
-            ES_Privacy::clear_saas_erasures($chunk);
+            Emblem_Studio_Privacy::clear_saas_erasures($chunk);
         }
     }
 
@@ -139,7 +144,7 @@ final class Emblem_Studio_SaaS_Connector
                 continue;
             }
 
-            $stored = class_exists('ES_Live_Values') ? ES_Live_Values::stored() : [];
+            $stored = class_exists('Emblem_Studio_Live_Values') ? Emblem_Studio_Live_Values::stored() : [];
             $resend = [];
             foreach ($data['missing'] as $key) {
                 if (is_string($key) && isset($stored[$key])) {
@@ -160,23 +165,23 @@ final class Emblem_Studio_SaaS_Connector
     public static function push_purchases(): void
     {
         $cfg = self::config();
-        if (! $cfg || ! class_exists('ES_Purchases')) {
+        if (! $cfg || ! class_exists('Emblem_Studio_Purchases')) {
             return;
         }
 
-        $forget = ES_Purchases::forgotten();
+        $forget = Emblem_Studio_Purchases::forgotten();
         if ($forget !== []) {
             foreach (array_chunk($forget, 200) as $chunk) {
                 $data = self::pull_post($cfg, '/v1/embed/purchases', ['forget' => array_values($chunk)]);
                 if (! is_array($data) || empty($data['ok'])) {
                     return;
                 }
-                ES_Purchases::clear_forgotten($chunk);
+                Emblem_Studio_Purchases::clear_forgotten($chunk);
             }
         }
 
         for ($pass = 0; $pass < 10; $pass++) {
-            $rows = ES_Purchases::pending(200);
+            $rows = Emblem_Studio_Purchases::pending(200);
             if ($rows === []) {
                 return;
             }
@@ -191,7 +196,7 @@ final class Emblem_Studio_SaaS_Connector
                 return;
             }
 
-            ES_Purchases::mark_sent($ids);
+            Emblem_Studio_Purchases::mark_sent($ids);
             if (count($rows) < 200) {
                 return;
             }
@@ -217,18 +222,18 @@ final class Emblem_Studio_SaaS_Connector
         if ($was !== $wanted || ! is_array($state)) {
             update_option(self::RECENT_ORDERS_WANTED, ['wanted' => $wanted, 'at' => time()], false);
         }
-        if (! $wanted && class_exists('ES_Recent_Orders')) {
-            ES_Recent_Orders::clear();
+        if (! $wanted && class_exists('Emblem_Studio_Recent_Orders')) {
+            Emblem_Studio_Recent_Orders::clear();
         }
     }
 
     public static function push_recent_orders(): void
     {
         $cfg = self::config();
-        if (! $cfg || ! class_exists('ES_Recent_Orders')) {
+        if (! $cfg || ! class_exists('Emblem_Studio_Recent_Orders')) {
             return;
         }
-        $pending = ES_Recent_Orders::pending();
+        $pending = Emblem_Studio_Recent_Orders::pending();
         if ($pending['orders'] === [] && $pending['forget'] === []) {
             return;
         }
@@ -237,7 +242,7 @@ final class Emblem_Studio_SaaS_Connector
         if (! is_array($data) || empty($data['ok'])) {
             return;
         }
-        ES_Recent_Orders::mark_sent(array_column($pending['orders'], 'ref'), $pending['forget']);
+        Emblem_Studio_Recent_Orders::mark_sent(array_column($pending['orders'], 'ref'), $pending['forget']);
         if (array_key_exists('wanted', $data)) {
             self::set_recent_orders_wanted(! empty($data['wanted']));
         }
@@ -654,15 +659,8 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function render_connect_panel(): void
     {
-        $api = defined('ESS_API_BASE') ? (string) ESS_API_BASE : self::DEFAULT_API_BASE;
-        $s   = self::stored();
-        if (! empty($s['api_base'])) {
-            $api = (string) $s['api_base'];
-        }
-        if (! empty($_GET['es_api'])) { // phpcs:ignore WordPress.Security.NonceVerification
-            $api = esc_url_raw(wp_unslash((string) $_GET['es_api'])); // phpcs:ignore WordPress.Security.NonceVerification
-        }
-        $api = rtrim($api, '/');
+        $api  = self::connect_api();
+        $host = (string) wp_parse_url($api, PHP_URL_HOST);
 
         $origin = home_url('/');
         $name   = get_bloginfo('name');
@@ -692,15 +690,16 @@ final class Emblem_Studio_SaaS_Connector
                         <?php esc_html_e('Sign in to connect', 'emblem-studio'); ?>
                     </button>
                 </p>
+                <p style="color:#646970;font-size:12px;margin:6px 0 0;">
+                    <?php
+                    printf(
+                        /* translators: %s: the Emblem Studio address this site connects to, e.g. emblemstudio.ai */
+                        esc_html__('Connects to %s', 'emblem-studio'),
+                        '<strong>'.esc_html($host).'</strong>'
+                    );
+                    ?>
+                </p>
                 <div id="es-connect-status" style="min-height:20px;margin-top:12px;color:#50575e;font-size:13px;"></div>
-                <details style="max-width:460px;margin:14px auto 0;text-align:left;">
-                    <summary style="cursor:pointer;color:#646970;font-size:12px;"><?php esc_html_e('Advanced: Emblem Studio address', 'emblem-studio'); ?></summary>
-                    <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" style="margin:10px 0 0;display:flex;gap:8px;">
-                        <input type="hidden" name="page" value="emblem-studio-account" />
-                        <input type="url" name="es_api" value="<?php echo esc_attr($api); ?>" class="regular-text" style="flex:1;" />
-                        <button type="submit" class="button"><?php esc_html_e('Use', 'emblem-studio'); ?></button>
-                    </form>
-                </details>
             </div>
         </div>
         <script>
@@ -712,18 +711,31 @@ final class Emblem_Studio_SaaS_Connector
             var NONCE    = <?php echo wp_json_encode(wp_create_nonce('es_connect_complete')); ?>;
             var btn      = document.getElementById('es-connect-btn');
             var statusEl = document.getElementById('es-connect-status');
+            var popup    = null;
+
+            // The origins a grant may come from: Emblem Studio's own. In local
+            // development the sign-in can bounce between localhost and 127.0.0.1,
+            // so those two count as the same host.
+            var ORIGINS = (function () {
+                var o = new URL(API_BASE).origin, list = [o];
+                if (o.indexOf('//localhost') !== -1) { list.push(o.replace('//localhost', '//127.0.0.1')); }
+                if (o.indexOf('//127.0.0.1') !== -1) { list.push(o.replace('//127.0.0.1', '//localhost')); }
+                return list;
+            })();
 
             btn.addEventListener('click', function () {
                 statusEl.textContent = '';
-                var w = window.open(POPUP, 'es-connect', 'popup,width=480,height=720');
-                if (! w) { statusEl.textContent = <?php echo wp_json_encode(__('Please allow pop-ups for this site, then click again.', 'emblem-studio')); ?>; }
+                popup = window.open(POPUP, 'es-connect', 'popup,width=480,height=720');
+                if (! popup) { statusEl.textContent = <?php echo wp_json_encode(__('Please allow pop-ups for this site, then click again.', 'emblem-studio')); ?>; }
             });
 
             window.addEventListener('message', function (e) {
                 var d = e.data || {};
-                // The state nonce is the trust anchor (the popup's origin can differ
-                // from API_BASE after WorkOS's canonical-host redirect); the grant is
-                // then verified cryptographically when WP pairs server-side.
+                // Only the sign-in window this page opened, on Emblem Studio's own
+                // address, may hand over a grant. The state nonce alone was not
+                // enough: a popup on any server receives it in its URL (audit SEC-1).
+                // The grant is then verified when WordPress pairs server-side.
+                if (! popup || e.source !== popup || ORIGINS.indexOf(e.origin) === -1) { return; }
                 if (! d || d.type !== 'es-connect' || d.state !== STATE || ! d.grant) { return; }
 
                 statusEl.textContent = <?php echo wp_json_encode(__('Connecting…', 'emblem-studio')); ?>;
@@ -731,7 +743,6 @@ final class Emblem_Studio_SaaS_Connector
                 form.append('action', 'es_connect_complete');
                 form.append('_ajax_nonce', NONCE);
                 form.append('grant', d.grant);
-                form.append('api_base', API_BASE);
 
                 fetch(AJAX, { method: 'POST', credentials: 'same-origin', body: form })
                     .then(function (r) { return r.json(); })
@@ -781,11 +792,7 @@ final class Emblem_Studio_SaaS_Connector
         check_ajax_referer('es_connect_complete');
 
         $grant = isset($_POST['grant']) ? sanitize_text_field(wp_unslash((string) $_POST['grant'])) : '';
-        $api   = isset($_POST['api_base']) ? esc_url_raw(wp_unslash((string) $_POST['api_base'])) : '';
-        if ($api === '') {
-            $api = defined('ESS_API_BASE') ? (string) ESS_API_BASE : self::DEFAULT_API_BASE;
-        }
-        $api = rtrim($api, '/');
+        $api = self::connect_api();
 
         if ($grant === '') {
             wp_send_json_error(['message' => __('Something went wrong signing in. Please try again.', 'emblem-studio')]);
@@ -829,10 +836,10 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function mirror_forms(array $cfg): void
     {
-        if (! class_exists('ES_Form_Repo')) {
+        if (! class_exists('Emblem_Studio_Form_Repo')) {
             return;
         }
-        $rows = array_merge(ES_Form_Repo::all('all'), ES_Form_Repo::all('archived'));
+        $rows = array_merge(Emblem_Studio_Form_Repo::all('all'), Emblem_Studio_Form_Repo::all('archived'));
         $forms = [];
         foreach ((array) $rows as $row) {
             if (! is_object($row) || empty($row->id)) {
@@ -841,7 +848,7 @@ final class Emblem_Studio_SaaS_Connector
             if (! empty($row->saas_form_id)) {
                 continue;
             }
-            $export = ES_Form_Repo::to_export_array($row);
+            $export = Emblem_Studio_Form_Repo::to_export_array($row);
             $export['wp_form_id'] = (int) $row->id;
             $export['revisions']  = self::form_revisions((int) $row->id);
             $forms[] = $export;
@@ -889,10 +896,10 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function mirror_presets(array $cfg): void
     {
-        if (! class_exists('ES_Preset_Repo')) {
+        if (! class_exists('Emblem_Studio_Preset_Repo')) {
             return;
         }
-        $rows    = ES_Preset_Repo::all();
+        $rows    = Emblem_Studio_Preset_Repo::all();
         $presets = [];
         foreach ((array) $rows as $row) {
             if (! is_object($row) || empty($row->id)) {
@@ -901,7 +908,7 @@ final class Emblem_Studio_SaaS_Connector
             if (! empty($row->saas_preset_id)) {
                 continue;
             }
-            $export = ES_Preset_Repo::to_export_array($row);
+            $export = Emblem_Studio_Preset_Repo::to_export_array($row);
             $export['wp_preset_id'] = (int) $row->id;
             $presets[] = $export;
         }
@@ -1073,16 +1080,16 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         $data = self::pull_post($cfg, '/v1/embed/funnelkit/pending', [
-            'shop_data_local' => class_exists('ES_Purchases') && get_option(ES_Purchases::ENABLED_OPTION) === '1',
+            'shop_data_local' => class_exists('Emblem_Studio_Purchases') && get_option(Emblem_Studio_Purchases::ENABLED_OPTION) === '1',
         ]);
         if (! $data) {
             return;
         }
 
-        if (array_key_exists('shop_data', $data) && $data['shop_data'] !== null && class_exists('ES_Purchases')) {
+        if (array_key_exists('shop_data', $data) && $data['shop_data'] !== null && class_exists('Emblem_Studio_Purchases')) {
             $want = ! empty($data['shop_data']) ? '1' : '0';
-            if (get_option(ES_Purchases::ENABLED_OPTION) !== $want) {
-                update_option(ES_Purchases::ENABLED_OPTION, $want);
+            if (get_option(Emblem_Studio_Purchases::ENABLED_OPTION) !== $want) {
+                update_option(Emblem_Studio_Purchases::ENABLED_OPTION, $want);
             }
         }
 
@@ -1378,7 +1385,7 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function pull_assets(array $cfg): void
     {
-        if (! class_exists('ES_Form_Repo')) {
+        if (! class_exists('Emblem_Studio_Form_Repo')) {
             return;
         }
         $data = self::pull_post($cfg, '/v1/embed/export/assets');
@@ -1440,7 +1447,7 @@ final class Emblem_Studio_SaaS_Connector
                 'active_until'         => $a['active_until'] ?? null,
             ];
 
-            $new_id = (int) ES_Form_Repo::save($fields, $local_id ?: null);
+            $new_id = (int) Emblem_Studio_Form_Repo::save($fields, $local_id ?: null);
             if ($new_id) {
                 $wpdb->update($t, [
                     'saas_form_id'  => $saas_id,
@@ -1450,7 +1457,7 @@ final class Emblem_Studio_SaaS_Connector
                 $wp_ids[$saas_id] = $new_id;
 
                 if (array_key_exists('archived_at', $a)) {
-                    ES_Form_Repo::set_archived_at($new_id, empty($a['archived_at']) ? null : (string) $a['archived_at']);
+                    Emblem_Studio_Form_Repo::set_archived_at($new_id, empty($a['archived_at']) ? null : (string) $a['archived_at']);
                 }
             }
         }
@@ -1462,9 +1469,9 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $t is a prefixed constant name.
-        foreach ((array) $wpdb->get_results("SELECT id, saas_form_id FROM {$t} WHERE saas_form_id IS NOT NULL AND trashed_at IS NULL") as $row) {
+        foreach ($received === [] ? [] : (array) $wpdb->get_results("SELECT id, saas_form_id FROM {$t} WHERE saas_form_id IS NOT NULL AND trashed_at IS NULL") as $row) {
             if (! in_array((int) $row->saas_form_id, $received, true)) {
-                ES_Form_Repo::trash((int) $row->id);
+                Emblem_Studio_Form_Repo::trash((int) $row->id);
             }
         }
 
@@ -1483,7 +1490,7 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function pull_presets(array $cfg): void
     {
-        if (! class_exists('ES_Preset_Repo')) {
+        if (! class_exists('Emblem_Studio_Preset_Repo')) {
             return;
         }
         $data = self::pull_post($cfg, '/v1/embed/export/presets');
@@ -1515,7 +1522,7 @@ final class Emblem_Studio_SaaS_Connector
                 'show_filters' => is_array($p['show_filters'] ?? null) ? $p['show_filters'] : [],
                 'hide_filters' => is_array($p['hide_filters'] ?? null) ? $p['hide_filters'] : [],
             ];
-            $new_id = ES_Preset_Repo::save($fields, $local_id ?: null);
+            $new_id = Emblem_Studio_Preset_Repo::save($fields, $local_id ?: null);
             if ($new_id) {
                 $wpdb->update($t, ['saas_preset_id' => $saas_id], ['id' => $new_id]);
             }
@@ -1524,7 +1531,7 @@ final class Emblem_Studio_SaaS_Connector
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $t is a prefixed constant name.
         foreach ((array) $wpdb->get_results("SELECT id, saas_preset_id FROM {$t} WHERE saas_preset_id IS NOT NULL") as $row) {
             if (! in_array((int) $row->saas_preset_id, $received, true)) {
-                ES_Preset_Repo::delete((int) $row->id);
+                Emblem_Studio_Preset_Repo::delete((int) $row->id);
             }
         }
     }
@@ -1536,8 +1543,8 @@ final class Emblem_Studio_SaaS_Connector
             return $after;
         }
 
-        if (class_exists('ES_Reports')) {
-            ES_Reports::reset_stats();
+        if (class_exists('Emblem_Studio_Reports')) {
+            Emblem_Studio_Reports::reset_stats();
         } else {
             global $wpdb;
             $events = $wpdb->prefix . 'emblemstudio_events';
@@ -1670,7 +1677,7 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function pull_lead_deletions(array $cfg): void
     {
-        if (! class_exists('ES_Leads')) {
+        if (! class_exists('Emblem_Studio_Leads')) {
             return;
         }
         $after = (int) get_option('es_saas_pull_lead_deletions_after', 0);
@@ -1683,10 +1690,10 @@ final class Emblem_Studio_SaaS_Connector
                 $wp_lead_id = isset($d['wp_lead_id']) ? (int) $d['wp_lead_id'] : 0;
                 $saas_lead_id = isset($d['saas_lead_id']) ? (int) $d['saas_lead_id'] : 0;
                 if ($wp_lead_id) {
-                    ES_Leads::delete($wp_lead_id);
+                    Emblem_Studio_Leads::delete($wp_lead_id);
                 }
                 if ($saas_lead_id) {
-                    ES_Leads::delete_by_saas_id($saas_lead_id);
+                    Emblem_Studio_Leads::delete_by_saas_id($saas_lead_id);
                 }
             }
             $after = (int) ($data['last_id'] ?? $after);
@@ -1729,11 +1736,11 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function form_revisions(int $form_id): array
     {
-        if (! class_exists('ES_Form_Revisions')) {
+        if (! class_exists('Emblem_Studio_Form_Revisions')) {
             return [];
         }
         $out = [];
-        foreach ((array) ES_Form_Revisions::list_for_form($form_id) as $rev) {
+        foreach ((array) Emblem_Studio_Form_Revisions::list_for_form($form_id) as $rev) {
             if (! is_object($rev) || empty($rev->id)) {
                 continue;
             }
@@ -1909,7 +1916,7 @@ final class Emblem_Studio_SaaS_Connector
 
         $forms = self::forms($cfg);
 
-        $admin_frame = class_exists('ES_Display_Rules') && ES_Display_Rules::is_admin_frame();
+        $admin_frame = class_exists('Emblem_Studio_Display_Rules') && Emblem_Studio_Display_Rules::is_admin_frame();
 
         $config = [
             'api'       => $cfg['api_base'].'/v1',
@@ -1924,8 +1931,8 @@ final class Emblem_Studio_SaaS_Connector
             $config['site'] = (string) $cfg['code'];
         }
 
-        $skip = class_exists('ES_No_Delay')
-            ? ' '.ES_No_Delay::ATTRS
+        $skip = class_exists('Emblem_Studio_No_Delay')
+            ? ' '.Emblem_Studio_No_Delay::ATTRS
             : ' data-cfasync="false" data-no-optimize="1" data-no-defer="1" data-no-minify="1"';
 
         echo '<script'.$skip.'>window.EmblemStudio = Object.assign(window.EmblemStudio || {}, '
@@ -2238,19 +2245,19 @@ final class Emblem_Studio_SaaS_Connector
 
     public static function read_products(WP_REST_Request $request)
     {
-        if (! class_exists('ES_Commerce')) {
+        if (! class_exists('Emblem_Studio_Commerce')) {
             return new WP_REST_Response(['ok' => false, 'error' => 'unsupported', 'message' => 'This site runs an older Emblem Studio that cannot read the store.'], 200);
         }
 
         $term  = sanitize_text_field((string) $request->get_param('search'));
         $limit = (int) ($request->get_param('limit') ?: 10);
 
-        return self::commerce_response(fn () => ES_Commerce::search($term, $limit));
+        return self::commerce_response(fn () => Emblem_Studio_Commerce::search($term, $limit));
     }
 
     public static function read_coupon(WP_REST_Request $request)
     {
-        if (! class_exists('ES_Commerce')) {
+        if (! class_exists('Emblem_Studio_Commerce')) {
             return new WP_REST_Response(['ok' => false, 'error' => 'unsupported', 'message' => 'This site runs an older Emblem Studio that cannot read the store.'], 200);
         }
 
@@ -2258,18 +2265,18 @@ final class Emblem_Studio_SaaS_Connector
         $product  = (int) $request->get_param('product_id');
         $quantity = (int) ($request->get_param('quantity') ?: 1);
 
-        return self::commerce_response(fn () => ES_Commerce::coupon_value($code, $product, $quantity));
+        return self::commerce_response(fn () => Emblem_Studio_Commerce::coupon_value($code, $product, $quantity));
     }
 
     public static function read_product(WP_REST_Request $request)
     {
-        if (! class_exists('ES_Commerce')) {
+        if (! class_exists('Emblem_Studio_Commerce')) {
             return new WP_REST_Response(['ok' => false, 'error' => 'unsupported', 'message' => 'This site runs an older Emblem Studio that cannot read the store.'], 200);
         }
 
         $id = (int) $request->get_param('id');
 
-        return self::commerce_response(fn () => ES_Commerce::product($id));
+        return self::commerce_response(fn () => Emblem_Studio_Commerce::product($id));
     }
 
     public static function funnelkit_meta(WP_REST_Request $request)
@@ -2279,7 +2286,7 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function funnelkit_meta_payload(): array
     {
-        $catalog = class_exists('ES_FunnelKit_Form_Feed') ? ES_FunnelKit_Form_Feed::catalog() : [];
+        $catalog = class_exists('Emblem_Studio_FunnelKit_Form_Feed') ? Emblem_Studio_FunnelKit_Form_Feed::catalog() : [];
         $assets  = [];
         foreach ($catalog as $asset) {
             $key = (string) ($asset['key'] ?? '');
@@ -2287,11 +2294,11 @@ final class Emblem_Studio_SaaS_Connector
                 continue;
             }
             $assets[] = array_merge($asset, [
-                'feed' => ES_FunnelKit_Form_Feed::status($key),
+                'feed' => Emblem_Studio_FunnelKit_Form_Feed::status($key),
             ]);
         }
         $fields = [];
-        foreach (ES_FunnelKit::get_all_fields_grouped() as $group) {
+        foreach (Emblem_Studio_FunnelKit::get_all_fields_grouped() as $group) {
             foreach ((array) ($group['fields'] ?? []) as $field) {
                 $fields[] = $field;
             }
@@ -2306,12 +2313,12 @@ final class Emblem_Studio_SaaS_Connector
                 'pro'       => defined('BWFAN_PRO_VERSION') || class_exists('BWFAN_Pro'),
             ],
             'capabilities'     => [
-                'direct_upsert' => class_exists('ES_FunnelKit_Upsert'),
-                'form_feeds'    => class_exists('ES_FunnelKit_Form_Feed'),
+                'direct_upsert' => class_exists('Emblem_Studio_FunnelKit_Upsert'),
+                'form_feeds'    => class_exists('Emblem_Studio_FunnelKit_Form_Feed'),
                 'idempotency'   => true,
             ],
-            'lists'            => ES_FunnelKit::get_lists(),
-            'tags'             => ES_FunnelKit::get_tags(),
+            'lists'            => Emblem_Studio_FunnelKit::get_lists(),
+            'tags'             => Emblem_Studio_FunnelKit::get_tags(),
             'fields'           => $fields,
             'assets'           => $assets,
         ];
@@ -2326,7 +2333,7 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function run_dispatch(array $p): array
     {
-        if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Delivery')) {
+        if (! self::funnelkit_available() || ! class_exists('Emblem_Studio_FunnelKit_Delivery')) {
             return [['ok' => false, 'error' => 'FunnelKit not installed'], 503];
         }
 
@@ -2375,7 +2382,7 @@ final class Emblem_Studio_SaaS_Connector
         }
 
         try {
-            $result = ES_FunnelKit_Delivery::dispatch(
+            $result = Emblem_Studio_FunnelKit_Delivery::dispatch(
                 $asset_key,
                 $fields,
                 $direct,
@@ -2408,7 +2415,7 @@ final class Emblem_Studio_SaaS_Connector
 
     private static function sanitize_field_value($value)
     {
-        return ES_Ajax::sanitize_field_value($value);
+        return Emblem_Studio_Ajax::sanitize_field_value($value);
     }
 
     private static function normalize_direct_lead(array $p): array
@@ -2438,7 +2445,7 @@ final class Emblem_Studio_SaaS_Connector
 
     public static function receive_lead(WP_REST_Request $request)
     {
-        if (! self::funnelkit_available() || ! class_exists('ES_FunnelKit_Upsert')) {
+        if (! self::funnelkit_available() || ! class_exists('Emblem_Studio_FunnelKit_Upsert')) {
             return new WP_REST_Response(['ok' => false, 'error' => 'FunnelKit not installed'], 503);
         }
 
@@ -2455,7 +2462,7 @@ final class Emblem_Studio_SaaS_Connector
             }
         }
 
-        $result = ES_FunnelKit_Upsert::run([
+        $result = Emblem_Studio_FunnelKit_Upsert::run([
             'email'      => $email,
             'first_name' => sanitize_text_field($p['f_name'] ?? ''),
             'last_name'  => sanitize_text_field($p['l_name'] ?? ''),
@@ -2471,7 +2478,7 @@ final class Emblem_Studio_SaaS_Connector
 
     public static function handle_lead_delete(WP_REST_Request $request)
     {
-        if (! class_exists('ES_Leads')) {
+        if (! class_exists('Emblem_Studio_Leads')) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Leads not available'], 503);
         }
 
@@ -2481,10 +2488,10 @@ final class Emblem_Studio_SaaS_Connector
 
         $deleted = false;
         if ($wp_lead_id) {
-            $deleted = ES_Leads::delete($wp_lead_id) || $deleted;
+            $deleted = Emblem_Studio_Leads::delete($wp_lead_id) || $deleted;
         }
         if ($saas_lead_id) {
-            $deleted = ES_Leads::delete_by_saas_id($saas_lead_id) || $deleted;
+            $deleted = Emblem_Studio_Leads::delete_by_saas_id($saas_lead_id) || $deleted;
         }
 
         return new WP_REST_Response(['ok' => true, 'deleted' => $deleted], 200);

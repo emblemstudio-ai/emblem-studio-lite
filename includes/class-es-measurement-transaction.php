@@ -1,7 +1,7 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-final class ES_Measurement_Transaction {
+final class Emblem_Studio_Measurement_Transaction {
 	public static function query_failed(): bool {
 		global $wpdb;
 		return $wpdb->last_error !== '';

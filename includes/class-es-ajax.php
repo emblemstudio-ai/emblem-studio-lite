@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Ajax {
+class Emblem_Studio_Ajax {
 
 	private const SUBMIT_WINDOW       = 60;
 	private const SUBMIT_MAX          = 8;
@@ -49,12 +49,12 @@ class ES_Ajax {
 		check_ajax_referer( 'es_preview_payload', 'nonce' );
 
 		$id   = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
-		$form = $id ? ES_Form_Repo::find( $id ) : null;
+		$form = $id ? Emblem_Studio_Form_Repo::find( $id ) : null;
 		if ( ! $form ) {
 			wp_send_json_error( [ 'message' => 'Not found' ], 404 );
 		}
 
-		$payload = json_decode( ( new ES_Shortcode() )->build_payload( $form ), true );
+		$payload = json_decode( ( new Emblem_Studio_Shortcode() )->build_payload( $form ), true );
 		wp_send_json_success( [
 			'html' => (string) ( $payload['html'] ?? '' ),
 			'css'  => (string) ( $payload['css'] ?? '' ),
@@ -83,7 +83,7 @@ class ES_Ajax {
 		if ( ! $form_id || $this->bucket_exceeded( 'stamp', 60, 60 ) ) {
 			wp_send_json_success( [ 'stamp' => '' ] );
 		}
-		wp_send_json_success( [ 'stamp' => ES_Form_Stamp::issue( (string) $form_id ) ] );
+		wp_send_json_success( [ 'stamp' => Emblem_Studio_Form_Stamp::issue( (string) $form_id ) ] );
 	}
 
 	public function dropoff(): void {
@@ -97,16 +97,16 @@ class ES_Ajax {
 		}
 
 		$shell        = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
-		$valid_shells = ES_Form_Repo::valid_types();
+		$valid_shells = Emblem_Studio_Form_Repo::valid_types();
 		if ( ! in_array( $shell, $valid_shells, true ) ) {
 			$shell = 'inline';
 		}
 
-		if ( ES_Event_Recorder::is_excluded_ip( $this->client_ip() ) ) {
+		if ( Emblem_Studio_Event_Recorder::is_excluded_ip( $this->client_ip() ) ) {
 			wp_send_json_success();
 		}
 
-		if ( ES_Event_Recorder::filter_bots_enabled() && ES_Event_Recorder::is_bot_request() ) {
+		if ( Emblem_Studio_Event_Recorder::filter_bots_enabled() && Emblem_Studio_Event_Recorder::is_bot_request() ) {
 			$this->record_bot_hit( $form_id, $shell );
 			wp_send_json_success();
 		}
@@ -120,8 +120,8 @@ class ES_Ajax {
 			wp_send_json_success();
 		}
 
-		$form = ES_Form_Repo::find( $form_id );
-		if ( ! $form || ! ES_Form_Repo::is_currently_active( $form ) ) {
+		$form = Emblem_Studio_Form_Repo::find( $form_id );
+		if ( ! $form || ! Emblem_Studio_Form_Repo::is_currently_active( $form ) ) {
 			wp_send_json_success();
 		}
 		if ( empty( $form->track_clicks ) ) {
@@ -135,12 +135,12 @@ class ES_Ajax {
 		}
 
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
-		$recorded = ES_Event_Recorder::record( $form_id, 'click', $post_id, $shell, $target, $variant );
+		$recorded = Emblem_Studio_Event_Recorder::record( $form_id, 'click', $post_id, $shell, $target, $variant );
 
-		if ( $recorded && class_exists( 'ES_AB' ) && $target !== '__close__' && $target !== '__backdrop__' ) {
-			$running = ES_AB::running_test_for_form( $form_id );
+		if ( $recorded && class_exists( 'Emblem_Studio_AB' ) && $target !== '__close__' && $target !== '__backdrop__' ) {
+			$running = Emblem_Studio_AB::running_test_for_form( $form_id );
 			if ( $running && isset( $running->primary_metric ) && $running->primary_metric === 'clicks' ) {
-				ES_AB::auto_winner_check( $form_id );
+				Emblem_Studio_AB::auto_winner_check( $form_id );
 			}
 		}
 
@@ -148,14 +148,14 @@ class ES_Ajax {
 	}
 
 	private function record_event( string $event_type ): void {
-		if ( ES_Event_Recorder::is_excluded_ip( $this->client_ip() ) ) {
+		if ( Emblem_Studio_Event_Recorder::is_excluded_ip( $this->client_ip() ) ) {
 			wp_send_json_success();
 		}
 
-		if ( ES_Event_Recorder::filter_bots_enabled() && ES_Event_Recorder::is_bot_request() ) {
+		if ( Emblem_Studio_Event_Recorder::filter_bots_enabled() && Emblem_Studio_Event_Recorder::is_bot_request() ) {
 			$bot_form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 			$bot_shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
-			if ( ! in_array( $bot_shell, ES_Form_Repo::valid_types(), true ) ) {
+			if ( ! in_array( $bot_shell, Emblem_Studio_Form_Repo::valid_types(), true ) ) {
 				$bot_shell = 'inline';
 			}
 			if ( $bot_form_id ) {
@@ -165,7 +165,7 @@ class ES_Ajax {
 		}
 		$dc_form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
 		$dc_shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
-		if ( ! in_array( $dc_shell, ES_Form_Repo::valid_types(), true ) ) {
+		if ( ! in_array( $dc_shell, Emblem_Studio_Form_Repo::valid_types(), true ) ) {
 			$dc_shell = 'inline';
 		}
 		if ( $dc_form_id && $this->maybe_record_datacenter( $dc_form_id, $dc_shell ) ) {
@@ -173,13 +173,13 @@ class ES_Ajax {
 		}
 
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
-		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => null ] ) === 'legacy' ) {
-			ES_Display_Rules::ensure_visitor_cookie();
+		if ( Emblem_Studio_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => null ] ) === 'legacy' ) {
+			Emblem_Studio_Display_Rules::ensure_visitor_cookie();
 		}
 
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
 		$shell   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
-		$valid_shells = ES_Form_Repo::valid_types();
+		$valid_shells = Emblem_Studio_Form_Repo::valid_types();
 		if ( ! in_array( $shell, $valid_shells, true ) ) {
 			$shell = 'inline';
 		}
@@ -192,12 +192,12 @@ class ES_Ajax {
 		if ( $this->bucket_exceeded( 'ev_' . $event_type . '_' . $shell . '_' . $form_id . $bucket_part, self::EVENT_WINDOW, self::EVENT_MAX ) ) {
 			wp_send_json_success();
 		}
-		$form = ES_Form_Repo::find( $form_id );
-		if ( ! $form || ! ES_Form_Repo::is_currently_active( $form ) ) {
+		$form = Emblem_Studio_Form_Repo::find( $form_id );
+		if ( ! $form || ! Emblem_Studio_Form_Repo::is_currently_active( $form ) ) {
 			wp_send_json_success();
 		}
 		$step = $event_type === 'dropoff' && isset( $_POST['step'] ) ? wp_unslash( (string) $_POST['step'] ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		ES_Event_Recorder::record( $form_id, $event_type, $post_id, $shell, null, $variant, null, $step );
+		Emblem_Studio_Event_Recorder::record( $form_id, $event_type, $post_id, $shell, null, $variant, null, $step );
 		wp_send_json_success();
 	}
 
@@ -222,8 +222,8 @@ class ES_Ajax {
 
 	public function submit(): void {
 		$form_id = isset( $_POST['form_id'] ) ? (int) $_POST['form_id'] : 0;
-		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'conversion', 'lead_id' => null ] ) === 'legacy' ) {
-			ES_Display_Rules::ensure_visitor_cookie();
+		if ( Emblem_Studio_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'conversion', 'lead_id' => null ] ) === 'legacy' ) {
+			Emblem_Studio_Display_Rules::ensure_visitor_cookie();
 		}
 
 		if ( ! $form_id ) {
@@ -235,17 +235,17 @@ class ES_Ajax {
 		$trap_filled = ! empty( $_POST['esf_hp'] );
 
 		$stamp      = isset( $_POST['es_stamp'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['es_stamp'] ) ) : '';
-		$stamped_at = ES_Form_Stamp::issued_at( $stamp, (string) $form_id );
-		if ( $stamped_at !== null && $trap_filled && ! ES_Form_Stamp::claim( $stamp ) ) {
+		$stamped_at = Emblem_Studio_Form_Stamp::issued_at( $stamp, (string) $form_id );
+		if ( $stamped_at !== null && $trap_filled && ! Emblem_Studio_Form_Stamp::claim( $stamp ) ) {
 			$stamped_at = null;
 		}
 		$elapsed_ms  = $stamped_at !== null ? (int) round( microtime( true ) * 1000 ) - $stamped_at : null;
 		$looks_human = $elapsed_ms !== null && $elapsed_ms >= self::MIN_HUMAN_SUBMIT_MS;
 
 		$ua        = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
-		$ua_bot    = ES_Event_Recorder::matched_bot_label( $ua );
-		$dc        = ES_Event_Recorder::detect_datacenter_enabled()
-			? ES_Event_Recorder::datacenter_provider( $this->client_ip() )
+		$ua_bot    = Emblem_Studio_Event_Recorder::matched_bot_label( $ua );
+		$dc        = Emblem_Studio_Event_Recorder::detect_datacenter_enabled()
+			? Emblem_Studio_Event_Recorder::datacenter_provider( $this->client_ip() )
 			: '';
 		$bot_label = $ua_bot !== '' ? $ua_bot : $dc;
 		$named_bot = $bot_label !== '';
@@ -271,25 +271,25 @@ class ES_Ajax {
 			if ( ! $this->bot_row_allowed( 'hp', $form_id ) ) {
 				wp_send_json_success( [ 'mode' => 'inline_state' ] );
 			}
-			ES_Logger::info( 'Honeypot triggered', [ 'form_id' => $form_id ] );
+			Emblem_Studio_Logger::info( 'Honeypot triggered', [ 'form_id' => $form_id ] );
 			$hp_shell = isset( $_POST['type'] ) ? sanitize_key( (string) $_POST['type'] ) : 'inline';
-			if ( ! in_array( $hp_shell, ES_Form_Repo::valid_types(), true ) ) {
+			if ( ! in_array( $hp_shell, Emblem_Studio_Form_Repo::valid_types(), true ) ) {
 				$hp_shell = 'inline';
 			}
-			ES_Event_Recorder::record( $form_id, 'honeypot_blocked', null, $hp_shell, $bot_label !== '' ? $bot_label : null );
+			Emblem_Studio_Event_Recorder::record( $form_id, 'honeypot_blocked', null, $hp_shell, $bot_label !== '' ? $bot_label : null );
 			$this->save_bot_lead( $form_id, $bot_signals );
 			wp_send_json_success( [ 'mode' => 'inline_state' ] );
 		}
 
 		if ( $this->bucket_exceeded( 'sub_' . $form_id, self::SUBMIT_WINDOW, self::SUBMIT_MAX ) ) {
 			if ( ! $this->bucket_exceeded( 'log_sub_' . $form_id, MINUTE_IN_SECONDS, 1 ) ) {
-				ES_Logger::error( 'es_submit aborted: rate-limited', [ 'ip' => $this->client_ip(), 'form_id' => $form_id ] );
+				Emblem_Studio_Logger::error( 'es_submit aborted: rate-limited', [ 'ip' => $this->client_ip(), 'form_id' => $form_id ] );
 			}
 			wp_send_json_error( [ 'message' => 'Too many submissions, please wait a moment.' ], 429 );
 		}
 
-		$form = ES_Form_Repo::find( $form_id );
-		if ( ! $form || ! ES_Form_Repo::is_currently_active( $form ) ) {
+		$form = Emblem_Studio_Form_Repo::find( $form_id );
+		if ( ! $form || ! Emblem_Studio_Form_Repo::is_currently_active( $form ) ) {
 			wp_send_json_error( [ 'message' => 'Form not available' ], 404 );
 		}
 
@@ -314,17 +314,17 @@ class ES_Ajax {
 			return self::posted_value( $fields, $name ) ?? '';
 		};
 		$field_kinds = [];
-		foreach ( ES_Form_Parser::extract_fields( (string) $form->html ) as $f ) {
+		foreach ( Emblem_Studio_Form_Parser::extract_fields( (string) $form->html ) as $f ) {
 			$field_kinds[ $f['name'] ] = $f['kind'];
 		}
 		$posted_names = array_keys( $fields );
 		$value_for = function ( string $fk_key, array $default_names = [], string $default_kind = '' ) use ( $mapping, $lookup_field, $posted_names, $field_kinds ) {
 			$form_name = (string) ( $mapping[ $fk_key ] ?? '' );
 			if ( $form_name === '' && $default_names ) {
-				$form_name = (string) ES_Field_Matcher::find_by_name( $posted_names, $default_names );
+				$form_name = (string) Emblem_Studio_Field_Matcher::find_by_name( $posted_names, $default_names );
 			}
 			if ( $form_name === '' && $default_kind !== '' ) {
-				$form_name = (string) ES_Field_Matcher::find_by_kind( $posted_names, $field_kinds, $default_kind );
+				$form_name = (string) Emblem_Studio_Field_Matcher::find_by_kind( $posted_names, $field_kinds, $default_kind );
 			}
 			if ( $form_name === '' ) {
 				return '';
@@ -339,19 +339,19 @@ class ES_Ajax {
 			return $geo[ $geo_key ] ?? '';
 		};
 
-		$email = self::normalize_email( $value_for( 'col:email', ES_Field_Matcher::EMAIL_NAME_VARIANTS, 'email' ) );
+		$email = self::normalize_email( $value_for( 'col:email', Emblem_Studio_Field_Matcher::EMAIL_NAME_VARIANTS, 'email' ) );
 		if ( ! self::is_deliverable_email( $email ) ) {
 			wp_send_json_error( [ 'message' => 'Please enter a valid email address.' ], 422 );
 		}
 
 		$missing_consent = $this->find_missing_consent_fields( (string) $form->html, $fields );
 		if ( $missing_consent ) {
-			ES_Logger::error( 'es_submit aborted: missing consent fields', [ 'missing' => $missing_consent, 'fields_received' => array_keys( $fields ) ] );
+			Emblem_Studio_Logger::error( 'es_submit aborted: missing consent fields', [ 'missing' => $missing_consent, 'fields_received' => array_keys( $fields ) ] );
 			wp_send_json_error( [ 'message' => __( 'Please confirm the consent checkbox before submitting.', 'emblem-studio' ) ], 422 );
 		}
 
-		$first_name = $value_for( 'col:f_name', ES_Field_Matcher::FIRST_NAME_VARIANTS );
-		$last_name  = $value_for( 'col:l_name', ES_Field_Matcher::LAST_NAME_VARIANTS );
+		$first_name = $value_for( 'col:f_name', Emblem_Studio_Field_Matcher::FIRST_NAME_VARIANTS );
+		$last_name  = $value_for( 'col:l_name', Emblem_Studio_Field_Matcher::LAST_NAME_VARIANTS );
 		if ( ! $first_name && ! $last_name && empty( $mapping['col:f_name'] ) && ! empty( $fields['name'] ) && is_scalar( $fields['name'] ) ) {
 			$full       = self::normalize_name( trim( (string) $fields['name'] ) );
 			$parts      = preg_split( '/\s+/', $full, 2 );
@@ -362,7 +362,7 @@ class ES_Ajax {
 			$last_name  = self::normalize_name( $last_name );
 		}
 
-		$phone       = $value_for( 'col:contact_no', ES_Field_Matcher::PHONE_NAME_VARIANTS, 'tel' );
+		$phone       = $value_for( 'col:contact_no', Emblem_Studio_Field_Matcher::PHONE_NAME_VARIANTS, 'tel' );
 		$fk_country  = $geo_value_for( 'col:country',  'country' );
 		$fk_state    = $geo_value_for( 'col:state',    'state' );
 		$fk_timezone = $geo_value_for( 'col:timezone', 'timezone' );
@@ -402,10 +402,10 @@ class ES_Ajax {
 			$custom_fields[ sanitize_key( $k ) ] = self::sanitize_field_value( $v );
 		}
 
-		$source = ES_Visit_Source::from_request( isset( $_POST['es_source'] ) ? wp_unslash( (string) $_POST['es_source'] ) : null );
+		$source = Emblem_Studio_Visit_Source::from_request( isset( $_POST['es_source'] ) ? wp_unslash( (string) $_POST['es_source'] ) : null );
 
 		global $wpdb;
-		$wpdb->insert( ES_Install::table( 'leads' ), [
+		$inserted = $wpdb->insert( Emblem_Studio_Install::table( 'leads' ), [
 			'form_id'      => $form_id,
 			'email'        => $email,
 			'source'       => $source !== null ? wp_json_encode( $source ) : null,
@@ -417,9 +417,14 @@ class ES_Ajax {
 			'bot_signals'  => $bot_signals !== null ? wp_json_encode( $bot_signals ) : null,
 			'created_at'   => current_time( 'mysql' ),
 		] );
-		$lead_id = (int) $wpdb->insert_id;
+		$lead_id = $inserted === false ? 0 : (int) $wpdb->insert_id;
 
-		ES_Consent_Log::record(
+		if ( $lead_id === 0 ) {
+			Emblem_Studio_Logger::error( 'es_submit failed: the lead could not be saved', [ 'form_id' => $form_id, 'db_error' => (string) $wpdb->last_error ] );
+			wp_send_json_error( [ 'message' => __( 'Sorry, your details could not be saved. Please try again.', 'emblem-studio' ) ], 500 );
+		}
+
+		Emblem_Studio_Consent_Log::record(
 			$form_id,
 			(string) $form->html,
 			$lead_id,
@@ -434,7 +439,7 @@ class ES_Ajax {
 		$fk_asset_key = ! empty( $form->saas_form_id )
 			? 'saas:' . (int) $form->saas_form_id
 			: 'wp:' . $form_id;
-		$push = ES_FunnelKit_Delivery::dispatch(
+		$push = Emblem_Studio_FunnelKit_Delivery::dispatch(
 			$fk_asset_key,
 			$feed_fields,
 			[
@@ -449,13 +454,13 @@ class ES_Ajax {
 				'tags'          => $tags,
 				'lists'         => $lists,
 				'custom_fields' => $custom_fields,
-				'contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
+				'contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 			],
 			$fk_enabled
 		);
 
 		if ( $push['mode'] !== 'disabled' ) {
-			$wpdb->update( ES_Install::table( 'leads' ), [
+			$wpdb->update( Emblem_Studio_Install::table( 'leads' ), [
 				'funnelkit_pushed'     => $push['ok'] ? 1 : 0,
 				'funnelkit_contact_id' => $push['contact_id'] ?? null,
 				'error'                => $push['ok'] ? null : ( $push['error'] ?? 'Unknown' ),
@@ -464,21 +469,21 @@ class ES_Ajax {
 
 		$post_id      = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
 		$shell        = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['type'] ) ) : 'inline';
-		$valid_shells = ES_Form_Repo::valid_types();
+		$valid_shells = Emblem_Studio_Form_Repo::valid_types();
 		if ( ! in_array( $shell, $valid_shells, true ) ) {
 			$shell = 'inline';
 		}
 		if ( ! $is_preview ) {
-			$recorded = ES_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ), $lead_id, null, $source['channel'] ?? null );
+			$recorded = Emblem_Studio_Event_Recorder::record( $form_id, 'conversion', $post_id, $shell, null, $this->ab_slot( $form_id ), $lead_id, null, $source['channel'] ?? null );
 
-			if ( $recorded && class_exists( 'ES_AB' ) ) {
-				ES_AB::auto_winner_check( $form_id );
+			if ( $recorded && class_exists( 'Emblem_Studio_AB' ) ) {
+				Emblem_Studio_AB::auto_winner_check( $form_id );
 			}
 		}
 
-		$form_for_hooks = class_exists( 'ES_Webhooks' ) ? ES_Form_Repo::find( $form_id ) : null;
+		$form_for_hooks = class_exists( 'Emblem_Studio_Webhooks' ) ? Emblem_Studio_Form_Repo::find( $form_id ) : null;
 		if ( $form_for_hooks ) {
-			$webhook_payload = ES_Webhooks::build_payload(
+			$webhook_payload = Emblem_Studio_Webhooks::build_payload(
 				$form_for_hooks,
 				$email,
 				$first_name,
@@ -488,23 +493,23 @@ class ES_Ajax {
 				$push['contact_id'] ?? null,
 				$source
 			);
-			ES_Webhooks::send_for_form( $form_for_hooks, $webhook_payload );
+			Emblem_Studio_Webhooks::send_for_form( $form_for_hooks, $webhook_payload );
 		}
 
 		wp_send_json_success( [
 			'mode'             => $form->success_mode,
 			'success_message'  => null,
-			'redirect_url'     => $form->success_mode === 'redirect' ? ( ES_Form_Repo::safe_redirect_url( (string) $form->success_redirect_url ) ?: null ) : null,
+			'redirect_url'     => $form->success_mode === 'redirect' ? ( Emblem_Studio_Form_Repo::safe_redirect_url( (string) $form->success_redirect_url ) ?: null ) : null,
 			'funnelkit_pushed' => (bool) $push['ok'],
 		] );
 	}
 
 	private function ab_slot( int $form_id ): string {
-		return class_exists( 'ES_AB' ) ? (string) ES_AB::slot_from_cookie( $form_id ) : '';
+		return class_exists( 'Emblem_Studio_AB' ) ? (string) Emblem_Studio_AB::slot_from_cookie( $form_id ) : '';
 	}
 
 	public function test_webhook(): void {
-		if ( ! class_exists( 'ES_Webhooks' ) ) {
+		if ( ! class_exists( 'Emblem_Studio_Webhooks' ) ) {
 			wp_send_json_error( [ 'message' => 'Webhooks are not available on this plan.' ], 403 );
 		}
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -533,7 +538,7 @@ class ES_Ajax {
 			'site_url'             => home_url(),
 			'_test'                => true,
 		];
-		$result = ES_Webhooks::send_test(
+		$result = Emblem_Studio_Webhooks::send_test(
 			[ 'url' => $url, 'secret' => $secret, 'headers' => $headers, 'active' => true ],
 			$sample
 		);
@@ -543,17 +548,18 @@ class ES_Ajax {
 	private function allowed_field_names( object $form ): array {
 		$html = (string) ( $form->html ?? '' );
 
-		if ( class_exists( 'ES_AB' ) && ! empty( $form->id ) ) {
-			foreach ( ES_AB::live_variants_for_form( (int) $form->id ) as $variant ) {
+		if ( class_exists( 'Emblem_Studio_AB' ) && ! empty( $form->id ) ) {
+			foreach ( Emblem_Studio_AB::live_variants_for_form( (int) $form->id ) as $variant ) {
 				$html .= "\n" . (string) ( $variant->html ?? '' );
 			}
 		}
 
 		$allowed = [];
-		foreach ( ES_Form_Parser::extract_fields( $html ) as $field ) {
+		foreach ( Emblem_Studio_Form_Parser::extract_fields( $html ) as $field ) {
 			$name = preg_replace( '/\[\]$/', '', (string) $field['name'] );
 			if ( $name !== '' ) {
 				$allowed[ $name ] = true;
+				$allowed[ self::post_key( $name ) ] = true;
 			}
 		}
 
@@ -592,16 +598,19 @@ class ES_Ajax {
 	}
 
 	public static function posted_value( array $fields, string $name ) {
-		if ( array_key_exists( $name, $fields ) ) {
-			return $fields[ $name ];
-		}
 		if ( substr( $name, -2 ) === '[]' ) {
-			$stripped = substr( $name, 0, -2 );
-			if ( array_key_exists( $stripped, $fields ) ) {
-				return $fields[ $stripped ];
+			$name = substr( $name, 0, -2 );
+		}
+		foreach ( array_unique( [ $name, self::post_key( $name ) ] ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				return $fields[ $key ];
 			}
 		}
 		return null;
+	}
+
+	public static function post_key( string $name ): string {
+		return strtr( $name, ' .', '__' );
 	}
 
 	public static function checkbox_value_is_ticked( $value ): bool {
@@ -675,7 +684,7 @@ class ES_Ajax {
 	}
 
 	private function bucket_exceeded( string $scope, int $window, int $max ): bool {
-		return ES_Rate_Limit::exceeded( $scope . '|' . $this->client_ip(), $window, $max );
+		return Emblem_Studio_Rate_Limit::exceeded( $scope . '|' . $this->client_ip(), $window, $max );
 	}
 
 	private function bot_row_allowed( string $kind, int $form_id ): bool {
@@ -706,7 +715,7 @@ class ES_Ajax {
 			$last  = sanitize_text_field( $parts[1] ?? '' );
 		}
 
-		$form     = ES_Form_Repo::find( $form_id );
+		$form     = Emblem_Studio_Form_Repo::find( $form_id );
 		$allowed  = $form ? $this->allowed_field_names( $form ) : [];
 		$captured = [];
 		foreach ( $fields as $k => $v ) {
@@ -723,7 +732,7 @@ class ES_Ajax {
 			$captured[ sanitize_key( $k ) ] = self::clean_answer( $flat, 500 );
 		}
 
-		$wpdb->insert( ES_Install::table( 'leads' ), [
+		$wpdb->insert( Emblem_Studio_Install::table( 'leads' ), [
 			'form_id'      => $form_id,
 			'email'        => $email,
 			'extra_fields' => wp_json_encode( array_merge(
@@ -742,17 +751,17 @@ class ES_Ajax {
 			return;
 		}
 		$ua      = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
-		$label   = $label_override !== '' ? $label_override : ES_Event_Recorder::matched_bot_label( $ua );
-		$ip      = ES_Event_Recorder::anonymize_ip( $this->client_ip() );
+		$label   = $label_override !== '' ? $label_override : Emblem_Studio_Event_Recorder::matched_bot_label( $ua );
+		$ip      = Emblem_Studio_Event_Recorder::anonymize_ip( $this->client_ip() );
 		$post_id = isset( $_POST['post_id'] ) && (int) $_POST['post_id'] > 0 ? (int) $_POST['post_id'] : null;
-		ES_Event_Recorder::record_bot( $form_id, $shell, $post_id, $label, $ua, $ip );
+		Emblem_Studio_Event_Recorder::record_bot( $form_id, $shell, $post_id, $label, $ua, $ip );
 	}
 
 	private function maybe_record_datacenter( int $form_id, string $shell ): bool {
-		if ( ! ES_Event_Recorder::filter_bots_enabled() || ! ES_Event_Recorder::detect_datacenter_enabled() ) {
+		if ( ! Emblem_Studio_Event_Recorder::filter_bots_enabled() || ! Emblem_Studio_Event_Recorder::detect_datacenter_enabled() ) {
 			return false;
 		}
-		$provider = ES_Event_Recorder::datacenter_provider( $this->client_ip() );
+		$provider = Emblem_Studio_Event_Recorder::datacenter_provider( $this->client_ip() );
 		if ( $provider === '' ) {
 			return false;
 		}
@@ -761,6 +770,6 @@ class ES_Ajax {
 	}
 
 	private function client_ip(): string {
-		return ES_Event_Recorder::client_ip();
+		return Emblem_Studio_Event_Recorder::client_ip();
 	}
 }

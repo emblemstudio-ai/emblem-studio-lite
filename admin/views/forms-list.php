@@ -14,14 +14,14 @@ $cur_from  = $now->modify( '-6 days' )->format( 'Y-m-d' );
 $prev_to   = $now->modify( '-7 days' )->format( 'Y-m-d' );
 $prev_from = $now->modify( '-13 days' )->format( 'Y-m-d' );
 
-$cur  = ES_Reports::aggregate_kpis( $cur_from, $cur_to );
-$prev = ES_Reports::aggregate_kpis( $prev_from, $prev_to );
-$cur_leads  = ES_Reports::leads_in_range( $cur_from, $cur_to );
-$prev_leads = ES_Reports::leads_in_range( $prev_from, $prev_to );
+$cur  = Emblem_Studio_Reports::aggregate_kpis( $cur_from, $cur_to );
+$prev = Emblem_Studio_Reports::aggregate_kpis( $prev_from, $prev_to );
+$cur_leads  = Emblem_Studio_Reports::leads_in_range( $cur_from, $cur_to );
+$prev_leads = Emblem_Studio_Reports::leads_in_range( $prev_from, $prev_to );
 
-$ab_running_ids = class_exists( 'ES_AB' ) ? ES_AB::form_ids_with_running_tests() : [];
+$ab_running_ids = class_exists( 'Emblem_Studio_AB' ) ? Emblem_Studio_AB::form_ids_with_running_tests() : [];
 
-function es_delta_line( int $current, int $prior ): string {
+function emblem_studio_delta_line( int $current, int $prior ): string {
 	if ( $prior === 0 && $current === 0 ) {
 		return '<div class="es-kpi-sub es-kpi-delta es-kpi-delta-flat">— ' . esc_html__( 'no prior data', 'emblem-studio' ) . '</div>';
 	}
@@ -36,7 +36,7 @@ function es_delta_line( int $current, int $prior ): string {
 	return '<div class="es-kpi-sub es-kpi-delta ' . esc_attr( $cls ) . '" title="' . esc_attr( $tip ) . '">' . $arr . ' ' . esc_html( $sign . number_format_i18n( $pct, 1 ) ) . '% ' . esc_html__( 'vs prev 7d', 'emblem-studio' ) . '</div>';
 }
 
-function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_label ): string {
+function emblem_studio_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_label ): string {
 	$out  = '<div class="es-kpi-rate">';
 	$out .= '<span class="es-kpi-rate-value">' . esc_html( number_format_i18n( $cur_rate, 1 ) ) . '% ' . esc_html( $rate_label ) . '</span>';
 	if ( $prior_rate > 0 || $cur_rate > 0 ) {
@@ -140,8 +140,8 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 
 	<?php
 	$sched_out = [];
-	foreach ( ES_Form_Repo::all( 'active' ) as $af ) {
-		$st = ES_Form_Repo::effective_state( $af );
+	foreach ( Emblem_Studio_Form_Repo::all( 'active' ) as $af ) {
+		$st = Emblem_Studio_Form_Repo::effective_state( $af );
 		if ( 'scheduled' === $st || 'expired' === $st ) {
 			$sched_out[] = $af;
 		}
@@ -149,7 +149,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 	if ( $sched_out ) :
 		$links = [];
 		foreach ( $sched_out as $af ) {
-			$label = ES_Form_Repo::effective_state( $af ) === 'scheduled'
+			$label = Emblem_Studio_Form_Repo::effective_state( $af ) === 'scheduled'
 				? __( 'Scheduled', 'emblem-studio' )
 				: __( 'Expired', 'emblem-studio' );
 			$links[] = '<a href="' . esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . (int) $af->id ) ) . '">'
@@ -167,7 +167,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 		'all'    => __( 'All',    'emblem-studio' ),
 		'active' => __( 'Active', 'emblem-studio' ),
 	];
-	if ( ! class_exists( 'ES_Caps' ) || ES_Caps::has( 'schedule_window' ) ) {
+	if ( ! class_exists( 'Emblem_Studio_Caps' ) || Emblem_Studio_Caps::has( 'schedule_window' ) ) {
 		$views['scheduled'] = __( 'Scheduled', 'emblem-studio' );
 		$views['expired']   = __( 'Expired',   'emblem-studio' );
 	}
@@ -191,29 +191,29 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Leads (7d)', 'emblem-studio' ); ?></div>
 			<div class="es-kpi-value"><?php echo (int) $cur_leads; ?></div>
-			<?php echo es_delta_line( $cur_leads, $prev_leads ); ?>
+			<?php echo emblem_studio_delta_line( $cur_leads, $prev_leads ); ?>
 		</div>
 		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Page Views (7d)', 'emblem-studio' ); ?></div>
 			<div class="es-kpi-value"><?php echo (int) $cur['page_views']; ?></div>
-			<?php echo es_delta_line( (int) $cur['page_views'], (int) $prev['page_views'] ); ?>
+			<?php echo emblem_studio_delta_line( (int) $cur['page_views'], (int) $prev['page_views'] ); ?>
 		</div>
 		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Form Impressions (7d)', 'emblem-studio' ); ?></div>
 			<div class="es-kpi-value"><?php echo (int) $cur['views']; ?></div>
-			<?php echo es_delta_line( (int) $cur['views'], (int) $prev['views'] ); ?>
+			<?php echo emblem_studio_delta_line( (int) $cur['views'], (int) $prev['views'] ); ?>
 		</div>
 		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Clicks (7d)', 'emblem-studio' ); ?></div>
 			<div class="es-kpi-value"><?php echo (int) $cur['clicks']; ?></div>
-			<?php echo es_delta_line( (int) $cur['clicks'], (int) $prev['clicks'] ); ?>
-			<?php echo es_kpi_rate_line( (float) $cur['click_rate'], (float) $prev['click_rate'], __( 'click rate', 'emblem-studio' ) ); ?>
+			<?php echo emblem_studio_delta_line( (int) $cur['clicks'], (int) $prev['clicks'] ); ?>
+			<?php echo emblem_studio_kpi_rate_line( (float) $cur['click_rate'], (float) $prev['click_rate'], __( 'click rate', 'emblem-studio' ) ); ?>
 		</div>
 		<div class="es-kpi">
 			<div class="es-kpi-label"><?php esc_html_e( 'Form Conversions (7d)', 'emblem-studio' ); ?></div>
 			<div class="es-kpi-value"><?php echo (int) $cur['conversions']; ?></div>
-			<?php echo es_delta_line( (int) $cur['conversions'], (int) $prev['conversions'] ); ?>
-			<?php echo es_kpi_rate_line( (float) $cur['conv_rate'], (float) $prev['conv_rate'], __( 'conv. rate', 'emblem-studio' ) ); ?>
+			<?php echo emblem_studio_delta_line( (int) $cur['conversions'], (int) $prev['conversions'] ); ?>
+			<?php echo emblem_studio_kpi_rate_line( (float) $cur['conv_rate'], (float) $prev['conv_rate'], __( 'conv. rate', 'emblem-studio' ) ); ?>
 		</div>
 	</div>
 
@@ -329,7 +329,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 			<tbody aria-hidden="true"><tr class="es-form-topspacer"><td colspan="99"></td></tr></tbody>
 			<?php $form_index = 0; foreach ( $forms as $f ) :
 				$form_index++;
-				$enabled_types = ES_Form_Repo::types_for( $f );
+				$enabled_types = Emblem_Studio_Form_Repo::types_for( $f );
 				$lite_meta   = json_decode( (string) ( $f->lite_disabled ?? '' ), true );
 				$lite_shells = ( is_array( $lite_meta ) && ! empty( $lite_meta['shells'] ) && is_array( $lite_meta['shells'] ) ) ? $lite_meta['shells'] : [];
 				$lite_off    = is_array( $lite_meta ) && ! empty( $lite_meta['asset_off'] );
@@ -337,8 +337,8 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 				foreach ( $lite_shells as $ls ) {
 					$lite_shell_labels[] = $shell_labels[ $ls ] ?? $ls;
 				}
-				$has_form      = ES_Form_Repo::primary_metric( (string) $f->html ) === 'conversions';
-				$data_types    = ES_Reports::shells_with_data( (int) $f->id );
+				$has_form      = Emblem_Studio_Form_Repo::primary_metric( (string) $f->html ) === 'conversions';
+				$data_types    = Emblem_Studio_Reports::shells_with_data( (int) $f->id );
 				$render_types  = array_values( array_unique( array_merge( $enabled_types, $data_types ) ) );
 				usort( $render_types, function ( $a, $b ) {
 					$order = [ 'inline' => 0, 'popup-click' => 1, 'popup-auto' => 2, 'ribbon' => 3, 'slide-in' => 4 ];
@@ -375,10 +375,10 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 			<tbody class="es-form-group"<?php echo $filter === 'all' ? ' data-form-id="' . (int) $f->id . '"' : ''; ?><?php echo $is_trash ? '' : ' data-es-asset-id="' . (int) $f->id . '"'; ?>>
 				<?php foreach ( $render_types as $shell ) :
 					$row_blank = ( $shell === '' );
-					$k = $row_blank ? null : ES_Reports::all_time( (int) $f->id, $shell );
+					$k = $row_blank ? null : Emblem_Studio_Reports::all_time( (int) $f->id, $shell );
 					$has_data = $k && ( (int) $k['page_views'] + (int) $k['trigger_views'] + (int) $k['views'] + (int) $k['conversions'] ) > 0;
 					$is_enabled = ! $row_blank && in_array( $shell, $enabled_types, true );
-					$eff          = ES_Form_Repo::effective_state( $f );
+					$eff          = Emblem_Studio_Form_Repo::effective_state( $f );
 					$status_class = 'es-status-inactive';
 					$status_title = '';
 					$dt_fmt       = get_option( 'date_format' ) . ' g:i A';
@@ -391,14 +391,14 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 					} elseif ( $row_blank || ! $is_enabled ) {
 						$status_label = __( 'Inactive', 'emblem-studio' );
 					} elseif ( $eff === 'scheduled' ) {
-						$es_next  = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::next( (int) $f->id ) : null;
+						$es_next  = class_exists( 'Emblem_Studio_Form_Schedule' ) ? Emblem_Studio_Form_Schedule::next( (int) $f->id ) : null;
 						$es_start = ( $es_next && ! empty( $es_next->starts_at ) ) ? (string) $es_next->starts_at : (string) $f->active_from;
 
 						$status_label = sprintf( __( 'Starts %s', 'emblem-studio' ), mysql2date( $short_fmt, $es_start ) );
 						$status_class = 'es-status-scheduled';
 						$status_title = sprintf( __( 'Set Active, but its schedule starts %s — not showing yet.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_start ) );
 					} elseif ( $eff === 'expired' ) {
-						$es_live = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::live( (int) $f->id ) : [];
+						$es_live = class_exists( 'Emblem_Studio_Form_Schedule' ) ? Emblem_Studio_Form_Schedule::live( (int) $f->id ) : [];
 						$es_last = ! empty( $es_live ) ? end( $es_live ) : null;
 						$es_gone = ( $es_last && ! empty( $es_last->ends_at ) ) ? (string) $es_last->ends_at : (string) $f->active_until;
 
@@ -406,8 +406,8 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						$status_class = 'es-status-expired';
 						$status_title = sprintf( __( 'Set Active, but its schedule ended %s — no longer showing.', 'emblem-studio' ), mysql2date( $dt_fmt, $es_gone ) );
 					} elseif ( $eff === 'ending' ) {
-						$es_cur  = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::current( (int) $f->id ) : null;
-						$es_next = class_exists( 'ES_Form_Schedule' ) ? ES_Form_Schedule::next( (int) $f->id ) : null;
+						$es_cur  = class_exists( 'Emblem_Studio_Form_Schedule' ) ? Emblem_Studio_Form_Schedule::current( (int) $f->id ) : null;
+						$es_next = class_exists( 'Emblem_Studio_Form_Schedule' ) ? Emblem_Studio_Form_Schedule::next( (int) $f->id ) : null;
 						$es_end  = ( $es_cur && ! empty( $es_cur->ends_at ) ) ? (string) $es_cur->ends_at : (string) $f->active_until;
 
 						$status_label = sprintf( __( 'Ends %s', 'emblem-studio' ), mysql2date( $short_fmt, $es_end ) );
@@ -455,9 +455,9 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 									</a>
 								<?php endif; ?>
 								<?php
-								$sched_n = ( ! $is_trash && class_exists( 'ES_Form_Scheduled_Revisions' ) ) ? ES_Form_Scheduled_Revisions::queued_count( (int) $f->id ) : 0;
+								$sched_n = ( ! $is_trash && class_exists( 'Emblem_Studio_Form_Scheduled_Revisions' ) ) ? Emblem_Studio_Form_Scheduled_Revisions::queued_count( (int) $f->id ) : 0;
 								if ( $sched_n > 0 ) :
-									$sched_next = ES_Form_Scheduled_Revisions::next_at( (int) $f->id );
+									$sched_next = Emblem_Studio_Form_Scheduled_Revisions::next_at( (int) $f->id );
 								?>
 									<a class="es-sched-badge"
 									   href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) . '#revisions' ); ?>"
@@ -473,13 +473,13 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 									</a>
 								<?php endif; ?>
 								<?php
-								$lock_uid = $is_trash ? 0 : ES_Locks::holder_of_row( $f );
+								$lock_uid = $is_trash ? 0 : Emblem_Studio_Locks::holder_of_row( $f );
 								?>
 								<span class="es-lock-slot">
 								<?php
 								if ( $lock_uid ) :
 									$lock_is_me = ( $lock_uid === get_current_user_id() );
-									$lock_name  = ES_Locks::user_label( $lock_uid );
+									$lock_name  = Emblem_Studio_Locks::user_label( $lock_uid );
 								?>
 									<span class="es-lock-badge<?php echo $lock_is_me ? ' is-you' : ''; ?>"
 									      title="<?php echo esc_attr( $lock_is_me
@@ -520,10 +520,10 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 						<td class="col-stat"><?php echo $k ? (int) $k['views'] : '—'; ?></td>
 						<td class="col-stat"><?php echo $k ? (int) ( $k['unique_visitors'] ?? 0 ) : '—'; ?></td>
 						<td class="col-stat es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? (int) $k['conversions'] : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
-						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
-						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::per_person_html( (float) ( $k['conversions_per_person'] ?? 0 ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? Emblem_Studio_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? Emblem_Studio_Reports::per_person_html( (float) ( $k['conversions_per_person'] ?? 0 ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<td class="col-stat es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? (int) $k['dropoffs'] : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
-						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
+						<td class="col-stat-narrow es-col-conv"><?php echo ! $k ? '—' : ( $has_form ? Emblem_Studio_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' ); ?></td>
 						<?php
 						$clicks_tracked = ! empty( $f->track_clicks );
 						?>
@@ -531,7 +531,7 @@ function es_kpi_rate_line( float $cur_rate, float $prior_rate, string $rate_labe
 							echo ! $k ? '—' : ( $clicks_tracked ? (int) $k['meaningful_clicks'] : '<span style="color:#8a8a8a;">—</span>' );
 						?></td>
 						<td class="col-stat-narrow es-col-click"><?php
-							echo ! $k ? '—' : ( $clicks_tracked ? ES_Reports::rate_pair_html( (float) $k['click_rate'], (float) $k['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' );
+							echo ! $k ? '—' : ( $clicks_tracked ? Emblem_Studio_Reports::rate_pair_html( (float) $k['click_rate'], (float) $k['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span style="color:#8a8a8a;">—</span>' );
 						?></td>
 						<td class="col-stat"><?php
 							echo ! $k ? '—' : ( (int) $k['bot_filtered'] > 0 ? esc_html( number_format_i18n( (int) $k['bot_filtered'] ) ) : '<span style="color:#8a8a8a;">—</span>' );

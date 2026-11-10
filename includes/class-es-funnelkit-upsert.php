@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class ES_FunnelKit_Upsert {
+final class Emblem_Studio_FunnelKit_Upsert {
 	public static function contact_status( $value ): string {
 		return $value === 'unsubscribed' ? 'unsubscribed' : 'subscribed';
 	}

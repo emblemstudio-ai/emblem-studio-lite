@@ -18,17 +18,17 @@ $f = (object) [
 	'funnelkit_lists'      => isset( $form->funnelkit_lists ) ? ( json_decode( (string) $form->funnelkit_lists, true ) ?: [] ) : [],
 	'funnelkit_tags'       => isset( $form->funnelkit_tags )  ? ( json_decode( (string) $form->funnelkit_tags,  true ) ?: [] ) : [],
 	'field_mapping'        => isset( $form->field_mapping )   ? ( json_decode( (string) $form->field_mapping,   true ) ?: [] ) : [],
-	'form_types'           => isset( $form ) ? ES_Form_Repo::types_for( $form ) : [ 'inline' ],
-	'auto_trigger_config'  => isset( $form ) ? ES_Form_Repo::get_auto_trigger_config( $form ) : [],
+	'form_types'           => isset( $form ) ? Emblem_Studio_Form_Repo::types_for( $form ) : [ 'inline' ],
+	'auto_trigger_config'  => isset( $form ) ? Emblem_Studio_Form_Repo::get_auto_trigger_config( $form ) : [],
 	'use_shadow_dom'       => isset( $form ) ? ! empty( $form->use_shadow_dom ) : false,
 	'use_design_system'    => isset( $form ) ? ! empty( $form->use_design_system ) : true,
 	'popup_max_width'      => isset( $form ) ? (int) ( $form->popup_max_width ?? 720 ) : 720,
 	'popup_fullscreen'     => isset( $form ) ? ! empty( $form->popup_fullscreen ) : false,
-	'popup_close_theme'    => isset( $form ) ? ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' ) : 'auto',
+	'popup_close_theme'    => isset( $form ) ? Emblem_Studio_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' ) : 'auto',
 	'track_clicks'         => isset( $form ) ? ! empty( $form->track_clicks ) : true,
 	'track_purchases'      => isset( $form ) ? ! empty( $form->track_purchases ) : false,
 	'funnelkit_enabled'    => isset( $form ) ? ! empty( $form->funnelkit_enabled ) : false,
-	'funnelkit_contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
+	'funnelkit_contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 	'active_from'          => isset( $form ) ? (string) ( $form->active_from  ?? '' ) : '',
 	'active_until'         => isset( $form ) ? (string) ( $form->active_until ?? '' ) : '',
 ];
@@ -44,7 +44,7 @@ $dr_special_labels = [
 ];
 $dr_post_types = get_post_types( [ 'public' => true ], 'objects' );
 unset( $dr_post_types['attachment'] );
-$dr_presets = class_exists( 'ES_Preset_Repo' ) ? ES_Preset_Repo::all() : [];
+$dr_presets = class_exists( 'Emblem_Studio_Preset_Repo' ) ? Emblem_Studio_Preset_Repo::all() : [];
 $dr_lookup_titles = function ( string $post_type, array $ids ): array {
 	$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
 	if ( empty( $ids ) ) {
@@ -93,8 +93,8 @@ $dr_lookup_term_names = function ( string $taxonomy, array $ids ): array {
 	}
 	return $out;
 };
-$dr_presets_json = class_exists( 'ES_Preset_Repo' )
-	? wp_json_encode( array_map( [ 'ES_Preset_Repo', 'to_admin_payload' ], $dr_presets ) )
+$dr_presets_json = class_exists( 'Emblem_Studio_Preset_Repo' )
+	? wp_json_encode( array_map( [ 'Emblem_Studio_Preset_Repo', 'to_admin_payload' ], $dr_presets ) )
 	: '[]';
 
 $dr_summarize = function ( array $filters ) use ( $dr_special_labels, $dr_post_types ): string {
@@ -161,9 +161,9 @@ $dr_summary_html_for = function ( array $rules ) use ( $dr_summarize ): string {
 };
 
 $shell_data = [];
-foreach ( ES_Form_Repo::auto_shells() as $shell ) {
-	$cfg   = isset( $form ) ? ES_Form_Repo::get_shell_trigger_config( $form, $shell ) : ES_Form_Repo::sanitize_auto_trigger_config( [] );
-	$rules = isset( $form ) ? ES_Display_Rules::get_for_form_shell( $form, $shell ) : ES_Display_Rules::defaults();
+foreach ( Emblem_Studio_Form_Repo::auto_shells() as $shell ) {
+	$cfg   = isset( $form ) ? Emblem_Studio_Form_Repo::get_shell_trigger_config( $form, $shell ) : Emblem_Studio_Form_Repo::sanitize_auto_trigger_config( [] );
+	$rules = isset( $form ) ? Emblem_Studio_Display_Rules::get_for_form_shell( $form, $shell ) : Emblem_Studio_Display_Rules::defaults();
 	$show  = $rules['show_filters'] ?? [];
 	$hide  = $rules['hide_filters'] ?? [];
 	$shell_data[ $shell ] = [
@@ -190,25 +190,25 @@ if ( empty( $f->funnelkit_lists ) && ! empty( $f->funnelkit_list_id ) ) {
 	$f->funnelkit_lists = [ (int) $f->funnelkit_list_id ];
 }
 
-if ( ES_Caps::has( 'ab' ) && ! $is_new ) {
-	$ab_test     = ES_AB::running_test_for_form( (int) $f->id );
-	$ab_variants = $ab_test ? ES_AB::live_variants_for_form( (int) $f->id ) : [];
-	$ab_archived = ES_AB::archived_variants_for_form( (int) $f->id );
+if ( Emblem_Studio_Caps::has( 'ab' ) && ! $is_new ) {
+	$ab_test     = Emblem_Studio_AB::running_test_for_form( (int) $f->id );
+	$ab_variants = $ab_test ? Emblem_Studio_AB::live_variants_for_form( (int) $f->id ) : [];
+	$ab_archived = Emblem_Studio_AB::archived_variants_for_form( (int) $f->id );
 } else {
 	$ab_test     = null;
 	$ab_variants = [];
 	$ab_archived = [];
 }
 $ab_running    = $ab_test && isset( $ab_variants['A'], $ab_variants['B'] );
-$ab_day        = $ab_running ? ES_AB::test_day_for( $ab_test ) : 0;
+$ab_day        = $ab_running ? Emblem_Studio_AB::test_day_for( $ab_test ) : 0;
 $ab_archive_ct = count( $ab_archived );
 
 $check_items = [];
-if ( class_exists( 'ES_Asset_Checks' ) && ! $is_new ) {
+if ( class_exists( 'Emblem_Studio_Asset_Checks' ) && ! $is_new ) {
 	if ( $ab_running ) {
-		$check_items = ES_Asset_Checks::run( (string) $ab_variants['A']->html, (string) $ab_variants['A']->css );
+		$check_items = Emblem_Studio_Asset_Checks::run( (string) $ab_variants['A']->html, (string) $ab_variants['A']->css );
 	} else {
-		$check_items = ES_Asset_Checks::run( (string) $f->html, (string) $f->css );
+		$check_items = Emblem_Studio_Asset_Checks::run( (string) $f->html, (string) $f->css );
 	}
 }
 $check_groups = [
@@ -251,7 +251,7 @@ $check_groups = [
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'A/B test started. Variants A and B are seeded with the current design — switch to variant B in the Design tab to edit it.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
 	<?php if ( isset( $_GET['test_ended'] ) ) :
-		$ended = ES_AB::normalize_slot( sanitize_key( (string) wp_unslash( $_GET['test_ended'] ) ) );
+		$ended = Emblem_Studio_AB::normalize_slot( sanitize_key( (string) wp_unslash( $_GET['test_ended'] ) ) );
 		$msg = null !== $ended
 			? sprintf( __( 'A/B test ended. Variant %s won and is now the live design. The other variant is archived.', 'emblem-studio' ), $ended )
 			: __( 'A/B test ended without a winner. Both variants are archived; the form has reverted to its pre-test design.', 'emblem-studio' );
@@ -324,7 +324,7 @@ $check_groups = [
 			<div class="es-form-header-bar">
 				<div class="es-form-header-left">
 					<label for="es-name" class="es-form-header-name-label"><?php esc_html_e( 'Name', 'emblem-studio' ); ?></label>
-					<?php $es_name_ph_id = $f->id ?: ES_Form_Repo::next_id(); ?>
+					<?php $es_name_ph_id = $f->id ?: Emblem_Studio_Form_Repo::next_id(); ?>
 					<input id="es-name" name="name" type="text" class="es-form-header-name" value="<?php echo esc_attr( $f->name ); ?>" placeholder="<?php echo esc_attr( sprintf( /* translators: %d: asset id */ __( 'Asset %d', 'emblem-studio' ), $es_name_ph_id ) ); ?>">
 				</div>
 				<div class="es-form-header-right">
@@ -351,7 +351,7 @@ $check_groups = [
 						</span>
 					<?php endif; ?>
 					<?php
-					$eff_state = ES_Form_Repo::effective_state( $f );
+					$eff_state = Emblem_Studio_Form_Repo::effective_state( $f );
 					if ( in_array( $eff_state, array( 'active', 'scheduled', 'expired', 'ending' ), true ) ) :
 						$hdr_fmt = get_option( 'date_format' ) . ' g:i A';
 						$hdr_short = 'M j';
@@ -389,11 +389,11 @@ $check_groups = [
 				<a href="#design"   class="es-tab is-active" data-tab="design"   role="tab"><?php esc_html_e( 'Design',   'emblem-studio' ); ?></a>
 				<a href="#shells"   class="es-tab"           data-tab="shells"   role="tab"><?php esc_html_e( 'Shells',   'emblem-studio' ); ?></a>
 				<a href="#connect"  class="es-tab"           data-tab="connect"  role="tab"><?php esc_html_e( 'Connect',  'emblem-studio' ); ?></a>
-				<?php if ( ES_Caps::has( 'linked_forms' ) ) : ?>
+				<?php if ( Emblem_Studio_Caps::has( 'linked_forms' ) ) : ?>
 				<a href="#linked"   class="es-tab"           data-tab="linked"   role="tab"><?php esc_html_e( 'Linked forms', 'emblem-studio' ); ?></a>
 				<?php endif; ?>
 				<a href="#stats"     class="es-tab"           data-tab="stats"     role="tab"><?php esc_html_e( 'Stats',     'emblem-studio' ); ?></a>
-				<?php if ( ES_Caps::has( 'revisions' ) ) : ?>
+				<?php if ( Emblem_Studio_Caps::has( 'revisions' ) ) : ?>
 				<a href="#revisions" class="es-tab"           data-tab="revisions" role="tab"><?php esc_html_e( 'Revisions', 'emblem-studio' ); ?></a>
 				<?php else : ?>
 				<a href="#revisions" class="es-tab es-tab-locked" data-tab="revisions" role="tab" data-es-tip="<?php esc_attr_e( 'Connect a free account to unlock revision history.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Revisions', 'emblem-studio' ); ?> <span class="es-tab-lock" aria-hidden="true">🔒</span></a>
@@ -404,10 +404,10 @@ $check_groups = [
 
 		<section id="es-tab-design" class="es-tab-panel is-active" data-panel="design">
 			<?php if ( $ab_running ) :
-				$aw_status = ES_AB::auto_winner_status( (int) $f->id );
+				$aw_status = Emblem_Studio_AB::auto_winner_status( (int) $f->id );
 				$ab_test_obj = $ab_test;
 				$ab_primary_cfg = ! empty( $ab_test->primary_metric ) ? (string) $ab_test->primary_metric : 'conversions';
-				$ab_labels      = ES_AB::metric_labels( $ab_primary_cfg );
+				$ab_labels      = Emblem_Studio_AB::metric_labels( $ab_primary_cfg );
 			?>
 				<details class="es-ab-config" open>
 					<summary>
@@ -554,7 +554,7 @@ $check_groups = [
 					</div>
 				</div>
 				<input type="hidden" name="ab_test_running" value="1">
-			<?php elseif ( ! $is_new && ES_Caps::has( 'ab' ) ) : ?>
+			<?php elseif ( ! $is_new && Emblem_Studio_Caps::has( 'ab' ) ) : ?>
 				<div class="es-ab-strip es-ab-strip--idle">
 					<div class="es-ab-strip-meta">
 						<strong><?php esc_html_e( 'No A/B test running.', 'emblem-studio' ); ?></strong>
@@ -575,7 +575,7 @@ $check_groups = [
 				</div>
 
 				<?php
-				$ab_start_metric = ES_AB::detect_primary_metric( (string) $f->html );
+				$ab_start_metric = Emblem_Studio_AB::detect_primary_metric( (string) $f->html );
 				?>
 				<div class="es-modal es-ab-start-modal" id="es-modal-ab-start" hidden>
 					<div class="es-modal-backdrop es-ab-start-dismiss"></div>
@@ -709,11 +709,11 @@ $check_groups = [
 				<p class="es-authoring-help-intro"><?php esc_html_e( 'Authoring this form by hand, or with an outside AI?', 'emblem-studio' ); ?></p>
 				<p class="description"><?php esc_html_e( 'Copy the specification to see exactly what an Emblem Studio form supports. To build it in your own ChatGPT, Claude or anything else, copy the AI prompt and paste it there. It points your AI at the current rules, so it never works from a stale copy.', 'emblem-studio' ); ?></p>
 				<p class="es-authoring-help-actions">
-					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( ES_Authoring::human_spec() ); ?>"><?php esc_html_e( 'Copy form specifications', 'emblem-studio' ); ?></button>
+					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( Emblem_Studio_Authoring::human_spec() ); ?>"><?php esc_html_e( 'Copy form specifications', 'emblem-studio' ); ?></button>
 					<span class="es-authoring-help-sep" aria-hidden="true">·</span>
-					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( ES_Authoring::ai_preprompt() ); ?>"><?php esc_html_e( 'Copy AI prompt', 'emblem-studio' ); ?></button>
+					<button type="button" class="es-copy es-authoring-link" data-es-copy="<?php echo esc_attr( Emblem_Studio_Authoring::ai_preprompt() ); ?>"><?php esc_html_e( 'Copy AI prompt', 'emblem-studio' ); ?></button>
 					<span class="es-authoring-help-sep" aria-hidden="true">·</span>
-					<a class="es-authoring-link" href="<?php echo esc_url( ES_Authoring::prompt_page_url() ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'About the prompt', 'emblem-studio' ); ?></a>
+					<a class="es-authoring-link" href="<?php echo esc_url( Emblem_Studio_Authoring::prompt_page_url() ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'About the prompt', 'emblem-studio' ); ?></a>
 				</p>
 			</div>
 
@@ -744,11 +744,11 @@ $check_groups = [
 					<textarea id="es-css-<?php echo esc_attr( $slot ); ?>" name="variants[<?php echo esc_attr( $slot ); ?>][css]" hidden><?php echo esc_textarea( (string) $v->css ); ?></textarea>
 				</div>
 			<?php endforeach;
-			$design_shells = ES_Form_Repo::types_for( $f );
+			$design_shells = Emblem_Studio_Form_Repo::types_for( $f );
 			if ( empty( $design_shells ) ) { $design_shells = [ 'inline' ]; }
 			$shell_label_map = [ 'inline' => __( 'Inline', 'emblem-studio' ), 'popup-click' => __( 'Click popup', 'emblem-studio' ), 'popup-auto' => __( 'Auto popup', 'emblem-studio' ), 'ribbon' => __( 'Ribbon', 'emblem-studio' ), 'slide-in' => __( 'Slide-in', 'emblem-studio' ) ];
 			?>
-				<div class="es-design-preview" data-preview-url="<?php echo esc_url( ES_Preview::url_for( (int) $f->id ) ); ?>" data-is-new="0" data-ab="1">
+				<div class="es-design-preview" data-preview-url="<?php echo esc_url( Emblem_Studio_Preview::url_for( (int) $f->id ) ); ?>" data-is-new="0" data-ab="1">
 					<div class="es-design-preview-bar">
 						<span class="es-design-preview-tag" aria-hidden="true"><?php esc_html_e( 'Preview', 'emblem-studio' ); ?></span>
 						<div class="es-design-shells" role="group" aria-label="<?php esc_attr_e( 'Preview shell', 'emblem-studio' ); ?>">
@@ -771,14 +771,14 @@ $check_groups = [
 				</div>
 			<?php else : ?>
 				<?php
-				$design_shells = ES_Form_Repo::types_for( $f );
+				$design_shells = Emblem_Studio_Form_Repo::types_for( $f );
 				if ( empty( $design_shells ) ) { $design_shells = [ 'inline' ]; }
 				$shell_label_map = [ 'inline' => __( 'Inline', 'emblem-studio' ), 'popup-click' => __( 'Click popup', 'emblem-studio' ), 'popup-auto' => __( 'Auto popup', 'emblem-studio' ), 'ribbon' => __( 'Ribbon', 'emblem-studio' ), 'slide-in' => __( 'Slide-in', 'emblem-studio' ) ];
 				$design_empty = ( trim( (string) $f->html ) === '' );
 				?>
 				<textarea id="es-html" name="html" hidden><?php echo esc_textarea( (string) $f->html ); ?></textarea>
 				<textarea id="es-css" name="css" hidden><?php echo esc_textarea( (string) $f->css ); ?></textarea>
-				<div class="es-design-preview" data-preview-url="<?php echo $is_new ? '' : esc_url( ES_Preview::url_for( (int) $f->id ) ); ?>" data-is-new="<?php echo $is_new ? '1' : '0'; ?>" data-empty="<?php echo $design_empty ? '1' : '0'; ?>">
+				<div class="es-design-preview" data-preview-url="<?php echo $is_new ? '' : esc_url( Emblem_Studio_Preview::url_for( (int) $f->id ) ); ?>" data-is-new="<?php echo $is_new ? '1' : '0'; ?>" data-empty="<?php echo $design_empty ? '1' : '0'; ?>">
 					<div class="es-design-preview-bar">
 						<span class="es-design-preview-tag" aria-hidden="true"><?php esc_html_e( 'Preview', 'emblem-studio' ); ?></span>
 						<div class="es-design-shells" role="group" aria-label="<?php esc_attr_e( 'Preview shell', 'emblem-studio' ); ?>">
@@ -838,7 +838,7 @@ $check_groups = [
 				return ob_get_clean();
 			} )();
 
-			if ( ES_Caps::has( 'auto_shells' ) ) {
+			if ( Emblem_Studio_Caps::has( 'auto_shells' ) ) {
 				include EMBLEM_STUDIO_PATH . 'admin/views/_partials/shells-auto-selector.php';
 			}
 			/** @var array<string,array<string,string>> $shell_meta   Defined in the partial above (auto_shells only). */
@@ -903,10 +903,10 @@ $check_groups = [
 						</div>
 					</div>
 
-					<?php if ( ES_Caps::has( 'auto_shells' ) ) { $render_shell_selector( 'popup-auto', $shell_meta['popup-auto'] ); } ?>
+					<?php if ( Emblem_Studio_Caps::has( 'auto_shells' ) ) { $render_shell_selector( 'popup-auto', $shell_meta['popup-auto'] ); } ?>
 				</div>
 
-				<?php if ( ES_Caps::has( 'auto_shells' ) ) : ?>
+				<?php if ( Emblem_Studio_Caps::has( 'auto_shells' ) ) : ?>
 				<div class="es-shells-col es-shells-col-side">
 					<div class="es-shells-col-head">
 						<strong><?php esc_html_e( 'Pick one', 'emblem-studio' ); ?></strong>
@@ -930,7 +930,7 @@ $check_groups = [
 
 			</div>
 
-			<?php if ( ES_Caps::has( 'auto_shells' ) ) : ?>
+			<?php if ( Emblem_Studio_Caps::has( 'auto_shells' ) ) : ?>
 			<div class="es-shell-settings-wrap" id="es-shell-settings-wrap">
 				<?php
 				foreach ( $shell_meta as $shell => $meta ) {
@@ -953,8 +953,8 @@ $check_groups = [
 		<?php
 		$fk_enabled    = ! empty( $f->funnelkit_enabled );
 		$fk_asset_key  = ! empty( $f->saas_form_id ) ? 'saas:' . (int) $f->saas_form_id : 'wp:' . (int) ( $f->id ?? 0 );
-		$fk_feed_state = class_exists( 'ES_FunnelKit_Form_Feed' )
-			? ES_FunnelKit_Form_Feed::status( $fk_asset_key )
+		$fk_feed_state = class_exists( 'Emblem_Studio_FunnelKit_Form_Feed' )
+			? Emblem_Studio_FunnelKit_Form_Feed::status( $fk_asset_key )
 			: [ 'available' => false, 'managed' => false, 'feeds' => [] ];
 		$fk_managed    = ! empty( $fk_feed_state['managed'] );
 		$fk_pro        = defined( 'BWFAN_PRO_VERSION' ) || class_exists( 'BWFAN_Pro' );
@@ -991,16 +991,16 @@ $check_groups = [
 				<?php endforeach; ?>
 			</div>
 		<?php else : ?>
-			<div class="notice inline <?php echo ES_FunnelKit::is_active() ? 'notice-success' : 'notice-warning'; ?>" style="margin:0 0 16px;">
-				<p><strong><?php echo esc_html( ES_FunnelKit::is_active() ? __( 'Direct integration', 'emblem-studio' ) : __( 'FunnelKit not connected', 'emblem-studio' ) ); ?></strong></p>
+			<div class="notice inline <?php echo Emblem_Studio_FunnelKit::is_active() ? 'notice-success' : 'notice-warning'; ?>" style="margin:0 0 16px;">
+				<p><strong><?php echo esc_html( Emblem_Studio_FunnelKit::is_active() ? __( 'Direct integration', 'emblem-studio' ) : __( 'FunnelKit not connected', 'emblem-studio' ) ); ?></strong></p>
 				<p><?php esc_html_e( 'Emblem Studio creates, updates, and subscribes eligible contacts directly on this WordPress site.', 'emblem-studio' ); ?></p>
 			</div>
 			<?php if ( $fk_pro ) : ?>
 				<div class="notice notice-warning inline" style="margin:0 0 16px;"><p><?php esc_html_e( 'FunnelKit Pro is available, but no active Form Feed manages this asset. Direct sync still works. Use FunnelKit Automations > Forms when you want FunnelKit-owned double opt-in.', 'emblem-studio' ); ?></p></div>
 			<?php endif; ?>
 		<?php
-		$fk_lists = ES_FunnelKit::get_lists();
-		$fk_tags  = ES_FunnelKit::get_tags();
+		$fk_lists = Emblem_Studio_FunnelKit::get_lists();
+		$fk_tags  = Emblem_Studio_FunnelKit::get_tags();
 		?>
 		<table class="form-table" role="presentation">
 			<tr>
@@ -1039,10 +1039,10 @@ $check_groups = [
 				<th><label for="es-fk-tags-typer"><?php esc_html_e( 'Add tags', 'emblem-studio' ); ?></label></th>
 				<td>
 					<?php
-					$es_fk_known   = array_map( [ 'ES_Form_Repo', 'tag_key' ], array_column( $fk_tags, 'name' ) );
+					$es_fk_known   = array_map( [ 'Emblem_Studio_Form_Repo', 'tag_key' ], array_column( $fk_tags, 'name' ) );
 					$es_fk_pending = array_values( array_filter(
-						ES_Form_Repo::all_funnelkit_tags(),
-						static fn ( string $name ): bool => ! in_array( ES_Form_Repo::tag_key( $name ), $es_fk_known, true )
+						Emblem_Studio_Form_Repo::all_funnelkit_tags(),
+						static fn ( string $name ): bool => ! in_array( Emblem_Studio_Form_Repo::tag_key( $name ), $es_fk_known, true )
 					) );
 					?>
 					<div class="es-tag-input"
@@ -1068,8 +1068,8 @@ $check_groups = [
 			<button type="button" class="es-help" data-tip="<?php esc_attr_e( 'Click a form input on the right to select it, then click an empty FunnelKit slot on the left to assign it. Click ✕ to unmap. Auto-detection by name still applies when no mapping is set.', 'emblem-studio' ); ?>" aria-label="<?php esc_attr_e( 'What\'s this?', 'emblem-studio' ); ?>">?</button>
 		</h2>
 		<?php
-		$fk_grouped     = ES_FunnelKit::get_all_fields_grouped();
-		$initial_fields = ES_Form_Parser::extract_fields( (string) $f->html );
+		$fk_grouped     = Emblem_Studio_FunnelKit::get_all_fields_grouped();
+		$initial_fields = Emblem_Studio_Form_Parser::extract_fields( (string) $f->html );
 		?>
 		<div class="es-mapper"
 			data-fk-groups="<?php echo esc_attr( wp_json_encode( $fk_grouped ) ); ?>"
@@ -1097,7 +1097,7 @@ $check_groups = [
 				</div>
 			<?php else :
 				$stats_enabled_types = $f->form_types;
-				$stats_data_types    = ES_Reports::shells_with_data( (int) $f->id );
+				$stats_data_types    = Emblem_Studio_Reports::shells_with_data( (int) $f->id );
 				$stats_render_types  = array_values( array_unique( array_merge( $stats_enabled_types, $stats_data_types ) ) );
 				usort( $stats_render_types, function ( $a, $b ) {
 					$order = [ 'inline' => 0, 'popup-click' => 1, 'popup-auto' => 2, 'ribbon' => 3, 'slide-in' => 4 ];
@@ -1112,8 +1112,8 @@ $check_groups = [
 				];
 			?>
 				<?php if ( $ab_running ) :
-					$ab_totals      = ES_AB::variant_stats_for_form( (int) $f->id );
-					$ab_leader      = ES_AB::leader_for_form( (int) $f->id );
+					$ab_totals      = Emblem_Studio_AB::variant_stats_for_form( (int) $f->id );
+					$ab_leader      = Emblem_Studio_AB::leader_for_form( (int) $f->id );
 					$ab_primary     = ! empty( $ab_test->primary_metric ) ? (string) $ab_test->primary_metric : 'conversions';
 					$ab_label_count = $ab_primary === 'clicks' ? __( 'Clicks', 'emblem-studio' ) : __( 'Conv', 'emblem-studio' );
 					$end_url = function ( string $winner ) use ( $f ) {
@@ -1149,7 +1149,7 @@ $check_groups = [
 									<div class="es-ab-variant-card-stats">
 										<div class="es-ab-stat">
 											<span class="es-ab-stat-label"><?php echo esc_html( $ab_label_count ); ?></span>
-											<span class="es-ab-stat-value"><?php echo (int) ES_AB::effective_successes( (array) $kv, $ab_primary ); ?></span>
+											<span class="es-ab-stat-value"><?php echo (int) Emblem_Studio_AB::effective_successes( (array) $kv, $ab_primary ); ?></span>
 										</div>
 										<div class="es-ab-stat">
 											<span class="es-ab-stat-label"><?php esc_html_e( 'Views', 'emblem-studio' ); ?></span>
@@ -1157,7 +1157,7 @@ $check_groups = [
 										</div>
 										<div class="es-ab-stat">
 											<span class="es-ab-stat-label"><?php esc_html_e( 'Rate', 'emblem-studio' ); ?></span>
-											<span class="es-ab-stat-value"><?php echo esc_html( number_format_i18n( ES_AB::effective_rate( (array) $kv, $ab_primary ), 1 ) ); ?>%</span>
+											<span class="es-ab-stat-value"><?php echo esc_html( number_format_i18n( Emblem_Studio_AB::effective_rate( (array) $kv, $ab_primary ), 1 ) ); ?>%</span>
 										</div>
 									</div>
 								</div>
@@ -1183,9 +1183,9 @@ $check_groups = [
 					</div>
 				<?php else : ?>
 					<?php
-					$has_form       = ES_Form_Repo::primary_metric( (string) $f->html ) === 'conversions';
+					$has_form       = Emblem_Studio_Form_Repo::primary_metric( (string) $f->html ) === 'conversions';
 					$clicks_tracked = ! empty( $f->track_clicks );
-					$vis            = ES_Reports::asset_visitors( (int) $f->id );
+					$vis            = Emblem_Studio_Reports::asset_visitors( (int) $f->id );
 					?>
 					<h3 class="es-stats-section-heading"><?php esc_html_e( 'Per shell', 'emblem-studio' ); ?></h3>
 						<?php if ( $ab_running ) : ?>
@@ -1218,7 +1218,7 @@ $check_groups = [
 						</thead>
 						<tbody>
 							<?php foreach ( $stats_render_types as $shell ) :
-								$k = ES_Reports::all_time( (int) $f->id, $shell );
+								$k = Emblem_Studio_Reports::all_time( (int) $f->id, $shell );
 							?>
 								<tr>
 									<td><span class="es-shell-pill es-shell-<?php echo esc_attr( $shell ); ?>"><?php echo esc_html( $stats_shell_labels[ $shell ] ?? $shell ); ?></span></td>
@@ -1227,12 +1227,12 @@ $check_groups = [
 									<td class="num"><?php echo (int) $k['views']; ?></td>
 									<td class="num"><?php echo (int) ( $k['unique_visitors'] ?? 0 ); ?></td>
 									<td class="num es-col-conv"><?php echo $has_form ? (int) $k['conversions'] : '<span class="dim">—</span>'; ?></td>
-									<td class="num es-col-conv"><?php echo $has_form ? ES_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
-									<td class="num es-col-conv"><?php echo $has_form ? ES_Reports::per_person_html( (float) ( $k['conversions_per_person'] ?? 0 ) ) : '<span class="dim">—</span>'; ?></td>
+									<td class="num es-col-conv"><?php echo $has_form ? Emblem_Studio_Reports::rate_pair_html( (float) $k['conv_rate'], (float) $k['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
+									<td class="num es-col-conv"><?php echo $has_form ? Emblem_Studio_Reports::per_person_html( (float) ( $k['conversions_per_person'] ?? 0 ) ) : '<span class="dim">—</span>'; ?></td>
 									<td class="num es-col-conv"><?php echo $has_form ? (int) $k['dropoffs'] : '<span class="dim">—</span>'; ?></td>
-									<td class="num es-col-conv"><?php echo $has_form ? ES_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
+									<td class="num es-col-conv"><?php echo $has_form ? Emblem_Studio_Reports::rate_pair_html( (float) $k['dropoff_rate_views'], (float) $k['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
 									<td class="num es-col-click"><?php echo $clicks_tracked ? (int) $k['meaningful_clicks'] : '<span class="dim">—</span>'; ?></td>
-									<td class="num es-col-click"><?php echo $clicks_tracked ? ES_Reports::rate_pair_html( (float) $k['click_rate'], (float) $k['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
+									<td class="num es-col-click"><?php echo $clicks_tracked ? Emblem_Studio_Reports::rate_pair_html( (float) $k['click_rate'], (float) $k['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
 									<td class="num"><?php
 										$bf_n = (int) ( $k['bot_filtered'] ?? 0 );
 										if ( $bf_n > 0 ) {
@@ -1261,7 +1261,7 @@ $check_groups = [
 								</tr>
 								<?php if ( $ab_running ) :
 									foreach ( [ 'A', 'B' ] as $slot ) :
-										$kv = ES_Reports::all_time( (int) $f->id, $shell, $slot );
+										$kv = Emblem_Studio_Reports::all_time( (int) $f->id, $shell, $slot );
 								?>
 									<tr class="es-stats-variant-row">
 										<td class="es-stats-variant-label">
@@ -1273,12 +1273,12 @@ $check_groups = [
 										<td class="num"><?php echo (int) $kv['views']; ?></td>
 										<td class="num"><?php echo (int) ( $kv['unique_visitors'] ?? 0 ); ?></td>
 										<td class="num es-col-conv"><?php echo $has_form ? (int) $kv['conversions'] : '<span class="dim">—</span>'; ?></td>
-										<td class="num es-col-conv"><?php echo $has_form ? ES_Reports::rate_pair_html( (float) $kv['conv_rate'], (float) $kv['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
-										<td class="num es-col-conv"><?php echo $has_form ? ES_Reports::per_person_html( (float) ( $kv['conversions_per_person'] ?? 0 ) ) : '<span class="dim">—</span>'; ?></td>
+										<td class="num es-col-conv"><?php echo $has_form ? Emblem_Studio_Reports::rate_pair_html( (float) $kv['conv_rate'], (float) $kv['unique_conv_rate'], __( 'Conversion rate vs asset views — of the times shown, the share that converted', 'emblem-studio' ), __( 'Conversion rate vs unique visitors — the share of people who signed up, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
+										<td class="num es-col-conv"><?php echo $has_form ? Emblem_Studio_Reports::per_person_html( (float) ( $kv['conversions_per_person'] ?? 0 ) ) : '<span class="dim">—</span>'; ?></td>
 										<td class="num es-col-conv"><?php echo $has_form ? (int) $kv['dropoffs'] : '<span class="dim">—</span>'; ?></td>
-										<td class="num es-col-conv"><?php echo $has_form ? ES_Reports::rate_pair_html( (float) $kv['dropoff_rate_views'], (float) $kv['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
+										<td class="num es-col-conv"><?php echo $has_form ? Emblem_Studio_Reports::rate_pair_html( (float) $kv['dropoff_rate_views'], (float) $kv['dropoff_rate_unique'], __( 'Drop-off rate vs asset views — of the times shown, the share that started then left', 'emblem-studio' ), __( 'Drop-off rate vs unique visitors — the share of people who started then left, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
 										<td class="num es-col-click"><?php echo $clicks_tracked ? (int) $kv['meaningful_clicks'] : '<span class="dim">—</span>'; ?></td>
-										<td class="num es-col-click"><?php echo $clicks_tracked ? ES_Reports::rate_pair_html( (float) $kv['click_rate'], (float) $kv['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
+										<td class="num es-col-click"><?php echo $clicks_tracked ? Emblem_Studio_Reports::rate_pair_html( (float) $kv['click_rate'], (float) $kv['click_rate_unique'], __( 'Click rate vs asset views — engaged clicks per time shown', 'emblem-studio' ), __( 'Click rate vs unique visitors — the share of people who clicked, counting each person once', 'emblem-studio' ) ) : '<span class="dim">—</span>'; ?></td>
 										<td class="num"><span class="dim">—</span></td>
 										<td class="num"><span class="dim">—</span></td>
 									</tr>
@@ -1297,7 +1297,7 @@ $check_groups = [
 				<?php endif; ?>
 
 				<?php
-				$clicks = ES_Reports::clicks_for_form( (int) $f->id );
+				$clicks = Emblem_Studio_Reports::clicks_for_form( (int) $f->id );
 				$total_clicks   = 0;
 				$tagged_count   = 0;
 				$untagged_count = 0;
@@ -1322,7 +1322,7 @@ $check_groups = [
 						break;
 					}
 				}
-				$dropoff_steps = ES_Reports::dropoff_steps( $f );
+				$dropoff_steps = Emblem_Studio_Reports::dropoff_steps( $f );
 				$step_variants = false;
 				foreach ( $dropoff_steps['steps'] as $r ) {
 					if ( $r['dropoffs_a'] > 0 || $r['dropoffs_b'] > 0 ) {
@@ -1480,7 +1480,7 @@ $check_groups = [
 		</section>
 
 		<section id="es-tab-revisions" class="es-tab-panel" data-panel="revisions">
-			<?php if ( ! ES_Caps::has( 'revisions' ) ) : ?>
+			<?php if ( ! Emblem_Studio_Caps::has( 'revisions' ) ) : ?>
 				<div class="es-tab-empty es-revisions-upsell">
 					<p><strong><?php esc_html_e( 'Revision history is a free-account feature', 'emblem-studio' ); ?></strong></p>
 					<p><?php esc_html_e( 'Every save that changes your design can keep a snapshot you can compare against the current version and restore with one click.', 'emblem-studio' ); ?></p>
@@ -1492,14 +1492,14 @@ $check_groups = [
 					<p><em><?php esc_html_e( 'Save the form once and your revision history starts here.', 'emblem-studio' ); ?></em></p>
 				</div>
 			<?php else :
-				$revisions = ES_Form_Revisions::list_for_form( (int) $f->id );
+				$revisions = Emblem_Studio_Form_Revisions::list_for_form( (int) $f->id );
 
-				$scheduled     = class_exists( 'ES_Form_Scheduled_Revisions' ) ? ES_Form_Scheduled_Revisions::list_for_form( (int) $f->id ) : [];
-				$sched_queued  = array_values( array_filter( $scheduled, static fn( $s ) => ES_Form_Scheduled_Revisions::QUEUED === $s->status ) );
-				$sched_history = array_values( array_filter( $scheduled, static fn( $s ) => ES_Form_Scheduled_Revisions::QUEUED !== $s->status ) );
+				$scheduled     = class_exists( 'Emblem_Studio_Form_Scheduled_Revisions' ) ? Emblem_Studio_Form_Scheduled_Revisions::list_for_form( (int) $f->id ) : [];
+				$sched_queued  = array_values( array_filter( $scheduled, static fn( $s ) => Emblem_Studio_Form_Scheduled_Revisions::QUEUED === $s->status ) );
+				$sched_history = array_values( array_filter( $scheduled, static fn( $s ) => Emblem_Studio_Form_Scheduled_Revisions::QUEUED !== $s->status ) );
 				$sched_half    = ( ! empty( $sched_queued ) || isset( $_GET['es_sched'] ) ) ? 'scheduled' : 'past';
 				$sched_result  = isset( $_GET['es_sched'] ) ? sanitize_text_field( wp_unslash( $_GET['es_sched'] ) ) : '';
-				$sched_ab      = class_exists( 'ES_AB' ) && ES_AB::running_test_for_form( (int) $f->id );
+				$sched_ab      = class_exists( 'Emblem_Studio_AB' ) && Emblem_Studio_AB::running_test_for_form( (int) $f->id );
 				$date_fmt      = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
 				if ( isset( $_GET['restored'] ) ) :
 			?>
@@ -1563,7 +1563,7 @@ $check_groups = [
 					<div class="es-tab-empty"><p><?php esc_html_e( 'Nothing scheduled yet.', 'emblem-studio' ); ?></p></div>
 				<?php else : ?>
 					<?php foreach ( $sched_queued as $s ) :
-						$moved  = ES_Form_Scheduled_Revisions::has_moved_on( $s );
+						$moved  = Emblem_Studio_Form_Scheduled_Revisions::has_moved_on( $s );
 						$cancel = wp_nonce_url(
 							admin_url( 'admin-post.php?action=es_cancel_scheduled_change&form_id=' . (int) $f->id . '&change_id=' . (int) $s->id ),
 							'es_cancel_scheduled_change_' . (int) $f->id . '_' . (int) $s->id
@@ -1587,7 +1587,7 @@ $check_groups = [
 									<?php esc_html_e( 'Cannot tell whether the form has changed since this was built.', 'emblem-studio' ); ?>
 								</p>
 							<?php endif; ?>
-							<div class="es-revision-previews es-sched-previews" data-preview-url="<?php echo esc_attr( ES_Preview::url_for( (int) $f->id ) ); ?>" data-change-id="<?php echo (int) $s->id; ?>" style="margin-top:.8em;">
+							<div class="es-revision-previews es-sched-previews" data-preview-url="<?php echo esc_attr( Emblem_Studio_Preview::url_for( (int) $f->id ) ); ?>" data-change-id="<?php echo (int) $s->id; ?>" style="margin-top:.8em;">
 								<div class="es-revision-preview-col">
 									<div class="es-revision-pane-label">
 										<strong><?php esc_html_e( 'How it looks now', 'emblem-studio' ); ?></strong>
@@ -1635,7 +1635,7 @@ $check_groups = [
 						<p><?php esc_html_e( 'No revisions yet. The first one will appear here after your next save that changes HTML or CSS.', 'emblem-studio' ); ?></p>
 					</div>
 				<?php else :
-					$preview_url = ES_Preview::url_for( (int) $f->id );
+					$preview_url = Emblem_Studio_Preview::url_for( (int) $f->id );
 				?>
 					<p class="description es-revisions-intro">
 						<?php
@@ -1801,7 +1801,7 @@ $check_groups = [
 						</label>
 					</td>
 				</tr>
-				<?php if ( ES_Caps::has( 'design_system' ) ) : ?>
+				<?php if ( Emblem_Studio_Caps::has( 'design_system' ) ) : ?>
 				<tr>
 					<th>
 						<label for="es-use-design-system"><?php esc_html_e( 'Design System', 'emblem-studio' ); ?></label>
@@ -1817,7 +1817,7 @@ $check_groups = [
 				<?php endif; ?>
 			</table>
 
-			<?php if ( ES_Caps::has( 'schedule_window' ) ) : ?>
+			<?php if ( Emblem_Studio_Caps::has( 'schedule_window' ) ) : ?>
 			<?php
 			include EMBLEM_STUDIO_PATH . 'admin/views/_partials/schedule-periods.php';
 			?>
@@ -1878,7 +1878,7 @@ $check_groups = [
 			<?php endif; ?>
 
 			<?php if ( ! $is_new ) :
-				$danger_shells_with_data = ES_Reports::shells_with_data( (int) $f->id );
+				$danger_shells_with_data = Emblem_Studio_Reports::shells_with_data( (int) $f->id );
 				$danger_shell_labels = [
 					'inline'      => __( 'Inline', 'emblem-studio' ),
 					'popup-click' => __( 'Click popup', 'emblem-studio' ),

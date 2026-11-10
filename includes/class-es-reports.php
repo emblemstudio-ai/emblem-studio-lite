@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Reports {
+class Emblem_Studio_Reports {
 
 	private static function pad_dt( string $s, string $end ): string {
 		if ( strlen( $s ) <= 10 ) {
@@ -14,7 +14,7 @@ class ES_Reports {
 
 	public static function kpis( int $form_id, string $from, string $to, ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = 'WHERE form_id = %d AND created_at >= %s AND created_at <= %s';
 		$params = [ $form_id, self::pad_dt( $from, 'start' ), self::pad_dt( $to, 'end' ) ];
@@ -66,7 +66,7 @@ class ES_Reports {
 
 	public static function timeseries( ?int $form_id, string $from, string $to, string $granularity = 'day', ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$from_full = self::pad_dt( $from, 'start' );
 		$to_full   = self::pad_dt( $to, 'end' );
@@ -154,7 +154,7 @@ class ES_Reports {
 
 	public static function all_time( int $form_id, ?string $shell = null, ?string $variant = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = 'WHERE form_id = %d';
 		$params = [ $form_id ];
@@ -238,7 +238,7 @@ class ES_Reports {
 
 	public static function clicks_for_form( int $form_id, ?string $shell = null, ?string $from = null, ?string $to = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = "WHERE form_id = %d AND event_type = 'click'";
 		$params = [ $form_id ];
@@ -286,7 +286,7 @@ class ES_Reports {
 
 	public static function dropoff_steps( object $form, ?string $shell = null, ?string $from = null, ?string $to = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = "WHERE form_id = %d AND event_type = 'dropoff'";
 		$params = [ (int) $form->id ];
@@ -325,7 +325,7 @@ class ES_Reports {
 		}
 
 		$html     = (string) ( $form->html ?? '' );
-		$variants = ES_Install::table( 'variants' );
+		$variants = Emblem_Studio_Install::table( 'variants' );
 		foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT html FROM $variants WHERE form_id = %d ORDER BY slot", (int) $form->id ) ) as $vh ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$html .= "\n" . (string) $vh;
 		}
@@ -358,7 +358,7 @@ class ES_Reports {
 		$labels = [];
 		foreach ( $m as $hit ) {
 			$raw   = html_entity_decode( $hit[1] !== '' ? $hit[1] : ( $hit[2] ?? '' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-			$label = ES_Event_Recorder::clean_step( $raw );
+			$label = Emblem_Studio_Event_Recorder::clean_step( $raw );
 			if ( $label !== '' && ! in_array( $label, $labels, true ) ) {
 				$labels[] = $label;
 			}
@@ -368,7 +368,7 @@ class ES_Reports {
 
 	public static function reset_stats( ?int $form_id = null, ?string $shell = null ): int {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 		if ( $form_id && $shell ) {
 			return (int) $wpdb->query( $wpdb->prepare(
 				"DELETE FROM $events WHERE form_id = %d AND type = %s",
@@ -383,7 +383,7 @@ class ES_Reports {
 
 	public static function shells_with_data( int $form_id ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 		$rows = $wpdb->get_col( $wpdb->prepare(
 			"SELECT DISTINCT type FROM $events WHERE form_id = %d AND type <> ''",
 			$form_id
@@ -393,7 +393,7 @@ class ES_Reports {
 
 	public static function aggregate_kpis( string $from, string $to ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$row = $wpdb->get_row( $wpdb->prepare(
 			"SELECT
@@ -434,7 +434,7 @@ class ES_Reports {
 
 	public static function bot_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = "WHERE event_type = 'bot_filtered'";
 		$params = [];
@@ -470,7 +470,7 @@ class ES_Reports {
 				$unattributed += $n;
 				continue;
 			}
-			$cat = ES_Event_Recorder::category_for_label( $label );
+			$cat = Emblem_Studio_Event_Recorder::category_for_label( $label );
 			if ( ! isset( $cats[ $cat ] ) ) {
 				$cats[ $cat ] = [ 'total' => 0, 'bots' => [] ];
 			}
@@ -499,7 +499,7 @@ class ES_Reports {
 
 	public static function device_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = "WHERE event_type IN ('view','conversion')";
 		$params = [];
@@ -545,7 +545,7 @@ class ES_Reports {
 
 	public static function source_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = "WHERE event_type IN ('view','conversion')";
 		$params = [];
@@ -593,7 +593,7 @@ class ES_Reports {
 
 	public static function page_breakdown( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null, int $limit = 20 ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where  = 'WHERE 1=1';
 		$params = [];
@@ -647,7 +647,7 @@ class ES_Reports {
 
 	public static function visitor_stats( ?int $form_id, ?string $from = null, ?string $to = null, ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$scope = '';
 		$sp    = [];
@@ -724,7 +724,7 @@ class ES_Reports {
 
 	public static function asset_visitors( int $form_id, ?string $shell = null ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 
 		$where = "WHERE event_type = 'view' AND form_id = %d";
 		$p     = [ $form_id ];
@@ -757,20 +757,20 @@ class ES_Reports {
 
 	public static function first_event_date(): ?string {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
+		$events = Emblem_Studio_Install::table( 'events' );
 		$min    = $wpdb->get_var( "SELECT MIN(created_at) FROM $events" );
 		return $min ? substr( (string) $min, 0, 10 ) : null;
 	}
 
 	public static function total_leads(): int {
 		global $wpdb;
-		$leads = ES_Install::table( 'leads' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $leads WHERE is_bot = 0" );
 	}
 
 	public static function leads_in_range( string $from, string $to ): int {
 		global $wpdb;
-		$leads = ES_Install::table( 'leads' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
 		return (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM $leads WHERE is_bot = 0 AND created_at >= %s AND created_at <= %s",
 			self::pad_dt( $from, 'start' ), self::pad_dt( $to, 'end' )

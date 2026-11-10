@@ -3,16 +3,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class ES_Measurement {
+final class Emblem_Studio_Measurement {
 	public const API_VERSION = 1;
 	private static bool $authorizing = false;
 
 	public static function transaction_active(): ?bool {
-		return ES_Measurement_Transaction::active();
+		return Emblem_Studio_Measurement_Transaction::active();
 	}
 
 	public static function storage_transactional(): bool {
-		return ES_Measurement_Transaction::tables_transactional( [ ES_Install::table( 'leads' ), ES_Install::table( 'events' ) ] );
+		return Emblem_Studio_Measurement_Transaction::tables_transactional( [ Emblem_Studio_Install::table( 'leads' ), Emblem_Studio_Install::table( 'events' ) ] );
 	}
 
 	public static function policy( array $context ): string {
@@ -29,7 +29,7 @@ final class ES_Measurement {
 			return false;
 		}
 		self::$authorizing = true;
-		$scope = new ES_Measurement_Write_Scope();
+		$scope = new Emblem_Studio_Measurement_Write_Scope();
 		try {
 			$authority = apply_filters( 'emblem_studio_measurement_authorization', null, $context );
 			if ( ! is_callable( $authority ) ) {
@@ -51,7 +51,7 @@ final class ES_Measurement {
 						return false;
 					}
 					$lead = $wpdb->get_row( $wpdb->prepare(
-						'SELECT id, form_id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $id
+						'SELECT id, form_id FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $id
 					) );
 					if ( ! $lead || (int) $lead->form_id !== $context['form_id'] ) {
 						return false;
@@ -74,14 +74,14 @@ final class ES_Measurement {
 			return [];
 		}
 		global $wpdb;
-		$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT id, form_id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d', $lead_id ) );
-		if ( ES_Measurement_Transaction::query_failed() || ! $lead ) {
+		$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT id, form_id FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE id = %d', $lead_id ) );
+		if ( Emblem_Studio_Measurement_Transaction::query_failed() || ! $lead ) {
 			return new WP_Error( 'es_measurement_capture_unavailable', __( 'The measurement capture could not be verified.', 'emblem-studio' ) );
 		}
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			'SELECT * FROM ' . ES_Install::table( 'events' ) . ' WHERE lead_id = %d ORDER BY id', $lead_id
+			'SELECT * FROM ' . Emblem_Studio_Install::table( 'events' ) . ' WHERE lead_id = %d ORDER BY id', $lead_id
 		) );
-		if ( ES_Measurement_Transaction::query_failed() || ! is_array( $rows ) ) {
+		if ( Emblem_Studio_Measurement_Transaction::query_failed() || ! is_array( $rows ) ) {
 			return new WP_Error( 'es_measurement_read_failed', __( 'Associated measurement could not be read. Export completeness cannot be confirmed.', 'emblem-studio' ) );
 		}
 		foreach ( $rows as $row ) {
@@ -97,18 +97,18 @@ final class ES_Measurement {
 			return 0;
 		}
 		if ( ! self::storage_transactional() ) { return false; }
-		return ES_Measurement_Transaction::run( static function () use ( $lead_id ) {
+		return Emblem_Studio_Measurement_Transaction::run( static function () use ( $lead_id ) {
 			global $wpdb;
-			$lead = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $lead_id ) );
+			$lead = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $lead_id ) );
 			if ( ! $lead || is_wp_error( self::events_for_lead( $lead_id ) ) ) { return false; }
-			return $wpdb->delete( ES_Install::table( 'events' ), [ 'lead_id' => $lead_id ], [ '%d' ] );
+			return $wpdb->delete( Emblem_Studio_Install::table( 'events' ), [ 'lead_id' => $lead_id ], [ '%d' ] );
 		} );
 	}
 
 	public static function association_status( int $form_id ): array {
 		global $wpdb;
-		$events = ES_Install::table( 'events' );
-		$leads = ES_Install::table( 'leads' );
+		$events = Emblem_Studio_Install::table( 'events' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
 		$count = $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM $events e LEFT JOIN $leads l ON l.id=e.lead_id
 			WHERE e.form_id = %d AND (
@@ -124,7 +124,7 @@ final class ES_Measurement {
 	}
 }
 
-final class ES_Measurement_Write_Scope {
+final class Emblem_Studio_Measurement_Write_Scope {
 	private bool $active = true;
 	private bool $used = false;
 	public function claim(): bool {

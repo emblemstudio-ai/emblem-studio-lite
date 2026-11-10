@@ -1983,6 +1983,7 @@
 		var depth = 0;
 		var line = '';
 		var i = 0, n = s.length;
+		var paren = 0;
 		function ind() { var r = ''; for (var k = 0; k < depth; k++) r += '  '; return r; }
 		function emit(text) { out.push(ind() + text); }
 		function flushDecl() {
@@ -1999,9 +2000,10 @@
 			var c = s.charAt(i);
 			if (c === '/' && s.charAt(i + 1) === '*') {
 				var pend = line.trim();
-				if (pend) { emit(pend); line = ''; }
 				var end = s.indexOf('*/', i + 2);
 				end = end < 0 ? n : end + 2;
+				if (pend && depth > 0) { line = pend + ' ' + s.slice(i, end) + ' '; i = end; continue; }
+				if (pend) { emit(pend); line = ''; }
 				var clines = s.slice(i, end).split('\n');
 				for (var ci2 = 0; ci2 < clines.length; ci2++) {
 					out.push(ind() + (ci2 === 0 ? clines[ci2].replace(/^\s+/, '') : ' ' + clines[ci2].trim()));
@@ -2027,6 +2029,9 @@
 				if (depth === 0) out.push('');
 				i++; continue;
 			}
+			if (c === '(') { paren++; line += c; i++; continue; }
+			if (c === ')') { if (paren > 0) paren--; line += c; i++; continue; }
+			if (c === ';' && paren > 0) { line += c; i++; continue; }
 			if (c === ';') { flushDecl(); i++; continue; }
 			if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f') {
 				if (line.length && line.charAt(line.length - 1) !== ' ') line += ' ';

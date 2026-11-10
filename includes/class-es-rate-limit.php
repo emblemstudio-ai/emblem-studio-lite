@@ -1,5 +1,5 @@
 <?php
-final class ES_Rate_Limit {
+final class Emblem_Studio_Rate_Limit {
 
 	private const CACHE_GROUP = 'emblem_studio_rate_limit';
 
@@ -8,7 +8,7 @@ final class ES_Rate_Limit {
 	private const SWEEP_ONE_IN = 1000;
 
 	public static function table(): string {
-		return ES_Install::table( 'rate_limits' );
+		return Emblem_Studio_Install::table( 'rate_limits' );
 	}
 
 	public static function exceeded( string $key, int $window, int $max ): bool {

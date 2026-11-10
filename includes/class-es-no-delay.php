@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class ES_No_Delay {
+final class Emblem_Studio_No_Delay {
 
 	const ATTRS = 'data-cfasync="false" nowprocket data-no-optimize="1" data-no-defer="1" data-no-minify="1" data-no-delay-js data-wpmeteor-nooptimize="true" data-jetpack-boost="ignore" data-dont-merge nitro-exclude data-loading-method="eager"';
 

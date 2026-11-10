@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Caps {
+class Emblem_Studio_Caps {
 
 	private const MATRIX = [
 		'full' => [

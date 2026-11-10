@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Form_Parser {
+class Emblem_Studio_Form_Parser {
 
 	public static function extract_fields( string $html ): array {
 		if ( trim( $html ) === '' ) {

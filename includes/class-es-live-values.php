@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Live_Values {
+class Emblem_Studio_Live_Values {
 
 	const FRESH_SECONDS = 7200;
 
@@ -78,7 +78,7 @@ class ES_Live_Values {
 	}
 
 	public static function ensure_tick(): void {
-		if ( ! class_exists( 'ES_Commerce' ) || ! ES_Commerce::available() ) {
+		if ( ! class_exists( 'Emblem_Studio_Commerce' ) || ! Emblem_Studio_Commerce::available() ) {
 			return;
 		}
 		if ( ! wp_next_scheduled( self::HOOK_TICK ) ) {
@@ -97,7 +97,7 @@ class ES_Live_Values {
 	}
 
 	public static function run(): array {
-		if ( ! class_exists( 'ES_Commerce' ) || ! ES_Commerce::available() ) {
+		if ( ! class_exists( 'Emblem_Studio_Commerce' ) || ! Emblem_Studio_Commerce::available() ) {
 			return [ 'measured' => 0, 'changed' => 0 ];
 		}
 		if ( get_transient( 'es_live_values_lock' ) ) {
@@ -120,8 +120,8 @@ class ES_Live_Values {
 			$unchanged = [];
 			foreach ( $watch as $key => $w ) {
 				$answer = $w['coupon'] !== null
-					? ES_Commerce::coupon_value( (string) $w['coupon'], (int) $w['product_id'] )
-					: ES_Commerce::product( (int) $w['product_id'] );
+					? Emblem_Studio_Commerce::coupon_value( (string) $w['coupon'], (int) $w['product_id'] )
+					: Emblem_Studio_Commerce::product( (int) $w['product_id'] );
 
 				if ( ! self::is_shop_answer( $answer ) ) {
 					continue;
@@ -175,12 +175,12 @@ class ES_Live_Values {
 
 	private static function local_htmls(): array {
 		global $wpdb;
-		$forms  = ES_Install::table( 'forms' );
+		$forms  = Emblem_Studio_Install::table( 'forms' );
 		$like   = '%' . $wpdb->esc_like( 'data-es-live' ) . '%';
 		$htmls  = (array) $wpdb->get_col( $wpdb->prepare( "SELECT html FROM {$forms} WHERE trashed_at IS NULL AND archived_at IS NULL AND html LIKE %s", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$htmls  = array_merge( $htmls, (array) $wpdb->get_col( $wpdb->prepare( 'SELECT html FROM ' . ES_Install::table( 'variants' ) . " WHERE status = 'live' AND html LIKE %s", $like ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( class_exists( 'ES_Form_Scheduled_Revisions' ) ) {
-			$htmls = array_merge( $htmls, (array) $wpdb->get_col( $wpdb->prepare( 'SELECT html FROM ' . ES_Install::table( 'form_scheduled_revisions' ) . " WHERE status = 'queued' AND html LIKE %s", $like ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$htmls  = array_merge( $htmls, (array) $wpdb->get_col( $wpdb->prepare( 'SELECT html FROM ' . Emblem_Studio_Install::table( 'variants' ) . " WHERE status = 'live' AND html LIKE %s", $like ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( class_exists( 'Emblem_Studio_Form_Scheduled_Revisions' ) ) {
+			$htmls = array_merge( $htmls, (array) $wpdb->get_col( $wpdb->prepare( 'SELECT html FROM ' . Emblem_Studio_Install::table( 'form_scheduled_revisions' ) . " WHERE status = 'queued' AND html LIKE %s", $like ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
 
 		return array_map( 'strval', $htmls );

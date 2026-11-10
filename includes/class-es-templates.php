@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Templates {
+class Emblem_Studio_Templates {
 
 	public static function root(): string {
 		return EMBLEM_STUDIO_PATH . 'templates';
@@ -80,7 +80,7 @@ class ES_Templates {
 			return null;
 		}
 		$payload = self::form_to_import_payload( $form, $bundle );
-		$id      = ES_Form_Repo::from_import_array( $payload );
+		$id      = Emblem_Studio_Form_Repo::from_import_array( $payload );
 		return $id ? (int) $id : null;
 	}
 
@@ -92,7 +92,7 @@ class ES_Templates {
 		$ids = [];
 		foreach ( (array) $bundle['resolved_forms'] as $form ) {
 			$payload = self::form_to_import_payload( $form, $bundle );
-			$id      = ES_Form_Repo::from_import_array( $payload );
+			$id      = Emblem_Studio_Form_Repo::from_import_array( $payload );
 			if ( $id ) {
 				$ids[] = (int) $id;
 			}

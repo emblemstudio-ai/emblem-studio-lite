@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.4.1-beta
+ * Version:           1.4.4-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Emblem Studio
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.4.1-beta' );
+define( 'EMBLEM_STUDIO_VERSION', '1.4.4-beta' );
 define( 'EMBLEM_STUDIO_DB_VERSION', '49' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
@@ -32,10 +32,10 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-repo.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-repo.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preset-ajax.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-revisions.php';
-if ( ES_Caps::has( 'revisions' ) ) {
+if ( Emblem_Studio_Caps::has( 'revisions' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-scheduled-revisions.php';
 }
-if ( ES_Caps::has( 'schedule_window' ) ) {
+if ( Emblem_Studio_Caps::has( 'schedule_window' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-form-schedule.php';
 }
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-consent-log.php';
@@ -69,23 +69,23 @@ require_once EMBLEM_STUDIO_PATH . 'includes/class-es-shortcode.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-preview.php';
 require_once EMBLEM_STUDIO_PATH . 'includes/class-es-plugin.php';
 
-if ( ES_Caps::is_lite() && file_exists( EMBLEM_STUDIO_PATH . 'includes/connector.php' ) ) {
+if ( Emblem_Studio_Caps::is_lite() && file_exists( EMBLEM_STUDIO_PATH . 'includes/connector.php' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/connector.php';
 }
 
-if ( ES_Caps::has( 'ab' ) ) {
+if ( Emblem_Studio_Caps::has( 'ab' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-ab.php';
 }
-if ( ES_Caps::has( 'webhooks' ) ) {
+if ( Emblem_Studio_Caps::has( 'webhooks' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-webhooks.php';
 }
-if ( ES_Caps::has( 'linked_forms' ) ) {
+if ( Emblem_Studio_Caps::has( 'linked_forms' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-connections.php';
 }
-if ( ES_Caps::has( 'auto_shells' ) ) {
+if ( Emblem_Studio_Caps::has( 'auto_shells' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-auto-shells.php';
 }
-if ( ES_Caps::has( 'design_system' ) ) {
+if ( Emblem_Studio_Caps::has( 'design_system' ) ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-design-system-revisions.php';
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-design-system.php';
 }
@@ -96,8 +96,8 @@ if ( is_admin() ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-asset-checks.php';
 }
 
-register_activation_hook( __FILE__, [ 'ES_Install', 'activate' ] );
+register_activation_hook( __FILE__, [ 'Emblem_Studio_Install', 'activate' ] );
 
-add_action( 'plugins_loaded', [ 'ES_Install', 'maybe_migrate' ], 5 );
-add_action( 'admin_notices', [ 'ES_Install', 'migration_notice' ] );
-add_action( 'plugins_loaded', static function () { ES_Plugin::instance(); } );
+add_action( 'plugins_loaded', [ 'Emblem_Studio_Install', 'maybe_migrate' ], 5 );
+add_action( 'admin_notices', [ 'Emblem_Studio_Install', 'migration_notice' ] );
+add_action( 'plugins_loaded', static function () { Emblem_Studio_Plugin::instance(); } );

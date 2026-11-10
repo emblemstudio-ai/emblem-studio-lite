@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Purchases {
+class Emblem_Studio_Purchases {
 
 	const HOOK_READY = 'es_purchases_ready';
 
@@ -38,7 +38,7 @@ class ES_Purchases {
 			return false;
 		}
 
-		return class_exists( 'ES_Commerce' ) && ES_Commerce::available();
+		return class_exists( 'Emblem_Studio_Commerce' ) && Emblem_Studio_Commerce::available();
 	}
 
 	public static function on_switch( $old, $new ): void {
@@ -103,7 +103,7 @@ class ES_Purchases {
 		];
 
 		global $wpdb;
-		$table    = ES_Install::table( 'purchases' );
+		$table    = Emblem_Studio_Install::table( 'purchases' );
 		$existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE order_id = %d", $order->get_id() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( $existing ) {
 			$wpdb->update( $table, $row, [ 'id' => (int) $existing ] );
@@ -127,11 +127,11 @@ class ES_Purchases {
 		$touches = [];
 
 		foreach ( $order->get_items() as $item ) {
-			$tag = ES_Click_Tag::clean( (string) $item->get_meta( ES_Click_Tag::META, true ) );
+			$tag = Emblem_Studio_Click_Tag::clean( (string) $item->get_meta( Emblem_Studio_Click_Tag::META, true ) );
 			if ( $tag === '' ) {
 				continue;
 			}
-			$parsed = ES_Click_Tag::parse( $tag );
+			$parsed = Emblem_Studio_Click_Tag::parse( $tag );
 			if ( $parsed['asset'] === '' ) {
 				continue;
 			}
@@ -171,7 +171,7 @@ class ES_Purchases {
 		$oldest      = gmdate( 'Y-m-d H:i:s', $paid_ts - ( self::MAX_WINDOW_DAYS * DAY_IN_SECONDS ) );
 		$oldest      = get_date_from_gmt( $oldest );
 		$before      = get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $paid_ts ) );
-		$table       = ES_Install::table( 'leads' );
+		$table       = Emblem_Studio_Install::table( 'leads' );
 		$placeholder = implode( ',', array_fill( 0, count( $emails ), '%s' ) );
 		$args        = array_merge( $emails, [ $oldest, $before ] );
 
@@ -213,7 +213,7 @@ class ES_Purchases {
 
 	public static function pending( int $limit = 200 ): array {
 		global $wpdb;
-		$table = ES_Install::table( 'purchases' );
+		$table = Emblem_Studio_Install::table( 'purchases' );
 		$rows  = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE needs_push = 1 ORDER BY id ASC LIMIT %d", max( 1, $limit ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		return array_map( [ __CLASS__, 'shape' ], $rows );
@@ -251,14 +251,14 @@ class ES_Purchases {
 			return;
 		}
 		global $wpdb;
-		$table = ES_Install::table( 'purchases' );
+		$table = Emblem_Studio_Install::table( 'purchases' );
 		$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET needs_push = 0 WHERE id IN ({$in})", $ids ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	public static function for_lead( int $lead_id ) {
 		global $wpdb;
-		$table = ES_Install::table( 'purchases' );
+		$table = Emblem_Studio_Install::table( 'purchases' );
 		$like  = '%' . $wpdb->esc_like( '"wp_lead_id":' . $lead_id . ',' ) . '%';
 		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE touches LIKE %s ORDER BY ordered_at DESC", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( ! is_array( $rows ) || $wpdb->last_error !== '' ) { return new WP_Error( 'es_purchase_read_failed', __( 'Purchase data could not be read. Export completeness cannot be confirmed.', 'emblem-studio' ) ); }
@@ -283,7 +283,7 @@ class ES_Purchases {
 
 	public static function forget_lead( int $lead_id, bool $notify = true ) {
 		global $wpdb;
-		$table   = ES_Install::table( 'purchases' );
+		$table   = Emblem_Studio_Install::table( 'purchases' );
 		$like    = '%' . $wpdb->esc_like( '"wp_lead_id":' . $lead_id . ',' ) . '%';
 		$rows    = $wpdb->get_results( $wpdb->prepare( "SELECT id, order_id, touches FROM {$table} WHERE touches LIKE %s", $like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( ! is_array( $rows ) || $wpdb->last_error !== '' ) { return false; }

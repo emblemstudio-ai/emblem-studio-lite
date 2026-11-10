@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Recent_Orders {
+class Emblem_Studio_Recent_Orders {
 
 	const HOOK_READY = 'es_recent_orders_ready';
 
@@ -58,10 +58,10 @@ class ES_Recent_Orders {
 	}
 
 	public static function is_purchase( WC_Order $order ): bool {
-		if ( ! ES_Purchases::counts( (string) $order->get_status(), (float) $order->get_total(), (float) $order->get_total_refunded() ) ) {
+		if ( ! Emblem_Studio_Purchases::counts( (string) $order->get_status(), (float) $order->get_total(), (float) $order->get_total_refunded() ) ) {
 			return false;
 		}
-		if ( ES_Purchases::is_renewal( $order ) ) {
+		if ( Emblem_Studio_Purchases::is_renewal( $order ) ) {
 			return false;
 		}
 		$paid = self::paid_ts( $order );
@@ -125,10 +125,10 @@ class ES_Recent_Orders {
 	}
 
 	private static function salt(): string {
-		$salt = (string) get_option( ES_Purchases::SALT_OPTION, '' );
+		$salt = (string) get_option( Emblem_Studio_Purchases::SALT_OPTION, '' );
 		if ( $salt === '' ) {
 			$salt = wp_generate_password( 32, false );
-			update_option( ES_Purchases::SALT_OPTION, $salt, false );
+			update_option( Emblem_Studio_Purchases::SALT_OPTION, $salt, false );
 		}
 
 		return $salt;

@@ -3,11 +3,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$forms = ES_Form_Repo::all();
+$forms = Emblem_Studio_Form_Repo::all();
 $tz    = wp_timezone();
 $today = new DateTimeImmutable( 'now', $tz );
 
-$first_event = ES_Reports::first_event_date();
+$first_event = Emblem_Studio_Reports::first_event_date();
 $all_start   = $first_event
 	? new DateTimeImmutable( $first_event . ' 00:00:00', $tz )
 	: $today->modify( '-13 days' );
@@ -26,10 +26,16 @@ $presets = [
 	'last_year'  => [ __( 'Last calendar year', 'emblem-studio' ), new DateTimeImmutable( ( (int) $today->format( 'Y' ) - 1 ) . '-01-01', $tz ), new DateTimeImmutable( ( (int) $today->format( 'Y' ) - 1 ) . '-12-31', $tz ), 'day' ],
 	'all'        => [ __( 'All time', 'emblem-studio' ),           $all_start, $today, 'day' ],
 ];
+foreach ( $presets as $key => $preset ) {
+	if ( $preset[3] === 'day' ) {
+		$presets[ $key ][1] = $preset[1]->setTime( 0, 0, 0 );
+		$presets[ $key ][2] = $preset[2]->setTime( 23, 59, 59 );
+	}
+}
 
 $form_id   = isset( $_GET['form_id'] ) && (int) $_GET['form_id'] > 0 ? (int) $_GET['form_id'] : 0;
 $shell     = isset( $_GET['shell'] ) ? sanitize_key( $_GET['shell'] ) : '';
-$valid_shells = ES_Form_Repo::valid_types();
+$valid_shells = Emblem_Studio_Form_Repo::valid_types();
 if ( $shell && ! in_array( $shell, $valid_shells, true ) ) {
 	$shell = '';
 }
@@ -37,8 +43,18 @@ $range_key = isset( $_GET['range'] ) ? sanitize_key( $_GET['range'] ) : '';
 $has_custom = isset( $_GET['from'] ) || isset( $_GET['to'] );
 
 if ( $has_custom ) {
-	$from_str = sanitize_text_field( $_GET['from'] ?? $today->modify( '-13 days' )->format( 'Y-m-d' ) );
-	$to_str   = sanitize_text_field( $_GET['to']   ?? $today->format( 'Y-m-d' ) );
+	$from_str = sanitize_text_field( $_GET['from'] ?? '' );
+	$to_str   = sanitize_text_field( $_GET['to']   ?? '' );
+	$is_day   = static function ( string $d ): bool {
+		$dt = DateTimeImmutable::createFromFormat( '!Y-m-d', $d );
+		return $dt !== false && $dt->format( 'Y-m-d' ) === $d;
+	};
+	if ( ! $is_day( $from_str ) ) {
+		$from_str = $today->modify( '-13 days' )->format( 'Y-m-d' );
+	}
+	if ( ! $is_day( $to_str ) ) {
+		$to_str = $today->format( 'Y-m-d' );
+	}
 	$from_dt  = new DateTimeImmutable( $from_str . ' 00:00:00', $tz );
 	$to_dt    = new DateTimeImmutable( $to_str   . ' 23:59:59', $tz );
 	$granularity = 'day';
@@ -55,9 +71,9 @@ $from_sql = $from_dt->format( 'Y-m-d H:i:s' );
 $to_sql   = $to_dt->format( 'Y-m-d H:i:s' );
 
 if ( $form_id ) {
-	$kpis = ES_Reports::kpis( $form_id, $from_sql, $to_sql, $shell ?: null );
+	$kpis = Emblem_Studio_Reports::kpis( $form_id, $from_sql, $to_sql, $shell ?: null );
 } else {
-	$agg  = ES_Reports::aggregate_kpis( $from_sql, $to_sql );
+	$agg  = Emblem_Studio_Reports::aggregate_kpis( $from_sql, $to_sql );
 	$kpis = [
 		'page_views'    => $agg['page_views'],
 		'trigger_views' => 0,
@@ -78,16 +94,16 @@ $span_secs = max( 1, $to_dt->getTimestamp() - $from_dt->getTimestamp() );
 $prev_to   = $from_dt->modify( '-1 second' );
 $prev_from = $from_dt->modify( '-' . ( $span_secs + 1 ) . ' seconds' );
 if ( $form_id ) {
-	$prev = ES_Reports::kpis( $form_id, $prev_from->format( 'Y-m-d H:i:s' ), $prev_to->format( 'Y-m-d H:i:s' ), $shell ?: null );
+	$prev = Emblem_Studio_Reports::kpis( $form_id, $prev_from->format( 'Y-m-d H:i:s' ), $prev_to->format( 'Y-m-d H:i:s' ), $shell ?: null );
 } else {
-	$prev = ES_Reports::aggregate_kpis( $prev_from->format( 'Y-m-d H:i:s' ), $prev_to->format( 'Y-m-d H:i:s' ) );
+	$prev = Emblem_Studio_Reports::aggregate_kpis( $prev_from->format( 'Y-m-d H:i:s' ), $prev_to->format( 'Y-m-d H:i:s' ) );
 }
 
-$ts        = ES_Reports::timeseries( $form_id ?: null, $from_sql, $to_sql, $granularity, $shell ?: null );
-$bot_break = ES_Reports::bot_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
-$device_break = ES_Reports::device_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
-$page_break   = ES_Reports::page_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
-$visitor_stats = ES_Reports::visitor_stats( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
+$ts        = Emblem_Studio_Reports::timeseries( $form_id ?: null, $from_sql, $to_sql, $granularity, $shell ?: null );
+$bot_break = Emblem_Studio_Reports::bot_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
+$device_break = Emblem_Studio_Reports::device_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
+$page_break   = Emblem_Studio_Reports::page_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
+$visitor_stats = Emblem_Studio_Reports::visitor_stats( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
 
 $device_labels = [
 	'mobile'  => __( 'Mobile', 'emblem-studio' ),
@@ -98,7 +114,7 @@ $device_labels = [
 $device_total = 0;
 foreach ( $device_break as $d ) { $device_total += (int) $d['views']; }
 
-$source_break  = ES_Reports::source_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
+$source_break  = Emblem_Studio_Reports::source_breakdown( $form_id ?: null, $from_sql, $to_sql, $shell ?: null );
 $source_labels = [
 	'paid'     => __( 'Paid ads', 'emblem-studio' ),
 	'email'    => __( 'Email', 'emblem-studio' ),
@@ -114,7 +130,7 @@ $source_total = 0;
 foreach ( $source_break as $s ) { $source_total += (int) $s['views']; }
 
 $design = ( isset( $_GET['design'] ) && $_GET['design'] === 'grid' ) ? 'grid' : 'journey';
-$tier = ES_Caps::is_lite()
+$tier = Emblem_Studio_Caps::is_lite()
 	? 'lite'
 	: ( ( isset( $_GET['tier'] ) && in_array( $_GET['tier'], [ 'lite', 'free', 'paid' ], true ) ) ? $_GET['tier'] : 'paid' );
 $tier_rank  = [ 'lite' => 0, 'free' => 1, 'paid' => 2 ];
@@ -478,7 +494,7 @@ $render_gated = static function ( $required, $title, callable $render ) use ( $e
 		</div>
 	</div>
 
-	<?php if ( ! ES_Caps::is_lite() ) : ?>
+	<?php if ( ! Emblem_Studio_Caps::is_lite() ) : ?>
 	<div class="es-rep-switcher">
 		<span class="es-rep-switcher-eyebrow"><?php esc_html_e( 'Preview', 'emblem-studio' ); ?></span>
 		<span class="es-rep-seg-label"><?php esc_html_e( 'Tier', 'emblem-studio' ); ?></span>

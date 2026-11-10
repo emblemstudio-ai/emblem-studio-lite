@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_FunnelKit {
+class Emblem_Studio_FunnelKit {
 
 	public const OPT_API_KEY    = 'emblem_studio_fk_api_key';
 	public const OPT_API_SECRET = 'emblem_studio_fk_api_secret';
@@ -35,10 +35,10 @@ class ES_FunnelKit {
 			if ( $res['ok'] ) {
 				return $res;
 			}
-			ES_Logger::error( 'FunnelKit direct push failed, trying REST fallback', $res );
+			Emblem_Studio_Logger::error( 'FunnelKit direct push failed, trying REST fallback', $res );
 		}
 
-		if ( ES_FunnelKit_Upsert::contact_status( $lead['contact_status'] ?? null ) === 'unsubscribed' ) {
+		if ( Emblem_Studio_FunnelKit_Upsert::contact_status( $lead['contact_status'] ?? null ) === 'unsubscribed' ) {
 			return $res ?? [ 'ok' => false, 'contact_id' => null, 'error' => 'FunnelKit is not on this site, so the contact cannot be added as unsubscribed' ];
 		}
 
@@ -50,7 +50,7 @@ class ES_FunnelKit {
 	}
 
 	private static function push_direct( array $lead ): array {
-		return ES_FunnelKit_Upsert::run( $lead );
+		return Emblem_Studio_FunnelKit_Upsert::run( $lead );
 	}
 
 	private static function push_rest( array $lead ): array {
@@ -86,7 +86,7 @@ class ES_FunnelKit {
 
 		if ( $code >= 200 && $code < 300 ) {
 			$id = isset( $json['id'] ) ? (int) $json['id'] : ( $json['contact_id'] ?? null );
-			ES_Logger::info( 'FunnelKit REST push OK', [ 'contact_id' => $id ] );
+			Emblem_Studio_Logger::info( 'FunnelKit REST push OK', [ 'contact_id' => $id ] );
 			return [ 'ok' => true, 'contact_id' => $id, 'error' => null ];
 		}
 
@@ -111,7 +111,7 @@ class ES_FunnelKit {
 						$norm = self::normalize_lookup( $rows );
 						if ( $norm ) { return $norm; }
 					} catch ( \Throwable $e ) {
-						ES_Logger::error( 'BWFCRM_List::' . $m . ' threw', [ 'message' => $e->getMessage() ] );
+						Emblem_Studio_Logger::error( 'BWFCRM_List::' . $m . ' threw', [ 'message' => $e->getMessage() ] );
 					}
 				}
 			}
@@ -151,7 +151,7 @@ class ES_FunnelKit {
 				$name_col = self::pick_col( $cols, [ 'name', 'title', 'list_name' ] );
 				if ( $id_col && $name_col ) {
 					$rows = $wpdb->get_results( "SELECT `$id_col` as id, `$name_col` as name FROM `$table` ORDER BY `$name_col` ASC" );
-					ES_Logger::info( 'Lists loaded via table probe', [ 'table' => $table, 'count' => is_array( $rows ) ? count( $rows ) : 0 ] );
+					Emblem_Studio_Logger::info( 'Lists loaded via table probe', [ 'table' => $table, 'count' => is_array( $rows ) ? count( $rows ) : 0 ] );
 					return self::normalize_lookup( $rows );
 				}
 			}
@@ -242,7 +242,7 @@ class ES_FunnelKit {
 				'key'     => 'slug:' . (string) $r->field_slug,
 				'label'   => (string) $r->field_name,
 				'kind'    => self::field_type_to_kind( (int) $r->field_type ),
-				'options' => ES_Field_Matcher::funnelkit_options( (int) $r->field_type, (string) ( $r->field_meta ?? '' ) ),
+				'options' => Emblem_Studio_Field_Matcher::funnelkit_options( (int) $r->field_type, (string) ( $r->field_meta ?? '' ) ),
 			];
 		}
 		foreach ( $by_group as $label => $fields ) {

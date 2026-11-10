@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class ES_FunnelKit_Form_Provider extends BWFCRM_Form_Base {
+final class Emblem_Studio_FunnelKit_Form_Provider extends BWFCRM_Form_Base {
 	private string $asset_key = '';
 	private array $entry = [];
 
@@ -53,7 +53,7 @@ final class ES_FunnelKit_Form_Provider extends BWFCRM_Form_Base {
 
 	public function get_form_selection( $args, $return_all_available = false ) {
 		$options = [];
-		foreach ( ES_FunnelKit_Form_Feed::catalog() as $key => $asset ) {
+		foreach ( Emblem_Studio_FunnelKit_Form_Feed::catalog() as $key => $asset ) {
 			$options[ (string) $key ] = $asset['name'];
 		}
 		return $this->get_step_selection_array( 'Asset', 'form_id', 1, [ 'default' => $options ] );
@@ -61,28 +61,28 @@ final class ES_FunnelKit_Form_Provider extends BWFCRM_Form_Base {
 
 	public function update_form_selection( $args, $feed_id ) {
 		$key = isset( $args['form_id'] ) ? (string) $args['form_id'] : '';
-		if ( $key === '' || ! isset( ES_FunnelKit_Form_Feed::catalog()[ $key ] ) || ! class_exists( 'BWFCRM_Form_Feed' ) ) {
+		if ( $key === '' || ! isset( Emblem_Studio_FunnelKit_Form_Feed::catalog()[ $key ] ) || ! class_exists( 'BWFCRM_Form_Feed' ) ) {
 			return false;
 		}
 		$feed = new BWFCRM_Form_Feed( $feed_id );
 		if ( ! $feed->is_feed_exists() ) {
 			return false;
 		}
-		$feed->set_source( ES_FunnelKit_Form_Feed::SOURCE );
+		$feed->set_source( Emblem_Studio_FunnelKit_Form_Feed::SOURCE );
 		$feed->set_data( 'form_id', $key );
 		return (bool) $feed->save( true );
 	}
 	public function get_total_selection_steps() { return 1; }
 	public function get_form_fields( $feed ) {
 		$key     = is_object( $feed ) && method_exists( $feed, 'get_data' ) ? (string) $feed->get_data( 'form_id' ) : '';
-		$catalog = ES_FunnelKit_Form_Feed::catalog();
+		$catalog = Emblem_Studio_FunnelKit_Form_Feed::catalog();
 		return isset( $catalog[ $key ] ) ? $catalog[ $key ]['fields'] : [];
 	}
 	public function get_meta() { return [ 'form_selection_fields' => [ 'form_id' => 'Asset' ] ]; }
-	public function get_source() { return ES_FunnelKit_Form_Feed::SOURCE; }
+	public function get_source() { return Emblem_Studio_FunnelKit_Form_Feed::SOURCE; }
 	public function get_form_link( $feed ) {
 		$key     = is_object( $feed ) && method_exists( $feed, 'get_data' ) ? (string) $feed->get_data( 'form_id' ) : '';
-		$catalog = ES_FunnelKit_Form_Feed::catalog();
+		$catalog = Emblem_Studio_FunnelKit_Form_Feed::catalog();
 		return isset( $catalog[ $key ] ) ? $catalog[ $key ]['edit_url'] : '';
 	}
 }

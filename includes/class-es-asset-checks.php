@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Asset_Checks {
+class Emblem_Studio_Asset_Checks {
 
 	const NON_FIELD_INPUT_TYPES = [ 'hidden', 'submit', 'button', 'image', 'reset' ];
 
@@ -69,7 +69,7 @@ class ES_Asset_Checks {
 					$typed[] = $name;
 				}
 			}
-			$email_field = ES_Field_Matcher::find_by_name( $input_names, ES_Field_Matcher::EMAIL_NAME_VARIANTS );
+			$email_field = Emblem_Studio_Field_Matcher::find_by_name( $input_names, Emblem_Studio_Field_Matcher::EMAIL_NAME_VARIANTS );
 			if ( $email_field === null && count( $typed ) === 1 ) {
 				$email_field = $typed[0];
 			}
@@ -230,7 +230,7 @@ class ES_Asset_Checks {
 			);
 		}
 
-		foreach ( ES_Consent_Log::unmarked_required_checkboxes( $html ) as $name ) {
+		foreach ( Emblem_Studio_Consent_Log::unmarked_required_checkboxes( $html ) as $name ) {
 			$items[] = self::item(
 				'unmarked_consent',
 				'warning',
@@ -364,7 +364,7 @@ class ES_Asset_Checks {
 			$product  = trim( $el->getAttribute( 'data-es-product' ) );
 			$fallback = trim( (string) preg_replace( '/\s+/u', ' ', $el->textContent ) );
 
-			if ( ! isset( ES_Live_Values::FIELDS[ $field ] ) ) {
+			if ( ! isset( Emblem_Studio_Live_Values::FIELDS[ $field ] ) ) {
 				$found['live_unknown_field'] = true;
 			}
 			if ( ! preg_match( '/^\d+$/', $product ) || (int) $product < 1 ) {

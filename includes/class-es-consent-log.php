@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Consent_Log {
+class Emblem_Studio_Consent_Log {
 
 	public static function record( int $form_id, string $form_html, int $lead_id, array $fields, ?int $post_id, ?string $variant_slot = null ): void {
 		$html     = self::rendered_html( $form_id, $form_html, $variant_slot );
@@ -13,11 +13,14 @@ class ES_Consent_Log {
 		}
 
 		global $wpdb;
-		$texts_table   = ES_Install::table( 'consent_texts' );
-		$consent_table = ES_Install::table( 'lead_consents' );
+		$texts_table   = Emblem_Studio_Install::table( 'consent_texts' );
+		$consent_table = Emblem_Studio_Install::table( 'lead_consents' );
 		$revision_id = self::latest_revision_id( $form_id );
 		$page_url    = $post_id ? (string) get_permalink( $post_id ) : null;
-		$leads_table = ES_Install::table( 'leads' );
+		if ( $page_url !== null && strlen( $page_url ) > 255 ) {
+			$page_url = function_exists( 'mb_strcut' ) ? mb_strcut( $page_url, 0, 255, 'UTF-8' ) : substr( $page_url, 0, 255 );
+		}
+		$leads_table = Emblem_Studio_Install::table( 'leads' );
 		$email       = $wpdb->get_var( $wpdb->prepare( "SELECT email FROM {$leads_table} WHERE id = %d", $lead_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$email       = is_string( $email ) && $email !== '' ? $email : null;
 
@@ -42,9 +45,9 @@ class ES_Consent_Log {
 				continue;
 			}
 
-			$checked = ES_Ajax::checkbox_value_is_ticked( ES_Ajax::posted_value( $fields, $consent['field'] ) );
+			$checked = Emblem_Studio_Ajax::checkbox_value_is_ticked( Emblem_Studio_Ajax::posted_value( $fields, $consent['field'] ) );
 
-			$wpdb->insert( $consent_table, [
+			$saved = $wpdb->insert( $consent_table, [
 				'lead_id'           => $lead_id,
 				'email'             => $email,
 				'field_name'        => $consent['field'],
@@ -54,12 +57,15 @@ class ES_Consent_Log {
 				'form_revision_id'  => $revision_id,
 				'created_at'        => current_time( 'mysql' ),
 			] );
+			if ( $saved === false && class_exists( 'Emblem_Studio_Logger' ) ) {
+				Emblem_Studio_Logger::error( 'Consent record could not be saved', [ 'lead_id' => $lead_id, 'field' => $consent['field'], 'db_error' => (string) $wpdb->last_error ] );
+			}
 		}
 	}
 
 	public static function erase( string $email, array $lead_ids ) {
 		global $wpdb;
-		$table = ES_Install::table( 'lead_consents' );
+		$table = Emblem_Studio_Install::table( 'lead_consents' );
 		$email = strtolower( trim( $email ) );
 		$ids   = array_values( array_filter( array_map( 'intval', $lead_ids ) ) );
 
@@ -78,7 +84,7 @@ class ES_Consent_Log {
 	private static function rendered_html( int $form_id, string $form_html, ?string $variant_slot ): string {
 		if ( $variant_slot ) {
 			global $wpdb;
-			$variants = ES_Install::table( 'variants' );
+			$variants = Emblem_Studio_Install::table( 'variants' );
 			$variant_html = $wpdb->get_var( $wpdb->prepare(
 				"SELECT html FROM {$variants} WHERE form_id = %d AND slot = %s ORDER BY id DESC LIMIT 1",
 				$form_id,
@@ -94,7 +100,7 @@ class ES_Consent_Log {
 
 	private static function latest_revision_id( int $form_id ): ?int {
 		global $wpdb;
-		$revisions = ES_Install::table( 'form_revisions' );
+		$revisions = Emblem_Studio_Install::table( 'form_revisions' );
 		$id        = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$revisions} WHERE form_id = %d ORDER BY id DESC LIMIT 1", $form_id ) );
 
 		return $id ? (int) $id : null;
@@ -196,8 +202,8 @@ class ES_Consent_Log {
 		}
 
 		global $wpdb;
-		$consents = ES_Install::table( 'lead_consents' );
-		$texts    = ES_Install::table( 'consent_texts' );
+		$consents = Emblem_Studio_Install::table( 'lead_consents' );
+		$texts    = Emblem_Studio_Install::table( 'consent_texts' );
 		$in       = implode( ',', array_fill( 0, count( $lead_ids ), '%d' ) );
 
 		$rows = $wpdb->get_results(

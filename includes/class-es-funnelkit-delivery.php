@@ -4,14 +4,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class ES_FunnelKit_Delivery {
+final class Emblem_Studio_FunnelKit_Delivery {
 	public static function dispatch(
 		string $asset_key,
 		array $raw_fields,
 		array $direct_lead,
 		bool $direct_enabled
 	): array {
-		$feed = ES_FunnelKit_Form_Feed::dispatch( $asset_key, $raw_fields );
+		$feed = Emblem_Studio_FunnelKit_Form_Feed::dispatch( $asset_key, $raw_fields );
 		if ( ! empty( $feed['handled'] ) ) {
 			return array_merge(
 				[
@@ -40,7 +40,7 @@ final class ES_FunnelKit_Delivery {
 				'contact_id' => null,
 				'error'      => 'Unknown FunnelKit error',
 			],
-			ES_FunnelKit::push( $direct_lead ),
+			Emblem_Studio_FunnelKit::push( $direct_lead ),
 			[ 'mode' => 'direct' ]
 		);
 	}

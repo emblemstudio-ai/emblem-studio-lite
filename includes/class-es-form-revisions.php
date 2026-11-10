@@ -3,12 +3,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Form_Revisions {
+class Emblem_Studio_Form_Revisions {
 
 	private const KEEP_PER_FORM = 50;
 
 	private static function table(): string {
-		return ES_Install::table( 'form_revisions' );
+		return Emblem_Studio_Install::table( 'form_revisions' );
 	}
 
 	public static function insert( int $form_id, string $html, string $css, ?string $note = null ): ?int {

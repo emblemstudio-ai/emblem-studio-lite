@@ -3,12 +3,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Locks {
+class Emblem_Studio_Locks {
 
 	const TIMEOUT = 90;
 
 	private static function table(): string {
-		return ES_Install::table( 'forms' );
+		return Emblem_Studio_Install::table( 'forms' );
 	}
 
 	private static function row( int $form_id ) {

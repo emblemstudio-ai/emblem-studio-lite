@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Commerce_Basket extends WC_Cart {
+class Emblem_Studio_Commerce_Basket extends WC_Cart {
 
 	private WC_Customer $shopper;
 

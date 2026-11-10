@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_REST {
+class Emblem_Studio_REST {
 
 	public const NAMESPACE_V1 = 'emblem-studio/v1';
 

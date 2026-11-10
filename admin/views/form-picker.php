@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$bundles = ES_Templates::bundles();
+$bundles = Emblem_Studio_Templates::bundles();
 
 $shell_labels = [
 	'inline'      => __( 'Inline', 'emblem-studio' ),
@@ -62,8 +62,8 @@ $blank_url = admin_url( 'admin.php?page=emblem-studio-new&blank=1' );
 
 					<div class="es-picker-grid">
 						<?php foreach ( $forms as $form_slug => $form ) :
-							$thumb_url   = ES_Preview::template_thumb_url( $slug, (string) $form_slug );
-							$preview_url = ES_Preview::template_preview_url( $slug, (string) $form_slug );
+							$thumb_url   = Emblem_Studio_Preview::template_thumb_url( $slug, (string) $form_slug );
+							$preview_url = Emblem_Studio_Preview::template_preview_url( $slug, (string) $form_slug );
 							$install_url = wp_nonce_url(
 								admin_url( 'admin-post.php?action=es_install_form&bundle=' . rawurlencode( $slug ) . '&form=' . rawurlencode( (string) $form_slug ) ),
 								'es_install_form_' . $slug . '_' . $form_slug

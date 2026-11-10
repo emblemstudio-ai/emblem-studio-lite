@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Install {
+class Emblem_Studio_Install {
 
 	public static function activate(): void {
 		global $wpdb;
@@ -304,10 +304,10 @@ class ES_Install {
 	private static function create_scheduling_tables(): void {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		list( $segments, $scheduled ) = self::scheduling_tables_sql();
-		if ( ES_Caps::has( 'schedule_window' ) ) {
+		if ( Emblem_Studio_Caps::has( 'schedule_window' ) ) {
 			dbDelta( $segments );
 		}
-		if ( ES_Caps::has( 'revisions' ) ) {
+		if ( Emblem_Studio_Caps::has( 'revisions' ) ) {
 			dbDelta( $scheduled );
 		}
 	}
@@ -933,8 +933,8 @@ class ES_Install {
 				$wpdb->query( "UPDATE {$tests} SET live_since = started_at WHERE status = 'running'" );
 			}
 
-			if ( class_exists( 'ES_Form_Repo' ) ) {
-				ES_Form_Repo::reconcile_statuses();
+			if ( class_exists( 'Emblem_Studio_Form_Repo' ) ) {
+				Emblem_Studio_Form_Repo::reconcile_statuses();
 			}
 
 			update_option( 'emblem_studio_db_version', '39' );
@@ -1026,7 +1026,7 @@ class ES_Install {
 		if ( version_compare( $current, '48', '<' ) ) {
 			global $wpdb;
 			self::create_rate_limits_table();
-			$t = ES_Rate_Limit::table();
+			$t = Emblem_Studio_Rate_Limit::table();
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t ) {
 				foreach ( [ '_transient_esf_rl_', '_transient_timeout_esf_rl_' ] as $prefix ) {
 					$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $prefix ) . '%' ) );
@@ -1058,7 +1058,7 @@ class ES_Install {
 	private static function create_rate_limits_table(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		$table = ES_Rate_Limit::table();
+		$table = Emblem_Studio_Rate_Limit::table();
 		$charset_collate = $wpdb->get_charset_collate();
 		dbDelta( "CREATE TABLE {$table} (
 			bucket CHAR(32) NOT NULL,

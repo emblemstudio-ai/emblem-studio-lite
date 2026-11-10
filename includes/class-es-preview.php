@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Preview {
+class Emblem_Studio_Preview {
 
 	public function __construct() {
 		add_action( 'init', [ $this, 'maybe_render' ] );
@@ -29,16 +29,16 @@ class ES_Preview {
 		if ( ! wp_verify_nonce( $nonce, 'es_preview_' . $form_id ) ) {
 			wp_die( esc_html__( 'Invalid or expired preview link.', 'emblem-studio' ), '', [ 'response' => 403 ] );
 		}
-		$form = ES_Form_Repo::find( $form_id );
+		$form = Emblem_Studio_Form_Repo::find( $form_id );
 		if ( ! $form ) {
 			wp_die( esc_html__( 'Form not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
 		}
 
 		if ( isset( $_POST['preview_html'] ) ) {
-			$form->html = ES_HTML_Sanitizer::sanitize( (string) wp_unslash( $_POST['preview_html'] ) );
+			$form->html = Emblem_Studio_HTML_Sanitizer::sanitize( (string) wp_unslash( $_POST['preview_html'] ) );
 		}
 		if ( isset( $_POST['preview_css'] ) ) {
-			$form->css = ES_HTML_Sanitizer::sanitize_css( (string) wp_unslash( $_POST['preview_css'] ) );
+			$form->css = Emblem_Studio_HTML_Sanitizer::sanitize_css( (string) wp_unslash( $_POST['preview_css'] ) );
 		}
 		if ( isset( $_POST['preview_success_mode'] ) ) {
 			$mode = sanitize_text_field( wp_unslash( $_POST['preview_success_mode'] ) );
@@ -60,7 +60,7 @@ class ES_Preview {
 			exit;
 		}
 
-		$types = ES_Form_Repo::types_for( $form );
+		$types = Emblem_Studio_Form_Repo::types_for( $form );
 		$shell = ! empty( $types ) ? (string) $types[0] : 'inline';
 		$auto_trigger = [];
 		if ( ! empty( $form->auto_trigger_config ) && is_string( $form->auto_trigger_config ) ) {
@@ -118,7 +118,7 @@ class ES_Preview {
 		$form_name    = (string) $form->name;
 		$success_mode = (string) $form->success_mode;
 		$use_shadow   = ! empty( $form->use_shadow_dom ) ? '1' : '0';
-		$close_theme  = ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
+		$close_theme  = Emblem_Studio_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
 
 		$close_html = '';
 		$close_css  = '';
@@ -126,14 +126,14 @@ class ES_Preview {
 			list( $close_html, $close_css ) = self::ribbon_close_assets( $close_theme );
 		}
 
-		$preview_css = class_exists( 'ES_Design_System' )
-			? ES_Design_System::compose( $form, (string) $form->css )
+		$preview_css = class_exists( 'Emblem_Studio_Design_System' )
+			? Emblem_Studio_Design_System::compose( $form, (string) $form->css )
 			: (string) $form->css;
 		$payload = wp_json_encode(
 			[
 				'css'  => $preview_css,
 				'html' => (string) $form->html,
-				'live' => class_exists( 'ES_Live_Values' ) ? ES_Live_Values::resolve_html( (string) $form->html ) : null,
+				'live' => class_exists( 'Emblem_Studio_Live_Values' ) ? Emblem_Studio_Live_Values::resolve_html( (string) $form->html ) : null,
 			],
 			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES
 		);
@@ -259,9 +259,9 @@ class ES_Preview {
 		$form_id      = (int) $form->id;
 		$success_mode = (string) $form->success_mode;
 		$use_shadow   = ! empty( $form->use_shadow_dom ) ? '1' : '0';
-		$close_theme  = ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
+		$close_theme  = Emblem_Studio_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
 
-		$types  = ES_Form_Repo::types_for( $form );
+		$types  = Emblem_Studio_Form_Repo::types_for( $form );
 		if ( empty( $types ) ) {
 			$types = [ 'inline' ];
 		}
@@ -280,7 +280,7 @@ class ES_Preview {
 		$requested = isset( $_POST['inspector_shell'] ) ? sanitize_key( (string) wp_unslash( $_POST['inspector_shell'] ) ) : '';
 		$shell     = in_array( $requested, $types, true ) ? $requested : (string) $types[0];
 
-		$cfg       = ES_Form_Repo::get_shell_trigger_config( $form, $shell );
+		$cfg       = Emblem_Studio_Form_Repo::get_shell_trigger_config( $form, $shell );
 		$position  = self::resolve_preview_position( $shell, [ $shell => $cfg ] );
 		$corner    = $cfg['corner'] ?? 'bottom-right';
 		$is_popup  = in_array( $shell, [ 'popup-click', 'popup-auto' ], true );
@@ -308,14 +308,14 @@ class ES_Preview {
 		$max_width = max( 100, (int) ( $form->popup_max_width ?? 720 ) );
 		$wrap_css  = self::inspector_shell_wrap_css( $shell, $is_fullscreen, $max_width );
 
-		$inspector_render_css = class_exists( 'ES_Design_System' )
-			? ES_Design_System::compose( $form, (string) $form->css )
+		$inspector_render_css = class_exists( 'Emblem_Studio_Design_System' )
+			? Emblem_Studio_Design_System::compose( $form, (string) $form->css )
 			: (string) $form->css;
 		$payload = wp_json_encode(
 			[
 				'css'  => $inspector_render_css,
 				'html' => (string) $form->html,
-				'live' => class_exists( 'ES_Live_Values' ) ? ES_Live_Values::resolve_html( (string) $form->html ) : null,
+				'live' => class_exists( 'Emblem_Studio_Live_Values' ) ? Emblem_Studio_Live_Values::resolve_html( (string) $form->html ) : null,
 			],
 			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES
 		);
@@ -343,7 +343,7 @@ html, body { margin: 0; padding: 0; background: <?php echo esc_html( $body_bg );
 <body>
 <script>window.EmblemStudio = { ajaxUrl: <?php echo wp_json_encode( $ajax_url ); ?>, postId: 0, preview: true };
 window.__esInspectorCss = <?php echo wp_json_encode( (string) $form->css ); ?>;
-window.__esInspectorDs = <?php echo wp_json_encode( ( class_exists( 'ES_Design_System' ) && ! empty( $form->use_design_system ) ) ? ES_Design_System::get_css() : '' ); ?>;
+window.__esInspectorDs = <?php echo wp_json_encode( ( class_exists( 'Emblem_Studio_Design_System' ) && ! empty( $form->use_design_system ) ) ? Emblem_Studio_Design_System::get_css() : '' ); ?>;
 window.__esInspectorShells = <?php echo wp_json_encode( $shells_for_js ); ?>;
 window.__esInspectorShell = <?php echo wp_json_encode( $shell ); ?>;</script>
 <div class="esf-inspect-shell"><?php echo $host; ?><?php echo $close_html; ?></div>
@@ -695,8 +695,8 @@ JS;
 		if ( count( $parts ) !== 2 ) {
 			wp_die( esc_html__( 'Malformed template id.', 'emblem-studio' ), '', [ 'response' => 400 ] );
 		}
-		$template = ES_Templates::load_form( $parts[0], $parts[1] );
-		$bundle   = ES_Templates::bundle( $parts[0] );
+		$template = Emblem_Studio_Templates::load_form( $parts[0], $parts[1] );
+		$bundle   = Emblem_Studio_Templates::bundle( $parts[0] );
 		if ( ! $template ) {
 			wp_die( esc_html__( 'Template not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
 		}
@@ -733,7 +733,7 @@ JS;
 		if ( count( $parts ) !== 2 ) {
 			wp_die( esc_html__( 'Malformed template id.', 'emblem-studio' ), '', [ 'response' => 400 ] );
 		}
-		$form = ES_Templates::load_form( $parts[0], $parts[1] );
+		$form = Emblem_Studio_Templates::load_form( $parts[0], $parts[1] );
 		if ( ! $form ) {
 			wp_die( esc_html__( 'Template not found.', 'emblem-studio' ), '', [ 'response' => 404 ] );
 		}

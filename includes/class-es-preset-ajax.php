@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Preset_Ajax {
+class Emblem_Studio_Preset_Ajax {
 
 	public function __construct() {
 		add_action( 'wp_ajax_es_preset_list', [ $this, 'list_presets' ] );
@@ -21,18 +21,18 @@ class ES_Preset_Ajax {
 
 	private function posted_where(): array {
 		$raw = isset( $_POST['rules'] ) ? json_decode( wp_unslash( (string) $_POST['rules'] ), true ) : [];
-		return ES_Display_Rules::sanitize_where( is_array( $raw ) ? $raw : [] );
+		return Emblem_Studio_Display_Rules::sanitize_where( is_array( $raw ) ? $raw : [] );
 	}
 
 	private function present( object $p ): array {
-		return ES_Preset_Repo::to_admin_payload( $p ) + [
-			'usage_count' => ES_Preset_Repo::usage_count( (int) $p->id ),
+		return Emblem_Studio_Preset_Repo::to_admin_payload( $p ) + [
+			'usage_count' => Emblem_Studio_Preset_Repo::usage_count( (int) $p->id ),
 		];
 	}
 
 	public function list_presets(): void {
 		$this->authorize();
-		$out = array_map( [ $this, 'present' ], ES_Preset_Repo::all() );
+		$out = array_map( [ $this, 'present' ], Emblem_Studio_Preset_Repo::all() );
 		wp_send_json_success( [ 'presets' => array_values( $out ) ] );
 	}
 
@@ -45,23 +45,23 @@ class ES_Preset_Ajax {
 		$where = $this->posted_where();
 
 		$existing_id = 0;
-		foreach ( ES_Preset_Repo::all() as $p ) {
+		foreach ( Emblem_Studio_Preset_Repo::all() as $p ) {
 			if ( strcasecmp( (string) $p->name, $name ) === 0 ) {
 				$existing_id = (int) $p->id;
 				break;
 			}
 		}
-		$id = ES_Preset_Repo::save( [ 'name' => $name ] + $where, $existing_id ?: null );
-		ES_Preset_Repo::apply_to_forms( $id, $where );
+		$id = Emblem_Studio_Preset_Repo::save( [ 'name' => $name ] + $where, $existing_id ?: null );
+		Emblem_Studio_Preset_Repo::apply_to_forms( $id, $where );
 
-		$preset = ES_Preset_Repo::find( $id );
+		$preset = Emblem_Studio_Preset_Repo::find( $id );
 		wp_send_json_success( [ 'preset' => $this->present( $preset ) ] );
 	}
 
 	public function update(): void {
 		$this->authorize();
 		$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
-		if ( ! $id || ! ES_Preset_Repo::find( $id ) ) {
+		if ( ! $id || ! Emblem_Studio_Preset_Repo::find( $id ) ) {
 			wp_send_json_error( [ 'message' => 'Not found' ], 404 );
 		}
 		$name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['name'] ) ) : '';
@@ -69,10 +69,10 @@ class ES_Preset_Ajax {
 			wp_send_json_error( [ 'message' => 'Name required' ], 422 );
 		}
 		$where = $this->posted_where();
-		ES_Preset_Repo::save( [ 'name' => $name ] + $where, $id );
-		ES_Preset_Repo::apply_to_forms( $id, $where );
+		Emblem_Studio_Preset_Repo::save( [ 'name' => $name ] + $where, $id );
+		Emblem_Studio_Preset_Repo::apply_to_forms( $id, $where );
 
-		wp_send_json_success( [ 'preset' => $this->present( ES_Preset_Repo::find( $id ) ) ] );
+		wp_send_json_success( [ 'preset' => $this->present( Emblem_Studio_Preset_Repo::find( $id ) ) ] );
 	}
 
 	public function delete(): void {
@@ -81,7 +81,7 @@ class ES_Preset_Ajax {
 		if ( ! $id ) {
 			wp_send_json_error( [ 'message' => 'Missing id' ], 422 );
 		}
-		ES_Preset_Repo::delete( $id );
+		Emblem_Studio_Preset_Repo::delete( $id );
 		wp_send_json_success( [ 'deleted' => true ] );
 	}
 }

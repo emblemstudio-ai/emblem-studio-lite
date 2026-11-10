@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Display_Rules {
+class Emblem_Studio_Display_Rules {
 
 	public static function is_admin_frame(): bool {
 		if ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) {
@@ -437,7 +437,7 @@ class ES_Display_Rules {
 		}
 
 		global $wpdb;
-		$t = ES_Install::table( 'forms' );
+		$t = Emblem_Studio_Install::table( 'forms' );
 		$rows = $wpdb->get_col(
 			"SELECT display_rules FROM $t WHERE trashed_at IS NULL AND archived_at IS NULL AND status = 'active' AND display_rules IS NOT NULL AND display_rules <> ''"
 		);

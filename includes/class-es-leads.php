@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Leads {
+class Emblem_Studio_Leads {
 
 	public const PER_PAGE = 20;
 
@@ -81,7 +81,7 @@ class ES_Leads {
 
 	public static function counts_by_kind( array $filters ): array {
 		global $wpdb;
-		$leads = ES_Install::table( 'leads' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
 		$f = $filters;
 		$f['kind'] = 'all';
 		$where = self::build_where( $f );
@@ -102,8 +102,8 @@ class ES_Leads {
 
 	public static function paginated( int $page = 1, $filters = null ): array {
 		global $wpdb;
-		$leads = ES_Install::table( 'leads' );
-		$forms = ES_Install::table( 'forms' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
+		$forms = Emblem_Studio_Install::table( 'forms' );
 
 		$page   = max( 1, $page );
 		$offset = ( $page - 1 ) * self::PER_PAGE;
@@ -143,7 +143,7 @@ class ES_Leads {
 		$in  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $in is a placeholder list.
 		$with_leads = $wpdb->get_col( $wpdb->prepare(
-			'SELECT DISTINCT form_id FROM ' . ES_Install::table( 'leads' ) . " WHERE form_id IN ($in)",
+			'SELECT DISTINCT form_id FROM ' . Emblem_Studio_Install::table( 'leads' ) . " WHERE form_id IN ($in)",
 			$ids
 		) );
 		$with_leads = array_flip( array_map( 'intval', $with_leads ?: [] ) );
@@ -151,7 +151,7 @@ class ES_Leads {
 		return array_values( array_filter(
 			$forms,
 			static fn( object $f ): bool => isset( $with_leads[ (int) $f->id ] )
-				|| ES_Form_Repo::primary_metric( (string) ( $f->html ?? '' ) ) === 'conversions'
+				|| Emblem_Studio_Form_Repo::primary_metric( (string) ( $f->html ?? '' ) ) === 'conversions'
 		) );
 	}
 
@@ -227,30 +227,30 @@ class ES_Leads {
 	}
 
 	public static function delete( int $id ): bool {
-		if ( ! ES_Measurement::storage_transactional() ) {
+		if ( ! Emblem_Studio_Measurement::storage_transactional() ) {
 			global $wpdb;
-			$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT id, form_id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d', $id ) );
-			$events = ES_Measurement::events_for_lead( $id );
-			if ( ! $lead || is_wp_error( $events ) || $events !== [] || ES_Measurement::policy( [ 'form_id' => (int) $lead->form_id, 'event_type' => 'privacy', 'lead_id' => $id ] ) !== 'legacy' ) { return false; }
-			return $wpdb->delete( ES_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] ) === 1;
+			$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT id, form_id FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE id = %d', $id ) );
+			$events = Emblem_Studio_Measurement::events_for_lead( $id );
+			if ( ! $lead || is_wp_error( $events ) || $events !== [] || Emblem_Studio_Measurement::policy( [ 'form_id' => (int) $lead->form_id, 'event_type' => 'privacy', 'lead_id' => $id ] ) !== 'legacy' ) { return false; }
+			return $wpdb->delete( Emblem_Studio_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] ) === 1;
 		}
-		return ES_Measurement_Transaction::run( static function () use ( $id ): bool {
+		return Emblem_Studio_Measurement_Transaction::run( static function () use ( $id ): bool {
 			global $wpdb;
-			$lead = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . ES_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $id ) );
-			if ( ! $lead || ES_Measurement::erase_for_lead( $id ) === false ) { return false; }
-			return $wpdb->delete( ES_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] ) === 1;
+			$lead = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE id = %d FOR UPDATE', $id ) );
+			if ( ! $lead || Emblem_Studio_Measurement::erase_for_lead( $id ) === false ) { return false; }
+			return $wpdb->delete( Emblem_Studio_Install::table( 'leads' ), [ 'id' => $id ], [ '%d' ] ) === 1;
 		} ) === true;
 	}
 
 	public static function delete_by_saas_id( int $saas_lead_id ): bool {
 		global $wpdb;
-		$id = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . ES_Install::table( 'leads' ) . ' WHERE saas_lead_id = %d', $saas_lead_id ) );
+		$id = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE saas_lead_id = %d', $saas_lead_id ) );
 		return $id ? self::delete( (int) $id ) : false;
 	}
 
 	public static function move_to_humans( int $lead_id, bool $push = true ): array {
 		global $wpdb;
-		$leads_table = ES_Install::table( 'leads' );
+		$leads_table = Emblem_Studio_Install::table( 'leads' );
 
 		$lead = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $leads_table WHERE id = %d", $lead_id ) );
 		if ( ! $lead ) {
@@ -262,7 +262,7 @@ class ES_Leads {
 
 		$wpdb->update( $leads_table, [ 'is_bot' => 0 ], [ 'id' => $lead_id ] );
 
-		$events_table = ES_Install::table( 'events' );
+		$events_table = Emblem_Studio_Install::table( 'events' );
 		$hp_event_id  = $wpdb->get_var( $wpdb->prepare(
 			"SELECT id FROM $events_table WHERE form_id = %d AND event_type = 'honeypot_blocked' AND created_at = %s LIMIT 1",
 			(int) $lead->form_id,
@@ -271,8 +271,8 @@ class ES_Leads {
 		if ( $hp_event_id ) {
 			$wpdb->update( $events_table, [ 'event_type' => 'conversion' ], [ 'id' => (int) $hp_event_id ] );
 
-			if ( class_exists( 'ES_AB' ) ) {
-				ES_AB::auto_winner_check( (int) $lead->form_id );
+			if ( class_exists( 'Emblem_Studio_AB' ) ) {
+				Emblem_Studio_AB::auto_winner_check( (int) $lead->form_id );
 			}
 		}
 
@@ -285,7 +285,7 @@ class ES_Leads {
 
 	public static function retry_push( int $lead_id ): array {
 		global $wpdb;
-		$leads_table = ES_Install::table( 'leads' );
+		$leads_table = Emblem_Studio_Install::table( 'leads' );
 
 		$lead = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $leads_table WHERE id = %d", $lead_id ) );
 		if ( ! $lead ) {
@@ -303,9 +303,9 @@ class ES_Leads {
 
 	private static function push_to_connections( object $lead ): array {
 		global $wpdb;
-		$leads_table = ES_Install::table( 'leads' );
+		$leads_table = Emblem_Studio_Install::table( 'leads' );
 
-		$form = ES_Form_Repo::find( (int) $lead->form_id );
+		$form = Emblem_Studio_Form_Repo::find( (int) $lead->form_id );
 		if ( ! $form ) {
 			return [ 'ok' => true, 'message' => __( 'Source form is gone — nothing was pushed.', 'emblem-studio' ) ];
 		}
@@ -325,7 +325,7 @@ class ES_Leads {
 		$asset_key = ! empty( $form->saas_form_id )
 			? 'saas:' . (int) $form->saas_form_id
 			: 'wp:' . (int) $form->id;
-		$push_res = ES_FunnelKit_Delivery::dispatch(
+		$push_res = Emblem_Studio_FunnelKit_Delivery::dispatch(
 			$asset_key,
 			array_merge( [ 'email' => (string) $lead->email ], $extra ),
 			[
@@ -336,7 +336,7 @@ class ES_Leads {
 				'lists'         => is_array( $lists ) ? $lists : [],
 				'tags'          => is_array( $tags ) ? $tags : [],
 				'custom_fields' => $extra,
-				'contact_status' => ES_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
+				'contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 			],
 			$fk_enabled
 		);
@@ -348,9 +348,9 @@ class ES_Leads {
 			], [ 'id' => (int) $lead->id ] );
 		}
 
-		if ( class_exists( 'ES_Webhooks' ) ) {
-			$payload = ES_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null, ES_Visit_Source::decode( $lead->source ?? null ) );
-			ES_Webhooks::send_for_form( $form, $payload );
+		if ( class_exists( 'Emblem_Studio_Webhooks' ) ) {
+			$payload = Emblem_Studio_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null, Emblem_Studio_Visit_Source::decode( $lead->source ?? null ) );
+			Emblem_Studio_Webhooks::send_for_form( $form, $payload );
 		}
 
 		return [ 'ok' => true, 'message' => null ];
@@ -368,15 +368,15 @@ class ES_Leads {
 
 	public static function find_by_email( string $email ): array {
 		global $wpdb;
-		$t = ES_Install::table( 'leads' );
+		$t = Emblem_Studio_Install::table( 'leads' );
 		$normalized = strtolower( trim( $email ) );
 		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE email = %s ORDER BY id DESC", $normalized ) );
 	}
 
 	public static function stream_csv( $filters = null ): void {
 		global $wpdb;
-		$leads = ES_Install::table( 'leads' );
-		$forms = ES_Install::table( 'forms' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
+		$forms = Emblem_Studio_Install::table( 'forms' );
 
 		if ( is_int( $filters ) ) {
 			$filters = [ 'form_id' => $filters ];
@@ -397,8 +397,8 @@ class ES_Leads {
 
 	private static function csv_batch( array $where, string $columns, int $before_id ): array {
 		global $wpdb;
-		$leads = ES_Install::table( 'leads' );
-		$forms = ES_Install::table( 'forms' );
+		$leads = Emblem_Studio_Install::table( 'leads' );
+		$forms = Emblem_Studio_Install::table( 'forms' );
 		$sql   = $where['sql'] !== '' ? $where['sql'] . ' AND l.id < %d' : 'WHERE l.id < %d';
 		$args  = array_merge( $where['args'], [ $before_id ] );
 		return (array) $wpdb->get_results(
@@ -429,14 +429,14 @@ class ES_Leads {
 			[ 'id', 'created_at', 'form', 'form_slug', 'email', 'first_name', 'last_name', 'phone', 'tags' ],
 			array_map( [ self::class, 'humanize_custom_key' ], $custom_keys ),
 			[ 'funnelkit_pushed', 'funnelkit_contact_id', 'error', 'consent', 'consent_wording' ],
-			ES_Visit_Source::CSV_HEADERS
+			Emblem_Studio_Visit_Source::CSV_HEADERS
 		) );
 
 		$columns = 'l.id, l.created_at, l.email, l.extra_fields, l.funnelkit_pushed, l.funnelkit_contact_id, l.error, l.source, f.name AS form_name, f.slug AS form_slug';
 		$before  = PHP_INT_MAX;
 		do {
 			$batch = self::csv_batch( $where, $columns, $before );
-			$consent = ES_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( $batch, 'id' ) ) );
+			$consent = Emblem_Studio_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( $batch, 'id' ) ) );
 			foreach ( $batch as $r ) {
 				$extra = $r['extra_fields'] ? json_decode( (string) $r['extra_fields'], true ) : [];
 				$extra = is_array( $extra ) ? $extra : [];
@@ -462,7 +462,7 @@ class ES_Leads {
 						implode( '; ', array_map( static fn( $c ) => $c['field'] . ': ' . ( $c['agreed'] ? 'yes' : 'no' ), $cs ) ),
 						implode( ' | ', array_map( static fn( $c ) => $c['text'], array_filter( $cs, static fn( $c ) => '' !== $c['text'] ) ) ),
 					],
-					ES_Visit_Source::csv_cells( ES_Visit_Source::decode( $r['source'] ?? null ) )
+					Emblem_Studio_Visit_Source::csv_cells( Emblem_Studio_Visit_Source::decode( $r['source'] ?? null ) )
 				);
 				fputcsv( $out, array_map( [ self::class, 'neutralize_formula' ], $row ) );
 				$before = (int) $r['id'];
@@ -514,7 +514,7 @@ class ES_Leads {
 
 	public static function purge_bot_leads( int $days ): int {
 		global $wpdb;
-		$t       = ES_Install::table( 'leads' );
+		$t       = Emblem_Studio_Install::table( 'leads' );
 		$cutoff  = wp_date( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * DAY_IN_SECONDS ) );
 		$deleted = 0;
 		for ( $i = 0; $i < 50; $i++ ) {

@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Shortcode {
+class Emblem_Studio_Shortcode {
 
 	private static bool $assets_enqueued = false;
 
@@ -22,7 +22,7 @@ class ES_Shortcode {
 			return;
 		}
 		global $wpdb;
-		$t = ES_Install::table( 'forms' );
+		$t = Emblem_Studio_Install::table( 'forms' );
 		$ids = get_transient( self::FORM_IDS_TRANSIENT );
 		if ( ! is_array( $ids ) ) {
 			$ids = array_map( 'intval', (array) $wpdb->get_col( "SELECT id FROM $t" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -73,21 +73,21 @@ class ES_Shortcode {
 		if ( $saas !== null ) {
 			return $saas;
 		}
-		$form = ES_Form_Repo::find( $id );
+		$form = Emblem_Studio_Form_Repo::find( $id );
 		if ( ! $form ) {
 			return '';
 		}
-		if ( ! ES_Form_Repo::is_currently_active( $form ) ) {
+		if ( ! Emblem_Studio_Form_Repo::is_currently_active( $form ) ) {
 			return '';
 		}
-		if ( ! in_array( 'inline', ES_Form_Repo::types_for( $form ), true ) ) {
+		if ( ! in_array( 'inline', Emblem_Studio_Form_Repo::types_for( $form ), true ) ) {
 			return '';
 		}
 		return $this->emit_inline( $form );
 	}
 
 	public function render_popup_click( int $id, $content ): string {
-		$form = ES_Form_Repo::find( $id );
+		$form = Emblem_Studio_Form_Repo::find( $id );
 		$label = ( is_string( $content ) && trim( wp_strip_all_tags( $content ) ) !== '' )
 			? $content
 			: esc_html__( 'Click here', 'emblem-studio' );
@@ -99,10 +99,10 @@ class ES_Shortcode {
 		if ( ! $form ) {
 			return is_string( $content ) ? $content : '';
 		}
-		if ( ! ES_Form_Repo::is_currently_active( $form ) ) {
+		if ( ! Emblem_Studio_Form_Repo::is_currently_active( $form ) ) {
 			return is_string( $content ) ? $content : '';
 		}
-		if ( ! in_array( 'popup-click', ES_Form_Repo::types_for( $form ), true ) ) {
+		if ( ! in_array( 'popup-click', Emblem_Studio_Form_Repo::types_for( $form ), true ) ) {
 			return is_string( $content ) ? $content : '';
 		}
 		return $this->emit_popup_click( $form, $label );
@@ -180,7 +180,7 @@ class ES_Shortcode {
 		$shadow     = ! empty( $form->use_shadow_dom ) ? '1' : '0';
 		$max_width  = max( 100, (int) ( $form->popup_max_width ?? 720 ) );
 		$fullscreen = ! empty( $form->popup_fullscreen ) ? '1' : '0';
-		$close_theme = ES_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
+		$close_theme = Emblem_Studio_Form_Repo::close_theme( $form->popup_close_theme ?? 'light' );
 		$track      = ! empty( $form->track_clicks ) ? '1' : '0';
 		$buy        = $this->buy_attr( $form );
 
@@ -204,7 +204,7 @@ class ES_Shortcode {
 	public function build_payload( object $form ): string {
 		$html = (string) $form->html;
 		$css  = (string) $form->css;
-		$variant = class_exists( 'ES_AB' ) ? ES_AB::assigned_variant_for_form( (int) $form->id ) : null;
+		$variant = class_exists( 'Emblem_Studio_AB' ) ? Emblem_Studio_AB::assigned_variant_for_form( (int) $form->id ) : null;
 		if ( $variant ) {
 			if ( is_string( $variant->html ?? null ) ) {
 				$html = (string) $variant->html;
@@ -213,14 +213,14 @@ class ES_Shortcode {
 				$css = (string) $variant->css;
 			}
 		}
-		if ( class_exists( 'ES_Design_System' ) ) {
-			$css = ES_Design_System::compose( $form, $css );
+		if ( class_exists( 'Emblem_Studio_Design_System' ) ) {
+			$css = Emblem_Studio_Design_System::compose( $form, $css );
 		}
 		$payload = [
 			'css'  => $css,
 			'html' => $html,
 		];
-		$live = class_exists( 'ES_Live_Values' ) ? ES_Live_Values::resolve_html( $html ) : null;
+		$live = class_exists( 'Emblem_Studio_Live_Values' ) ? Emblem_Studio_Live_Values::resolve_html( $html ) : null;
 		if ( $live !== null ) {
 			$payload['live'] = (object) $live;
 		}
@@ -231,20 +231,20 @@ class ES_Shortcode {
 	}
 
 	public function variant_attr( int $form_id ): string {
-		$slot = class_exists( 'ES_AB' ) ? ES_AB::assigned_slot_for_form( $form_id ) : '';
+		$slot = class_exists( 'Emblem_Studio_AB' ) ? Emblem_Studio_AB::assigned_slot_for_form( $form_id ) : '';
 		return $slot === '' ? '' : ' data-esf-variant="' . esc_attr( $slot ) . '"';
 	}
 
 	public function buy_attr( object $form ): string {
 		$on = ! empty( $form->track_purchases )
-			&& class_exists( 'ES_Purchases' )
-			&& ES_Purchases::enabled();
+			&& class_exists( 'Emblem_Studio_Purchases' )
+			&& Emblem_Studio_Purchases::enabled();
 
 		return $on ? ' data-esf-track-purchases="1"' : '';
 	}
 	public function connection_decision( object $form ): array {
-		if ( class_exists( 'ES_Connections' ) ) {
-			return ES_Connections::render_decision( $form );
+		if ( class_exists( 'Emblem_Studio_Connections' ) ) {
+			return Emblem_Studio_Connections::render_decision( $form );
 		}
 
 		return [ 'mode' => 'show', 'attrs' => '' ];
@@ -271,7 +271,7 @@ class ES_Shortcode {
 
 		return str_replace(
 			'<script ',
-			'<script ' . ES_No_Delay::ATTRS . ' ',
+			'<script ' . Emblem_Studio_No_Delay::ATTRS . ' ',
 			$tag
 		);
 	}
@@ -282,11 +282,11 @@ class ES_Shortcode {
 			return $cached === '1';
 		}
 		global $wpdb;
-		$t    = ES_Install::table( 'forms' );
+		$t    = Emblem_Studio_Install::table( 'forms' );
 		$rows = $wpdb->get_col(
 			"SELECT form_types FROM $t WHERE trashed_at IS NULL AND archived_at IS NULL AND status = 'active' AND form_types IS NOT NULL AND form_types <> ''"
 		);
-		$auto = ES_Form_Repo::auto_shells();
+		$auto = Emblem_Studio_Form_Repo::auto_shells();
 		$any  = false;
 		foreach ( (array) $rows as $json ) {
 			$types = json_decode( (string) $json, true );

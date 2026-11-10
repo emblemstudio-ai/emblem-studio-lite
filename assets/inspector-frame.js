@@ -56,7 +56,9 @@
 			var fam = families[fi];
 			var scoped = fam + '__es' + _esHashStr(blocksByFamily[fam].join('\n'));
 			var nameRe = new RegExp("(['\"]?)\\b" + _esEscapeRegExp(fam) + "\\b\\1", 'g');
-			css = css.replace(nameRe, function (_all, q) { return q + scoped + q; });
+			css = css.replace(/(^|[;{\s])(font-family|font)(\s*:)([^;{}]*)/gi, function(_d, pre, prop, colon, val){
+				return pre + prop + colon + val.replace(nameRe, function(_all, q){ return q + scoped + q; });
+			});
 		}
 		return css.replace(blockRe, function (block) {
 			if (!_esLiftedFontFaceRules[block]) {

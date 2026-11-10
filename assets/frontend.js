@@ -78,7 +78,9 @@
 			var fam = families[fi];
 			var scoped = fam + '__es' + _esHashStr(blocksByFamily[fam].join('\n'));
 			var nameRe = new RegExp("(['\"]?)\\b" + _esEscapeRegExp(fam) + "\\b\\1", 'g');
-			css = css.replace(nameRe, function (_all, q) { return q + scoped + q; });
+			css = css.replace(/(^|[;{\s])(font-family|font)(\s*:)([^;{}]*)/gi, function(_d, pre, prop, colon, val){
+				return pre + prop + colon + val.replace(nameRe, function(_all, q){ return q + scoped + q; });
+			});
 		}
 		return css.replace(blockRe, function (block) {
 			if (!_esLiftedFontFaceRules[block]) {
@@ -824,7 +826,7 @@
 		if (form._esHoneypotInjected) return;
 		form._esHoneypotInjected = true;
 		const wrap = document.createElement('div');
-		wrap.style.cssText = 'position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;';
+		wrap.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;';
 		wrap.setAttribute('aria-hidden', 'true');
 		const input = document.createElement('input');
 		input.type = 'text';
@@ -841,7 +843,7 @@
 	function requestStamp(form) {
 		if (form._esStampP) return form._esStampP;
 		const root = form.getRootNode && form.getRootNode();
-		const host = root && root.host;
+		const host = (form.closest && form.closest('.esf-host[data-esf-id]')) || (root && root.host);
 		const formId = host && host.getAttribute('data-esf-id');
 		if (!formId) return Promise.resolve('');
 		const body = new FormData();

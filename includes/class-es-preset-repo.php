@@ -3,10 +3,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Preset_Repo {
+class Emblem_Studio_Preset_Repo {
 
 	public static function table(): string {
-		return ES_Install::table( 'display_rule_presets' );
+		return Emblem_Studio_Install::table( 'display_rule_presets' );
 	}
 
 	public static function all(): array {
@@ -27,7 +27,7 @@ class ES_Preset_Repo {
 		$t   = self::table();
 		$now = current_time( 'mysql' );
 
-		$where = ES_Display_Rules::sanitize_where( $data );
+		$where = Emblem_Studio_Display_Rules::sanitize_where( $data );
 		$name  = trim( (string) ( $data['name'] ?? '' ) );
 
 		$row = [
@@ -56,9 +56,9 @@ class ES_Preset_Repo {
 
 	public static function usage_count( int $presetId ): int {
 		$count = 0;
-		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
-			$rules = ES_Display_Rules::get_all_for_form( $form );
-			foreach ( ES_Form_Repo::auto_shells() as $shell ) {
+		foreach ( Emblem_Studio_Form_Repo::all( 'all' ) as $form ) {
+			$rules = Emblem_Studio_Display_Rules::get_all_for_form( $form );
+			foreach ( Emblem_Studio_Form_Repo::auto_shells() as $shell ) {
 				if ( ( $rules[ $shell ]['preset_id'] ?? null ) === $presetId ) {
 					$count++;
 				}
@@ -68,33 +68,33 @@ class ES_Preset_Repo {
 	}
 
 	public static function apply_to_forms( int $presetId, array $where ): void {
-		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
-			$rules   = ES_Display_Rules::get_all_for_form( $form );
+		foreach ( Emblem_Studio_Form_Repo::all( 'all' ) as $form ) {
+			$rules   = Emblem_Studio_Display_Rules::get_all_for_form( $form );
 			$changed = false;
-			foreach ( ES_Form_Repo::auto_shells() as $shell ) {
+			foreach ( Emblem_Studio_Form_Repo::auto_shells() as $shell ) {
 				if ( ( $rules[ $shell ]['preset_id'] ?? null ) === $presetId ) {
 					$rules[ $shell ] = array_merge( $rules[ $shell ], $where );
 					$changed         = true;
 				}
 			}
 			if ( $changed ) {
-				ES_Form_Repo::update_display_rules( (int) $form->id, $rules );
+				Emblem_Studio_Form_Repo::update_display_rules( (int) $form->id, $rules );
 			}
 		}
 	}
 
 	public static function decouple_forms_using( int $presetId ): void {
-		foreach ( ES_Form_Repo::all( 'all' ) as $form ) {
-			$rules   = ES_Display_Rules::get_all_for_form( $form );
+		foreach ( Emblem_Studio_Form_Repo::all( 'all' ) as $form ) {
+			$rules   = Emblem_Studio_Display_Rules::get_all_for_form( $form );
 			$changed = false;
-			foreach ( ES_Form_Repo::auto_shells() as $shell ) {
+			foreach ( Emblem_Studio_Form_Repo::auto_shells() as $shell ) {
 				if ( ( $rules[ $shell ]['preset_id'] ?? null ) === $presetId ) {
 					$rules[ $shell ]['preset_id'] = null;
 					$changed                      = true;
 				}
 			}
 			if ( $changed ) {
-				ES_Form_Repo::update_display_rules( (int) $form->id, $rules );
+				Emblem_Studio_Form_Repo::update_display_rules( (int) $form->id, $rules );
 			}
 		}
 	}

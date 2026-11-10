@@ -3,14 +3,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Event_Recorder {
+class Emblem_Studio_Event_Recorder {
 
 	public static function record( int $form_id, string $event_type, ?int $post_id = null, string $shell = 'inline', ?string $click_target = null, ?string $variant = null, ?int $lead_id = null, ?string $step = null, ?string $source = null ): bool {
 		$step    = $event_type === 'dropoff' ? self::clean_step( $step ) : '';
-		$source  = ES_Visit_Source::event_channel( $source ?? ( isset( $_POST['src'] ) ? (string) wp_unslash( $_POST['src'] ) : null ) );
+		$source  = Emblem_Studio_Visit_Source::event_channel( $source ?? ( isset( $_POST['src'] ) ? (string) wp_unslash( $_POST['src'] ) : null ) );
 		$context = [ 'form_id' => $form_id, 'event_type' => $event_type, 'lead_id' => $lead_id ];
-		if ( ES_Measurement::policy( $context ) === 'strict' ) {
-			return ES_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id, $step, $source ): bool {
+		if ( Emblem_Studio_Measurement::policy( $context ) === 'strict' ) {
+			return Emblem_Studio_Measurement::authorized_write( $context, static function ( array $decision ) use ( $form_id, $event_type, $post_id, $shell, $variant, $lead_id, $step, $source ): bool {
 				global $wpdb;
 				$personal = $decision['personal'];
 				$row = [
@@ -35,7 +35,7 @@ class ES_Event_Recorder {
 						}
 					}
 				}
-				return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
+				return $wpdb->insert( Emblem_Studio_Install::table( 'events' ), $row ) === 1;
 			} );
 		}
 		global $wpdb;
@@ -70,7 +70,7 @@ class ES_Event_Recorder {
 		if ( $source !== null ) {
 			$row['source'] = $source;
 		}
-		return $wpdb->insert( ES_Install::table( 'events' ), $row ) === 1;
+		return $wpdb->insert( Emblem_Studio_Install::table( 'events' ), $row ) === 1;
 	}
 
 	public static function clean_step( ?string $step ): string {
@@ -464,12 +464,12 @@ class ES_Event_Recorder {
 	}
 
 	public static function record_bot( int $form_id, string $shell, ?int $post_id, string $label, string $ua, string $ip ): void {
-		if ( ES_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'bot_filtered', 'lead_id' => null ] ) === 'strict' ) {
+		if ( Emblem_Studio_Measurement::policy( [ 'form_id' => $form_id, 'event_type' => 'bot_filtered', 'lead_id' => null ] ) === 'strict' ) {
 			self::record( $form_id, 'bot_filtered', $post_id, $shell );
 			return;
 		}
 		global $wpdb;
-		$wpdb->insert( ES_Install::table( 'events' ), [
+		$wpdb->insert( Emblem_Studio_Install::table( 'events' ), [
 			'form_id'      => $form_id,
 			'event_type'   => 'bot_filtered',
 			'type'         => $shell,
@@ -483,7 +483,7 @@ class ES_Event_Recorder {
 
 	public static function purge_bot_events( int $days ): int {
 		global $wpdb;
-		$t        = ES_Install::table( 'events' );
+		$t        = Emblem_Studio_Install::table( 'events' );
 		$cutoff   = wp_date( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * DAY_IN_SECONDS ) );
 		$form_ids = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT form_id FROM $t" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$deleted  = 0;

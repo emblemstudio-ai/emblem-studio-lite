@@ -3,9 +3,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$status = ES_FunnelKit::detection_status();
-$lists  = ES_FunnelKit::get_lists();
-$logs   = ES_Logger::recent( 50 );
+$status = Emblem_Studio_FunnelKit::detection_status();
+$lists  = Emblem_Studio_FunnelKit::get_lists();
+$logs   = Emblem_Studio_Logger::recent( 50 );
 ?>
 <div class="wrap emblem-studio-wrap">
 	<div class="es-page-header">
@@ -54,15 +54,15 @@ $logs   = ES_Logger::recent( 50 );
 		<table class="form-table" role="presentation">
 			<tr>
 				<th><label for="es-fk-key"><?php esc_html_e( 'API Key', 'emblem-studio' ); ?></label></th>
-				<td><input id="es-fk-key" name="fk_api_key" type="text" class="regular-text" value="<?php echo esc_attr( get_option( ES_FunnelKit::OPT_API_KEY, '' ) ); ?>" autocomplete="off"></td>
+				<td><input id="es-fk-key" name="fk_api_key" type="text" class="regular-text" value="<?php echo esc_attr( get_option( Emblem_Studio_FunnelKit::OPT_API_KEY, '' ) ); ?>" autocomplete="off"></td>
 			</tr>
 			<tr>
 				<th><label for="es-fk-secret"><?php esc_html_e( 'API Secret', 'emblem-studio' ); ?></label></th>
-				<td><input id="es-fk-secret" name="fk_api_secret" type="password" class="regular-text" value="" placeholder="<?php echo get_option( ES_FunnelKit::OPT_API_SECRET, '' ) ? esc_attr__( 'Leave blank to keep saved secret', 'emblem-studio' ) : ''; ?>" autocomplete="new-password"></td>
+				<td><input id="es-fk-secret" name="fk_api_secret" type="password" class="regular-text" value="" placeholder="<?php echo get_option( Emblem_Studio_FunnelKit::OPT_API_SECRET, '' ) ? esc_attr__( 'Leave blank to keep saved secret', 'emblem-studio' ) : ''; ?>" autocomplete="new-password"></td>
 			</tr>
 			<tr>
 				<th><label for="es-fk-base"><?php esc_html_e( 'API Base URL', 'emblem-studio' ); ?></label></th>
-				<td><input id="es-fk-base" name="fk_api_base" type="url" class="regular-text" value="<?php echo esc_attr( get_option( ES_FunnelKit::OPT_API_BASE, home_url() ) ); ?>" placeholder="<?php echo esc_attr( home_url() ); ?>">
+				<td><input id="es-fk-base" name="fk_api_base" type="url" class="regular-text" value="<?php echo esc_attr( get_option( Emblem_Studio_FunnelKit::OPT_API_BASE, home_url() ) ); ?>" placeholder="<?php echo esc_attr( home_url() ); ?>">
 					<p class="description"><?php esc_html_e( 'Defaults to this site. Change only if FunnelKit lives on a different site.', 'emblem-studio' ); ?></p>
 				</td>
 			</tr>
@@ -78,7 +78,7 @@ $logs   = ES_Logger::recent( 50 );
 					</p>
 					<?php
 					global $wpdb;
-					$events_table = ES_Install::table( 'events' );
+					$events_table = Emblem_Studio_Install::table( 'events' );
 					$bot_total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $events_table WHERE event_type = 'bot_filtered'" );
 					if ( $bot_total > 0 ) :
 					?>
@@ -94,7 +94,7 @@ $logs   = ES_Logger::recent( 50 );
 					<th><?php esc_html_e( 'Datacenter detection', 'emblem-studio' ); ?></th>
 					<td>
 						<label style="display:inline-flex; align-items:center; gap:0.5rem;">
-							<input type="checkbox" class="es-toggle-input" name="detect_datacenter" value="1" <?php checked( ES_Event_Recorder::detect_datacenter_enabled() ); ?>>
+							<input type="checkbox" class="es-toggle-input" name="detect_datacenter" value="1" <?php checked( Emblem_Studio_Event_Recorder::detect_datacenter_enabled() ); ?>>
 							<?php esc_html_e( 'Treat browsers from cloud datacenters as bots', 'emblem-studio' ); ?>
 						</label>
 						<p class="description">
@@ -108,7 +108,7 @@ $logs   = ES_Logger::recent( 50 );
 					<td>
 						<?php $proxy_forced = defined( 'EMBLEM_STUDIO_TRUST_PROXY' ) && EMBLEM_STUDIO_TRUST_PROXY; ?>
 						<label style="display:inline-flex; align-items:center; gap:0.5rem;">
-							<input type="checkbox" class="es-toggle-input" name="trust_proxy" value="1" <?php checked( ES_Event_Recorder::trust_proxy_enabled() ); ?> <?php disabled( $proxy_forced ); ?>>
+							<input type="checkbox" class="es-toggle-input" name="trust_proxy" value="1" <?php checked( Emblem_Studio_Event_Recorder::trust_proxy_enabled() ); ?> <?php disabled( $proxy_forced ); ?>>
 							<?php esc_html_e( 'Resolve the real visitor IP from proxy headers (Cloudflare, reverse proxy)', 'emblem-studio' ); ?>
 						</label>
 						<p class="description">
@@ -123,11 +123,11 @@ $logs   = ES_Logger::recent( 50 );
 				<tr>
 					<th><?php esc_html_e( 'Exclude IP addresses', 'emblem-studio' ); ?></th>
 					<td>
-						<textarea name="exclude_ips" rows="3" cols="40" class="large-text code" placeholder="159.203.93.67"><?php echo esc_textarea( implode( "\n", ES_Event_Recorder::excluded_ips() ) ); ?></textarea>
+						<textarea name="exclude_ips" rows="3" cols="40" class="large-text code" placeholder="159.203.93.67"><?php echo esc_textarea( implode( "\n", Emblem_Studio_Event_Recorder::excluded_ips() ) ); ?></textarea>
 						<p class="description">
 							<?php esc_html_e( 'One IP per line. Hits from these IPs are dropped from ALL stats (page views, impressions, clicks) — use it to mute your own uptime / synthetic monitors and load tests, including headless-browser monitors that spoof a real browser UA the bot filter can\'t catch. Behind Cloudflare, enable "Behind a CDN / proxy" above so the real IP is matched.', 'emblem-studio' ); ?>
 						</p>
-						<p class="description"><?php printf( esc_html__( 'IP the plugin sees for YOUR current request: %s', 'emblem-studio' ), '<code>' . esc_html( ES_Event_Recorder::client_ip() ) . '</code>' ); ?></p>
+						<p class="description"><?php printf( esc_html__( 'IP the plugin sees for YOUR current request: %s', 'emblem-studio' ), '<code>' . esc_html( Emblem_Studio_Event_Recorder::client_ip() ) . '</code>' ); ?></p>
 					</td>
 				</tr>
 

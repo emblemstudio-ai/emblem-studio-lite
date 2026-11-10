@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Commerce {
+class Emblem_Studio_Commerce {
 
 	private const MAX_VARIATIONS = 25;
 
@@ -146,7 +146,7 @@ class ES_Commerce {
 		$previous_customer = $wc->customer;
 
 		try {
-			$basket       = new ES_Commerce_Basket( $product, $quantity );
+			$basket       = new Emblem_Studio_Commerce_Basket( $product, $quantity );
 			$wc->cart     = $basket;
 			$wc->customer = $basket->get_customer();
 
@@ -252,7 +252,7 @@ class ES_Commerce {
 	}
 
 	private static function measure( WooCommerce $wc, WC_Product $product, string $code, int $quantity ): ?float {
-		$basket   = new ES_Commerce_Basket( $product, $quantity );
+		$basket   = new Emblem_Studio_Commerce_Basket( $product, $quantity );
 		$wc->cart = $basket;
 
 		$discounts = new WC_Discounts( $basket );

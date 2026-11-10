@@ -1,5 +1,5 @@
 <?php
-final class ES_Form_Stamp {
+final class Emblem_Studio_Form_Stamp {
 
 	public const MAX_AGE_MS = 86400000;
 
@@ -23,7 +23,7 @@ final class ES_Form_Stamp {
 	}
 
 	public static function claim( string $stamp ): bool {
-		return ES_Rate_Limit::claim_once( 'stamp:' . $stamp, (int) ( self::MAX_AGE_MS / 1000 ) );
+		return Emblem_Studio_Rate_Limit::claim_once( 'stamp:' . $stamp, (int) ( self::MAX_AGE_MS / 1000 ) );
 	}
 
 	private static function sign( string $form_key, int $ms, string $nonce ): string {

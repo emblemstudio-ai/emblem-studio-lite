@@ -3,12 +3,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Logger {
+class Emblem_Studio_Logger {
 
 	public static function log( string $level, string $message, array $context = [] ): void {
 		global $wpdb;
 		$wpdb->insert(
-			ES_Install::table( 'logs' ),
+			Emblem_Studio_Install::table( 'logs' ),
 			[
 				'level'      => $level,
 				'message'    => $message,
@@ -28,13 +28,13 @@ class ES_Logger {
 
 	public static function recent( int $limit = 100 ): array {
 		global $wpdb;
-		$t = ES_Install::table( 'logs' );
+		$t = Emblem_Studio_Install::table( 'logs' );
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t ORDER BY id DESC LIMIT %d", $limit ) );
 	}
 
 	public static function purge_old( int $days = 30 ): int {
 		global $wpdb;
-		$t = ES_Install::table( 'logs' );
+		$t = Emblem_Studio_Install::table( 'logs' );
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
 		return (int) $wpdb->query( $wpdb->prepare( "DELETE FROM $t WHERE created_at < %s", $cutoff ) );
 	}

@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Privacy {
+class Emblem_Studio_Privacy {
 
 	public function __construct() {
 		add_filter( 'wp_privacy_personal_data_exporters', [ $this, 'register_exporter' ] );
@@ -28,7 +28,7 @@ class ES_Privacy {
 
 	public function exporter( string $email, int $page = 1 ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . ES_Install::table( 'leads' ) . ' WHERE email = %s ORDER BY id', strtolower( trim( $email ) ) ) );
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE email = %s ORDER BY id', strtolower( trim( $email ) ) ) );
 		if ( ! is_array( $rows ) || $wpdb->last_error !== '' ) {
 			return [ 'data' => [], 'done' => false, 'measurement_complete' => false, 'error' => 'es_measurement_capture_unavailable' ];
 		}
@@ -46,7 +46,7 @@ class ES_Privacy {
 				[ 'name' => __( 'Phone', 'emblem-studio' ),       'value' => $extra['phone']      ?? '' ],
 				[ 'name' => __( 'Submitted at', 'emblem-studio' ), 'value' => $r->created_at ],
 			];
-			$status = ES_Measurement::association_status( (int) $r->form_id );
+			$status = Emblem_Studio_Measurement::association_status( (int) $r->form_id );
 			if ( $status['unassociated'] === null ) {
 				return [ 'data' => [], 'done' => false, 'measurement_complete' => false, 'error' => 'es_measurement_read_failed' ];
 			}
@@ -55,8 +55,8 @@ class ES_Privacy {
 				$item_data[] = [ 'name' => __( 'Measurement export limitation', 'emblem-studio' ), 'value' => __( 'Legacy or malformed measurement cannot be deterministically associated. Only exactly associated events are included; measurement completeness cannot be confirmed.', 'emblem-studio' ) ];
 			}
 
-			if ( class_exists( 'ES_Purchases' ) ) {
-				$purchases = ES_Purchases::for_lead( (int) $r->id );
+			if ( class_exists( 'Emblem_Studio_Purchases' ) ) {
+				$purchases = Emblem_Studio_Purchases::for_lead( (int) $r->id );
 				if ( is_wp_error( $purchases ) ) {
 					return [ 'data' => [], 'done' => false, 'measurement_complete' => false, 'error' => $purchases->get_error_code() ];
 				}
@@ -75,7 +75,7 @@ class ES_Privacy {
 				'item_id'     => 'emblem-studio-lead-' . (int) $r->id,
 				'data'        => $item_data,
 			];
-			$events = ES_Measurement::events_for_lead( (int) $r->id );
+			$events = Emblem_Studio_Measurement::events_for_lead( (int) $r->id );
 			if ( is_wp_error( $events ) ) {
 				return [ 'data' => [], 'done' => false, 'error' => $events->get_error_code() ];
 			}
@@ -100,22 +100,22 @@ class ES_Privacy {
 
 	public function eraser( string $email, int $page = 1 ): array {
 		global $wpdb;
-		$leads = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . ES_Install::table( 'leads' ) . ' WHERE email = %s', strtolower( trim( $email ) ) ) );
+		$leads = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE email = %s', strtolower( trim( $email ) ) ) );
 		if ( ! is_array( $leads ) || $wpdb->last_error !== '' ) {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 		}
 		$protected = false;
 		foreach ( $leads as $lead ) {
 			$context = [ 'form_id' => (int) $lead->form_id, 'event_type' => 'privacy', 'lead_id' => (int) $lead->id ];
-			$events = ES_Measurement::events_for_lead( (int) $lead->id );
+			$events = Emblem_Studio_Measurement::events_for_lead( (int) $lead->id );
 			if ( is_wp_error( $events ) ) {
 				return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [ $events->get_error_message() ], 'done' => false ];
 			}
-			$protected = $protected || ES_Measurement::policy( $context ) === 'strict' || $events !== [];
+			$protected = $protected || Emblem_Studio_Measurement::policy( $context ) === 'strict' || $events !== [];
 		}
 		$external = ( class_exists( 'Emblem_Studio_SaaS_Connector' ) && Emblem_Studio_SaaS_Connector::is_connected() )
 			|| has_action( 'es_erasure_ready' ) !== false
-			|| ( class_exists( 'ES_Purchases' ) && has_action( ES_Purchases::HOOK_READY ) !== false );
+			|| ( class_exists( 'Emblem_Studio_Purchases' ) && has_action( Emblem_Studio_Purchases::HOOK_READY ) !== false );
 		if ( $external && $protected ) {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [ __( 'Connected or external erasure cannot be committed atomically by this measurement API. No capture was erased and no external callback was dispatched.', 'emblem-studio' ) ], 'done' => false, 'atomic_scope' => false ];
 		}
@@ -124,9 +124,9 @@ class ES_Privacy {
 			$result['atomic_scope'] = false;
 			return $result;
 		}
-		$tables = [ ES_Install::table( 'leads' ), ES_Install::table( 'events' ), ES_Install::table( 'lead_consents' ) ];
-		if ( class_exists( 'ES_Purchases' ) ) { $tables[] = ES_Install::table( 'purchases' ); }
-		if ( ! ES_Measurement_Transaction::tables_transactional( $tables ) ) {
+		$tables = [ Emblem_Studio_Install::table( 'leads' ), Emblem_Studio_Install::table( 'events' ), Emblem_Studio_Install::table( 'lead_consents' ) ];
+		if ( class_exists( 'Emblem_Studio_Purchases' ) ) { $tables[] = Emblem_Studio_Install::table( 'purchases' ); }
+		if ( ! Emblem_Studio_Measurement_Transaction::tables_transactional( $tables ) ) {
 			if ( ! $protected ) {
 				$result = $this->eraser_locked( $email, false );
 				$result['atomic_scope'] = false;
@@ -135,7 +135,7 @@ class ES_Privacy {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [ __( 'Atomic erasure requires verified InnoDB native tables. No capture was erased.', 'emblem-studio' ) ], 'done' => false ];
 		}
 		$result = null;
-		$ok = ES_Measurement_Transaction::run( function () use ( $email, &$result ) {
+		$ok = Emblem_Studio_Measurement_Transaction::run( function () use ( $email, &$result ) {
 			$result = $this->eraser_locked( $email );
 			return $result['done'] ? $result : false;
 		} );
@@ -144,15 +144,15 @@ class ES_Privacy {
 
 	private function eraser_locked( string $email, bool $atomic = true ): array {
 		global $wpdb;
-		$leads = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . ES_Install::table( 'leads' ) . ' WHERE email = %s' . ( $atomic ? ' FOR UPDATE' : '' ), strtolower( trim( $email ) ) ) );
+		$leads = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . Emblem_Studio_Install::table( 'leads' ) . ' WHERE email = %s' . ( $atomic ? ' FOR UPDATE' : '' ), strtolower( trim( $email ) ) ) );
 		if ( ! is_array( $leads ) || $wpdb->last_error !== '' ) {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 		}
 		if ( ! $atomic ) {
 			foreach ( $leads as $lead ) {
-				$events = ES_Measurement::events_for_lead( (int) $lead->id );
+				$events = Emblem_Studio_Measurement::events_for_lead( (int) $lead->id );
 				$context = [ 'form_id' => (int) $lead->form_id, 'event_type' => 'privacy', 'lead_id' => (int) $lead->id ];
-				if ( is_wp_error( $events ) || $events !== [] || ES_Measurement::policy( $context ) !== 'legacy' ) {
+				if ( is_wp_error( $events ) || $events !== [] || Emblem_Studio_Measurement::policy( $context ) !== 'legacy' ) {
 					return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [ __( 'The mutable capture snapshot requires protected erasure. Legacy external dispatch was refused.', 'emblem-studio' ) ], 'done' => false ];
 				}
 			}
@@ -161,33 +161,33 @@ class ES_Privacy {
 		$measurement_retained = false;
 		$measurement_removed = 0;
 		foreach ( $leads as $lead ) {
-			$status = ES_Measurement::association_status( (int) $lead->form_id );
+			$status = Emblem_Studio_Measurement::association_status( (int) $lead->form_id );
 			if ( $status['unassociated'] === null ) {
 				return [ 'items_removed' => $measurement_removed > 0, 'items_retained' => true, 'messages' => [ __( 'Measurement completeness could not be read. The capture was retained for retry.', 'emblem-studio' ) ], 'done' => false ];
 			}
 			$measurement_retained = $measurement_retained || ! $status['complete'];
-			$count = $atomic ? ES_Measurement::erase_for_lead( (int) $lead->id ) : 0;
+			$count = $atomic ? Emblem_Studio_Measurement::erase_for_lead( (int) $lead->id ) : 0;
 			if ( $count === false ) {
 				return [ 'items_removed' => $measurement_removed > 0, 'items_retained' => true, 'messages' => [ __( 'Associated measurement could not be erased. The capture was retained for retry.', 'emblem-studio' ) ], 'done' => false ];
 			}
 			$measurement_removed += $count;
 		}
 
-		if ( class_exists( 'ES_Purchases' ) ) {
+		if ( class_exists( 'Emblem_Studio_Purchases' ) ) {
 			foreach ( $lead_ids as $lead_id ) {
-				if ( ES_Purchases::forget_lead( $lead_id, ! $atomic ) === false ) {
+				if ( Emblem_Studio_Purchases::forget_lead( $lead_id, ! $atomic ) === false ) {
 					return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 				}
 			}
 		}
 
-		$consents = ES_Consent_Log::erase( $email, $lead_ids );
-		if ( $consents === false || ES_Measurement_Transaction::query_failed() ) {
+		$consents = Emblem_Studio_Consent_Log::erase( $email, $lead_ids );
+		if ( $consents === false || Emblem_Studio_Measurement_Transaction::query_failed() ) {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 		}
 
 		$removed = 0;
-		foreach ( $lead_ids as $id ) { $removed += ES_Leads::delete( $id ) ? 1 : 0; }
+		foreach ( $lead_ids as $id ) { $removed += Emblem_Studio_Leads::delete( $id ) ? 1 : 0; }
 		if ( $removed !== count( $lead_ids ) ) {
 			return [ 'items_removed' => false, 'items_retained' => true, 'messages' => [], 'done' => false ];
 		}

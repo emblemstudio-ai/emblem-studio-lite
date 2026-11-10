@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_Click_Tag {
+class Emblem_Studio_Click_Tag {
 
 	const META = '_es_source';
 
@@ -38,7 +38,7 @@ class ES_Click_Tag {
 		if ( class_exists( 'Emblem_Studio_SaaS_Connector' ) && Emblem_Studio_SaaS_Connector::is_connected() ) {
 			return false;
 		}
-		if ( ! class_exists( 'ES_Purchases' ) || ! ES_Purchases::enabled() ) {
+		if ( ! class_exists( 'Emblem_Studio_Purchases' ) || ! Emblem_Studio_Purchases::enabled() ) {
 			return false;
 		}
 
@@ -52,7 +52,7 @@ class ES_Click_Tag {
 		}
 
 		global $wpdb;
-		$table = ES_Install::table( 'forms' );
+		$table = Emblem_Studio_Install::table( 'forms' );
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE track_purchases = 1 AND trashed_at IS NULL" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		set_transient( 'emblem_studio_buy_assets', $count > 0 ? '1' : '0', 5 * MINUTE_IN_SECONDS );
 
@@ -92,7 +92,7 @@ class ES_Click_Tag {
 
 	public static function stamp_line( $cart_item_key ): void {
 		$cart = self::cart();
-		if ( ! $cart || ! class_exists( 'ES_Purchases' ) || ! ES_Purchases::enabled() ) {
+		if ( ! $cart || ! class_exists( 'Emblem_Studio_Purchases' ) || ! Emblem_Studio_Purchases::enabled() ) {
 			return;
 		}
 		$tag = self::from_request();
@@ -105,7 +105,7 @@ class ES_Click_Tag {
 
 	public static function stamp_last_line(): void {
 		$tag = self::from_request();
-		if ( $tag === '' || ! class_exists( 'ES_Purchases' ) || ! ES_Purchases::enabled() || ! function_exists( 'wc_load_cart' ) ) {
+		if ( $tag === '' || ! class_exists( 'Emblem_Studio_Purchases' ) || ! Emblem_Studio_Purchases::enabled() || ! function_exists( 'wc_load_cart' ) ) {
 			wp_send_json( [ 'ok' => false ] );
 		}
 		wc_load_cart();

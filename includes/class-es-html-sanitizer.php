@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ES_HTML_Sanitizer {
+class Emblem_Studio_HTML_Sanitizer {
 
 	private const DROP_ELEMENTS = [
 		'script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet', 'base', 'meta',
@@ -39,6 +39,29 @@ class ES_HTML_Sanitizer {
 		}
 
 		$xpath = new DOMXPath( $doc );
+
+		$nodes = $xpath->query( '//comment() | //processing-instruction()' );
+		if ( $nodes === false ) {
+			return '';
+		}
+		foreach ( iterator_to_array( $nodes ) as $node ) {
+			if ( $node->parentNode ) {
+				$node->parentNode->removeChild( $node );
+			}
+		}
+		$nodes = $xpath->query( '//textarea | //title' );
+		if ( $nodes === false ) {
+			return '';
+		}
+		foreach ( iterator_to_array( $nodes ) as $el ) {
+			$text = $el->textContent;
+			while ( $el->firstChild ) {
+				$el->removeChild( $el->firstChild );
+			}
+			if ( $text !== '' ) {
+				$el->appendChild( $doc->createTextNode( $text ) );
+			}
+		}
 
 		$elements = $xpath->query( '//*' );
 		if ( $elements === false ) {

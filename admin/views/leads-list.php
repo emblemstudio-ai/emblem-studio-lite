@@ -3,18 +3,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$forms   = ES_Leads::lead_capable_forms( ES_Form_Repo::all() );
-$filters = ES_Leads::parse_filters( $_GET );
+$forms   = Emblem_Studio_Leads::lead_capable_forms( Emblem_Studio_Form_Repo::all() );
+$filters = Emblem_Studio_Leads::parse_filters( $_GET );
 $paged   = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
 
-$result = ES_Leads::paginated( $paged, $filters );
+$result = Emblem_Studio_Leads::paginated( $paged, $filters );
 $rows   = $result['rows'];
 $total  = $result['total'];
-$pages  = max( 1, (int) ceil( $total / ES_Leads::PER_PAGE ) );
+$pages  = max( 1, (int) ceil( $total / Emblem_Studio_Leads::PER_PAGE ) );
 
-$consents = ES_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( (array) $rows, 'id' ) ) );
+$consents = Emblem_Studio_Consent_Log::for_leads( array_map( 'intval', wp_list_pluck( (array) $rows, 'id' ) ) );
 
-$counts = ES_Leads::counts_by_kind( $filters );
+$counts = Emblem_Studio_Leads::counts_by_kind( $filters );
 
 $has_active_filter = $filters['form_id'] || $filters['from'] || $filters['to'] || $filters['email'] || ( $filters['status'] && $filters['status'] !== 'all' );
 
@@ -206,7 +206,7 @@ $status_labels = [
 					: ( $is_bot_row ? esc_attr__( 'Honeypot field was filled — submission blocked. Not sent to FunnelKit or webhooks.', 'emblem-studio' ) : '' );
 			?>
 				<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?><?php echo $row_title ? ' title="' . $row_title . '"' : ''; ?>>
-					<?php $display_name = ES_Leads::display_name( $r->extra_fields ); ?>
+					<?php $display_name = Emblem_Studio_Leads::display_name( $r->extra_fields ); ?>
 					<td class="es-leads-col-name" title="<?php echo esc_attr( $display_name ); ?>">
 						<?php if ( $is_bot_row ) : ?><span class="es-bot-tag" aria-label="<?php esc_attr_e( 'Bot lead', 'emblem-studio' ); ?>" title="<?php esc_attr_e( 'Caught by the hidden honeypot field — not sent to your CRM.', 'emblem-studio' ); ?>"><?php esc_html_e( 'BOT', 'emblem-studio' ); ?></span> <?php endif; ?>
 						<?php echo esc_html( $display_name ); ?>
@@ -298,10 +298,10 @@ $status_labels = [
 										<dd><code><?php echo esc_html( (string) $r->ip ); ?></code></dd>
 									<?php endif; ?>
 									<?php
-									$detail_source = ES_Visit_Source::decode( $r->source ?? null );
+									$detail_source = Emblem_Studio_Visit_Source::decode( $r->source ?? null );
 									?>
 									<dt><?php esc_html_e( 'Came from', 'emblem-studio' ); ?></dt>
-									<dd><?php echo esc_html( ES_Visit_Source::label( $detail_source ) ?: '—' ); ?></dd>
+									<dd><?php echo esc_html( Emblem_Studio_Visit_Source::label( $detail_source ) ?: '—' ); ?></dd>
 									<?php if ( ! empty( $detail_source['landing'] ) && is_string( $detail_source['landing'] ) ) : ?>
 										<dt><?php esc_html_e( 'First page', 'emblem-studio' ); ?></dt>
 										<dd><code><?php echo esc_html( $detail_source['landing'] ); ?></code></dd>
@@ -309,9 +309,9 @@ $status_labels = [
 								</dl>
 
 								<?php
-								$detail_signals   = ES_Leads::bot_signals( $r->bot_signals ?? null );
-								$detail_reason    = ES_Leads::bot_reason( $detail_signals, ! empty( $r->is_bot ) );
-								$detail_confirmed = ES_Leads::bot_confirmed( $detail_signals );
+								$detail_signals   = Emblem_Studio_Leads::bot_signals( $r->bot_signals ?? null );
+								$detail_reason    = Emblem_Studio_Leads::bot_reason( $detail_signals, ! empty( $r->is_bot ) );
+								$detail_confirmed = Emblem_Studio_Leads::bot_confirmed( $detail_signals );
 								?>
 								<?php if ( $detail_reason ) : ?>
 									<h4>
