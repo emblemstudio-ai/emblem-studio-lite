@@ -353,6 +353,7 @@ function emblem_studio_kpi_rate_line( float $cur_rate, float $prior_rate, string
 				$updated_str = mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $f->updated_at );
 				if ( $is_trash ) {
 					$actions_html = '<div class="es-actions-icons">'
+						. '<a class="es-action-icon" title="' . esc_attr__( 'Open (read only)', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Open (read only)', 'emblem-studio' ) . '" href="' . esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) ) . '"><span class="dashicons dashicons-visibility" aria-hidden="true"></span></a>'
 						. '<a class="es-action-icon" title="' . esc_attr__( 'Restore', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Restore', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_restore_form&id=' . $f->id ), 'es_restore_form_' . $f->id ) ) . '"><span class="dashicons dashicons-undo" aria-hidden="true"></span></a>'
 						. '<a class="es-action-icon es-action-danger" title="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" aria-label="' . esc_attr__( 'Delete permanently', 'emblem-studio' ) . '" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_delete_form&id=' . $f->id ), 'es_delete_form_' . $f->id ) ) . '" onclick="return confirm(\'' . esc_attr__( 'Permanently delete this form? It can not be restored. Its sign-ups stay on the Leads page and its stats stay in Reports.', 'emblem-studio' ) . '\');"><span class="dashicons dashicons-trash" aria-hidden="true"></span></a>'
 						. '</div>';
@@ -435,11 +436,7 @@ function emblem_studio_kpi_rate_line( float $cur_rate, float $prior_rate, string
 							</td>
 							<td class="col-name">
 								<strong>
-									<?php if ( $is_trash ) : ?>
-										<span class="es-asset-name-trash" title="<?php echo esc_attr( $f->name ); ?>"><?php echo esc_html( $f->name ); ?></span>
-									<?php else : ?>
 										<a class="es-asset-name<?php echo $lite_off ? ' es-lite-off-name' : ''; ?>" data-es-preview-name="<?php echo esc_attr( $f->name ); ?>" data-es-preview-id="<?php echo (int) $f->id; ?>" data-es-preview-wide="<?php echo in_array( 'ribbon', $enabled_types, true ) ? '1' : '0'; ?>" href="<?php echo esc_url( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $f->id ) ); ?>"><?php echo esc_html( $f->name ); ?></a>
-									<?php endif; ?>
 								</strong>
 								<?php if ( ! $is_trash && $lite_off ) : ?>
 										<span class="es-lite-badge es-lite-badge-off" title="<?php esc_attr_e( 'This asset only uses shells Lite can’t run, so it’s off here. It stays active in your Emblem Studio account.', 'emblem-studio' ); ?>"><?php esc_html_e( 'Off in Lite', 'emblem-studio' ); ?></span>

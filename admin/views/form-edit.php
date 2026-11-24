@@ -4,6 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 /** @var ?object $form */
 $is_new = empty( $form );
+$es_trashed = ! $is_new && ! empty( $form->trashed_at );
 $f = (object) [
 	'id'                   => $form->id ?? 0,
 	'name'                 => $form->name ?? '',
@@ -235,6 +236,18 @@ $check_groups = [
 			}
 		?></div>
 	<?php endif; ?>
+	<?php if ( $es_trashed ) : ?>
+		<div class="notice notice-error es-trashed-notice">
+			<p>
+				<strong><?php esc_html_e( 'In the trash.', 'emblem-studio' ); ?></strong>
+				<?php esc_html_e( 'You can look at everything here, but not save changes. Restore it to edit. It comes back switched off.', 'emblem-studio' ); ?>
+				<a class="button button-small" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=es_restore_form&back=edit&id=' . (int) $form->id ), 'es_restore_form_' . (int) $form->id ) ); ?>"><?php esc_html_e( 'Restore', 'emblem-studio' ); ?></a>
+			</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( isset( $_GET['untrashed'] ) && ! $es_trashed ) : ?>
+		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Restored from the trash. It is switched off. Turn it on when you are ready.', 'emblem-studio' ); ?></p></div>
+	<?php endif; ?>
 	<?php if ( isset( $_GET['stats_reset'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Stats for this form have been reset.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
@@ -372,7 +385,7 @@ $check_groups = [
 						<span class="es-status-pill es-status-<?php echo esc_attr( $eff_state ); ?>" title="<?php echo esc_attr( $hdr_title ); ?>"><?php echo esc_html( $hdr_label ); ?></span>
 					<?php endif; ?>
 					<span class="es-save-group">
-						<button type="submit" class="button button-primary" name="submit"><?php echo $is_new ? esc_html__( 'Create form', 'emblem-studio' ) : esc_html__( 'Save', 'emblem-studio' ); ?></button>
+						<button type="submit" class="button button-primary" name="submit"<?php disabled( $es_trashed ); ?><?php echo $es_trashed ? ' title="' . esc_attr__( 'In the trash. Restore it to edit.', 'emblem-studio' ) . '"' : ''; ?>><?php echo $is_new ? esc_html__( 'Create form', 'emblem-studio' ) : esc_html__( 'Save', 'emblem-studio' ); ?></button>
 						<span class="es-dirty-flag" aria-live="polite"><?php esc_html_e( 'Unsaved', 'emblem-studio' ); ?></span>
 					</span>
 				</div>
@@ -1856,7 +1869,7 @@ $check_groups = [
 				</p>
 			<?php endif; ?>
 
-			<?php if ( ! $is_new ) : ?>
+			<?php if ( ! $is_new && ! $es_trashed ) : ?>
 				<div class="es-danger-zone es-archive-zone">
 					<h2><?php esc_html_e( 'Asset status', 'emblem-studio' ); ?></h2>
 					<?php if ( ! empty( $f->archived_at ) ) : ?>
@@ -1877,7 +1890,7 @@ $check_groups = [
 				</div>
 			<?php endif; ?>
 
-			<?php if ( ! $is_new ) :
+			<?php if ( ! $is_new && ! $es_trashed ) :
 				$danger_shells_with_data = Emblem_Studio_Reports::shells_with_data( (int) $f->id );
 				$danger_shell_labels = [
 					'inline'      => __( 'Inline', 'emblem-studio' ),

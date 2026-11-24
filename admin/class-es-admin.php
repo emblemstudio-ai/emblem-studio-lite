@@ -1359,6 +1359,14 @@ class Emblem_Studio_Admin {
 
 		$id   = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
 
+		if ( $id ) {
+			$es_current = Emblem_Studio_Form_Repo::find( $id );
+			if ( $es_current && ! empty( $es_current->trashed_at ) ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $id ) );
+				exit;
+			}
+		}
+
 		$posted_token = isset( $_POST['lock_token'] ) ? sanitize_text_field( wp_unslash( $_POST['lock_token'] ) ) : '';
 		if ( $id && Emblem_Studio_Locks::blocks_save( $id, get_current_user_id(), $posted_token ) ) {
 			$who = Emblem_Studio_Locks::user_label( Emblem_Studio_Locks::holder( $id ) );
@@ -1796,6 +1804,10 @@ class Emblem_Studio_Admin {
 		check_admin_referer( 'es_restore_form_' . $id );
 		if ( $id ) {
 			Emblem_Studio_Form_Repo::restore( $id );
+		}
+		if ( $id && 'edit' === ( $_GET['back'] ?? '' ) ) {
+			wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&action=edit&id=' . $id . '&untrashed=1' ) );
+			exit;
 		}
 		wp_safe_redirect( admin_url( 'admin.php?page=emblem-studio&filter=trash&restored=1' ) );
 		exit;
