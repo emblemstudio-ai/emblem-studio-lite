@@ -899,6 +899,15 @@
 		shadow._esThankYouUndo = undo;
 	}
 
+	function leadRequest(data, init) {
+		let size = 0;
+		try {
+			const enc = new TextEncoder();
+			data.forEach(function (v, k) { size += 64 + enc.encode(String(k)).length + enc.encode(typeof v === 'string' ? v : '').length; });
+		} catch (e) { size = Infinity; }
+		return size < 60000 ? Object.assign({}, init, { keepalive: true }) : init;
+	}
+
 	function undoInlineThankYou(shadow) {
 		const undo = shadow._esThankYouUndo;
 		if (!undo) return;
@@ -1058,13 +1067,6 @@
 		const optimistic = successMode === 'inline_state' && hasInlineThankYou(shadow);
 		let revealed = false;
 		let revealTimer = null;
-		if (optimistic) {
-			revealTimer = setTimeout(function () {
-				revealTimer = null;
-				revealed = true;
-				showInlineThankYou(shadow);
-			}, SUBMIT_BEAT_MS);
-		}
 		const abandonReveal = function () {
 			if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
 			if (revealed) { undoInlineThankYou(shadow); revealed = false; }
@@ -1074,7 +1076,15 @@
 		const stamp = await stampP;
 		if (stamp) data.append('es_stamp', stamp);
 
-		fetch(ajax, { method: 'POST', body: data, credentials: 'same-origin' })
+		const sent = fetch(ajax, leadRequest(data, { method: 'POST', body: data, credentials: 'same-origin' }));
+		if (optimistic) {
+			revealTimer = setTimeout(function () {
+				revealTimer = null;
+				revealed = true;
+				showInlineThankYou(shadow);
+			}, SUBMIT_BEAT_MS);
+		}
+		sent
 			.then(r => r.json().then(j => ({ ok: r.ok, status: r.status, json: j })))
 			.then(({ ok, json }) => {
 				if (!ok || !json || !json.success) {

@@ -112,8 +112,11 @@ $logs   = Emblem_Studio_Logger::recent( 50 );
 							<?php esc_html_e( 'Resolve the real visitor IP from proxy headers (Cloudflare, reverse proxy)', 'emblem-studio' ); ?>
 						</label>
 						<p class="description">
-							<?php esc_html_e( 'Enable ONLY if this site is behind Cloudflare or a trusted reverse proxy. It reads CF-Connecting-IP / X-Forwarded-For so the IP used for rate-limiting and the stored bot IP is the real visitor, not the CDN edge. Leave OFF on directly-exposed sites — the header could be spoofed.', 'emblem-studio' ); ?>
+							<?php esc_html_e( 'Cloudflare and a proxy on this same server are recognised on their own. Turn this on only if another proxy or CDN sits in front of this site. It reads X-Forwarded-For so the IP used for rate-limiting and the stored bot IP is the real visitor, not the proxy. Leave it off on sites visitors reach directly, because anyone can send that header.', 'emblem-studio' ); ?>
 						</p>
+						<?php if ( Emblem_Studio_Event_Recorder::proxy_suspected() ) : ?>
+							<p class="es-notice es-notice-warning" style="margin-top:8px;"><strong><?php esc_html_e( 'This page reached WordPress through a proxy.', 'emblem-studio' ); ?></strong> <?php esc_html_e( 'If that proxy is yours, turn this on. Until then every visitor shares the address of the proxy, so sign-ups can be refused after eight a minute, and visits through a cloud-hosted proxy are counted as bots.', 'emblem-studio' ); ?></p>
+						<?php endif; ?>
 						<?php if ( $proxy_forced ) : ?>
 							<p style="margin-top:8px; font-size:13px;"><em><?php esc_html_e( 'Force-enabled by the EMBLEM_STUDIO_TRUST_PROXY constant in wp-config.', 'emblem-studio' ); ?></em></p>
 						<?php endif; ?>

@@ -32,6 +32,8 @@ $f = (object) [
 	'funnelkit_contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 	'active_from'          => isset( $form ) ? (string) ( $form->active_from  ?? '' ) : '',
 	'active_until'         => isset( $form ) ? (string) ( $form->active_until ?? '' ) : '',
+	'archived_at'          => $form->archived_at ?? null,
+	'saas_form_id'         => $form->saas_form_id ?? null,
 ];
 
 $dtl_from  = $f->active_from  !== '' ? substr( str_replace( ' ', 'T', $f->active_from  ), 0, 16 ) : '';

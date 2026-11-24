@@ -206,6 +206,14 @@ class Emblem_Studio_Form_Repo {
 			'updated_at'           => $now,
 		];
 
+		if ( $id ) {
+			foreach ( [ 'success_message', 'success_redirect_url' ] as $k ) {
+				if ( ! array_key_exists( $k, $data ) ) {
+					unset( $row[ $k ] );
+				}
+			}
+		}
+
 		if ( isset( $data['auto_trigger_config'] ) && is_array( $data['auto_trigger_config'] ) ) {
 			$row['auto_trigger_config'] = wp_json_encode( self::sanitize_all_shell_trigger_configs( $data['auto_trigger_config'] ) );
 		}

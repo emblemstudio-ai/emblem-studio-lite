@@ -111,7 +111,7 @@ class Emblem_Studio_Event_Recorder {
 	public static function client_ip(): string {
 		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) $_SERVER['REMOTE_ADDR'] ) : '';
 		$ip     = filter_var( $remote, FILTER_VALIDATE_IP ) ? $remote : '0.0.0.0';
-		if ( ! self::trust_proxy_enabled() ) {
+		if ( ! self::trust_proxy_enabled() && ( $ip === '0.0.0.0' || ( self::is_public_ip( $ip ) && ! self::is_cloudflare_ip( $ip ) ) ) ) {
 			return preg_replace( '/[^0-9a-f:.]/i', '', (string) $ip );
 		}
 
@@ -140,6 +140,17 @@ class Emblem_Studio_Event_Recorder {
 			}
 		}
 		return preg_replace( '/[^0-9a-f:.]/i', '', (string) $ip );
+	}
+
+	public static function proxy_suspected(): bool {
+		if ( self::trust_proxy_enabled() ) {
+			return false;
+		}
+		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) $_SERVER['REMOTE_ADDR'] ) : '';
+		if ( ! filter_var( $remote, FILTER_VALIDATE_IP ) || ! self::is_public_ip( $remote ) || self::is_cloudflare_ip( $remote ) ) {
+			return false;
+		}
+		return ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) || ! empty( $_SERVER['HTTP_X_REAL_IP'] );
 	}
 
 	private static function is_public_ip( string $ip ): bool {

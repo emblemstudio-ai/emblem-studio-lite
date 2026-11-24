@@ -1594,6 +1594,23 @@ class Emblem_Studio_Admin {
 			'active_until'         => isset( $_POST['active_until'] ) ? wp_unslash( $_POST['active_until'] ) : '',
 		];
 
+		if ( $id ) {
+			if ( ! Emblem_Studio_Caps::has( 'auto_shells' ) ) {
+				unset( $data['auto_trigger_config'] );
+			}
+			if ( ! Emblem_Studio_Caps::has( 'targeting' ) ) {
+				unset( $data['display_rules'] );
+			}
+			if ( ! Emblem_Studio_Caps::has( 'schedule_window' ) || ! isset( $_POST['active_from'], $_POST['active_until'] ) ) {
+				unset( $data['active_from'], $data['active_until'] );
+			}
+			foreach ( [ 'success_message', 'success_redirect_url', 'popup_max_width' ] as $posted_only ) {
+				if ( ! isset( $_POST[ $posted_only ] ) ) {
+					unset( $data[ $posted_only ] );
+				}
+			}
+		}
+
 		if ( $id && $data['status'] === 'active' ) {
 			$current = Emblem_Studio_Form_Repo::find( $id );
 			if ( $current && ( ! empty( $current->archived_at ) || ! empty( $current->trashed_at ) ) ) {
