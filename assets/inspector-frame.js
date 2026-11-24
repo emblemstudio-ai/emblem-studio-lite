@@ -90,7 +90,7 @@
 	function prepareCss(css, withBoot) {
 		css = css || '';
 		css = scopeAndLiftFontFaces(css);
-		var re = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
+		var re = /^\s*(?:\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\/\s*)*(@charset\b[^;]*;|@import\b(?:\s*url\()?\s*(?:'[^']*'|"[^"]*"|[^;'")]*)(?:\s*\))?\s*[^;]*;)/i;
 		var m;
 		while ((m = re.exec(css)) !== null) {
 			var rule = m[1];

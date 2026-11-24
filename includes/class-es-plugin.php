@@ -46,10 +46,14 @@ class Emblem_Studio_Plugin {
 		add_action( Emblem_Studio_Stats_Summary::CRON_HOOK, [ $this, 'run_stats_summary' ] );
 
 		add_filter( 'cron_schedules', [ $this, 'add_minute_schedule' ] );
-		if ( ! wp_next_scheduled( 'emblem_studio_reconcile_statuses' ) ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'emblem_studio_minute', 'emblem_studio_reconcile_statuses' );
+		if ( ! class_exists( 'Emblem_Studio_Caps' ) || Emblem_Studio_Caps::has( 'schedule_window' ) ) {
+			if ( ! wp_next_scheduled( 'emblem_studio_reconcile_statuses' ) ) {
+				wp_schedule_event( time() + MINUTE_IN_SECONDS, 'emblem_studio_minute', 'emblem_studio_reconcile_statuses' );
+			}
+			add_action( 'emblem_studio_reconcile_statuses', [ $this, 'run_status_reconcile' ] );
+		} elseif ( wp_next_scheduled( 'emblem_studio_reconcile_statuses' ) ) {
+			wp_clear_scheduled_hook( 'emblem_studio_reconcile_statuses' );
 		}
-		add_action( 'emblem_studio_reconcile_statuses', [ $this, 'run_status_reconcile' ] );
 
 		$has_scheduled_changes = false;
 		if ( $has_scheduled_changes ) {

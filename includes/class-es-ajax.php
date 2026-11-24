@@ -399,7 +399,12 @@ class Emblem_Studio_Ajax {
 			if ( ! isset( $allowed[ $k ] ) ) {
 				continue;
 			}
-			$custom_fields[ sanitize_key( $k ) ] = self::sanitize_field_value( $v );
+			$key   = sanitize_key( $k );
+			$value = self::sanitize_field_value( $v );
+			if ( is_array( $value ) && in_array( $key, $reserved, true ) ) {
+				$value = implode( ', ', array_map( 'strval', $value ) );
+			}
+			$custom_fields[ $key ] = $value;
 		}
 
 		$source = Emblem_Studio_Visit_Source::from_request( isset( $_POST['es_source'] ) ? wp_unslash( (string) $_POST['es_source'] ) : null );

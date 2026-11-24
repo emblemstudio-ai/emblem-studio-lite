@@ -15,6 +15,10 @@ class Emblem_Studio_HTML_Sanitizer {
 
 	private const DROP_IN_MATH = [ 'annotation-xml', 'mglyph' ];
 
+	private const NO_STYLE_IN = [ 'select', 'option', 'optgroup', 'datalist' ];
+
+	private const MARKUP_IN_STYLE = '#<[a-z!/?]#i';
+
 	private const SVG_ANIMATION = [ 'set', 'animate', 'animatetransform', 'animatemotion' ];
 
 	private const ROOT = 'es-sanitize-root';
@@ -131,6 +135,9 @@ class Emblem_Studio_HTML_Sanitizer {
 			$href = strtolower( trim( $el->getAttribute( 'href' ) ) );
 			return ! ( strpos( $rel, 'stylesheet' ) !== false && strpos( $href, 'https://' ) === 0 );
 		}
+		if ( $name === 'style' && preg_match( self::MARKUP_IN_STYLE, $el->textContent ) ) {
+			return true;
+		}
 		if ( in_array( $name, self::SVG_ANIMATION, true ) ) {
 			$target = strtolower( trim( $el->getAttribute( 'attributename' ) ) );
 			if ( $target === 'href' || $target === 'xlink:href' || strpos( $target, 'on' ) === 0 ) {
@@ -141,6 +148,9 @@ class Emblem_Studio_HTML_Sanitizer {
 		$in_math = false;
 		for ( $p = $el->parentNode; $p instanceof DOMElement; $p = $p->parentNode ) {
 			$pn = strtolower( $p->nodeName );
+			if ( $name === 'style' && in_array( $pn, self::NO_STYLE_IN, true ) ) {
+				return true;
+			}
 			if ( $pn === 'svg' ) {
 				$in_svg = true;
 			} elseif ( $pn === 'math' ) {
@@ -196,7 +206,7 @@ class Emblem_Studio_HTML_Sanitizer {
 			'/-moz-binding/i'           => '',
 			'/(?<![\w-])behavior\s*:/i' => '',
 		];
-		for ( $i = 0; $i < 10; $i++ ) {
+		for ( $i = 0; $i < 50; $i++ ) {
 			$next = (string) preg_replace( array_keys( $patterns ), array_values( $patterns ), $css );
 			$next = (string) preg_replace_callback(
 				'/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)]*))\s*\)/i',
@@ -207,10 +217,10 @@ class Emblem_Studio_HTML_Sanitizer {
 				$next
 			);
 			if ( $next === $css ) {
-				break;
+				return $css;
 			}
 			$css = $next;
 		}
-		return $css;
+		return '';
 	}
 }

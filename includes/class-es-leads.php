@@ -216,12 +216,19 @@ class Emblem_Studio_Leads {
 		if ( ! is_array( $x ) ) {
 			return '—';
 		}
+		$text  = static function ( $v ): string {
+			if ( is_array( $v ) ) {
+				return implode( ', ', array_filter( array_map( 'strval', array_filter( $v, 'is_scalar' ) ), static fn ( string $s ): bool => $s !== '' ) );
+			}
+			return is_scalar( $v ) ? trim( (string) $v ) : '';
+		};
 		$parts = array_filter( [
-			$x['first_name'] ?? '',
-			$x['last_name']  ?? '',
+			$text( $x['first_name'] ?? '' ),
+			$text( $x['last_name'] ?? '' ),
 		], fn( $v ) => $v !== '' );
 		if ( ! $parts ) {
-			return $x['name'] ?? '—';
+			$name = $text( $x['name'] ?? '' );
+			return $name !== '' ? $name : '—';
 		}
 		return implode( ' ', $parts );
 	}

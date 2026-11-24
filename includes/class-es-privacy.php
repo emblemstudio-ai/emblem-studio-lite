@@ -13,7 +13,7 @@ class Emblem_Studio_Privacy {
 	public function register_exporter( array $exporters ): array {
 		$exporters['emblem-studio'] = [
 			'exporter_friendly_name' => __( 'Emblem Studio Leads', 'emblem-studio' ),
-			'callback'               => [ $this, 'exporter' ],
+			'callback'               => [ $this, 'wp_exporter' ],
 		];
 		return $exporters;
 	}
@@ -21,9 +21,32 @@ class Emblem_Studio_Privacy {
 	public function register_eraser( array $erasers ): array {
 		$erasers['emblem-studio'] = [
 			'eraser_friendly_name' => __( 'Emblem Studio Leads', 'emblem-studio' ),
-			'callback'             => [ $this, 'eraser' ],
+			'callback'             => [ $this, 'wp_eraser' ],
 		];
 		return $erasers;
+	}
+
+	public function wp_exporter( string $email, int $page = 1 ) {
+		$result = $this->exporter( $email, $page );
+		if ( ! empty( $result['done'] ) ) {
+			return $result;
+		}
+		return new WP_Error(
+			'emblem_studio_export_failed',
+			__( 'Emblem Studio could not read the records for this person just now, so nothing was exported. Please try again in a moment.', 'emblem-studio' )
+		);
+	}
+
+	public function wp_eraser( string $email, int $page = 1 ) {
+		$result = $this->eraser( $email, $page );
+		if ( ! empty( $result['done'] ) ) {
+			return $result;
+		}
+		$why = array_filter( array_map( 'strval', (array) ( $result['messages'] ?? [] ) ) );
+		return new WP_Error(
+			'emblem_studio_erase_failed',
+			$why ? implode( ' ', $why ) : __( 'Emblem Studio could not finish erasing this person, so their records were kept. Please try again in a moment.', 'emblem-studio' )
+		);
 	}
 
 	public function exporter( string $email, int $page = 1 ): array {

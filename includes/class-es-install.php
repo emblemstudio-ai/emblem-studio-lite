@@ -5,6 +5,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Emblem_Studio_Install {
 
+	public static function deactivate(): void {
+		$owned = require __DIR__ . '/es-owned-data.php';
+		foreach ( (array) _get_cron_array() as $events ) {
+			foreach ( array_keys( (array) $events ) as $hook ) {
+				foreach ( (array) $owned['cron_prefixes'] as $prefix ) {
+					if ( strpos( (string) $hook, (string) $prefix ) === 0 ) {
+						wp_unschedule_hook( (string) $hook );
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	public static function activate(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';

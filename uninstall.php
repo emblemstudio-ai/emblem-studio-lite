@@ -21,7 +21,7 @@ if ( ! function_exists( 'emblem_studio_uninstall_site' ) ) {
 		foreach ( (array) _get_cron_array() as $events ) {
 			foreach ( array_keys( (array) $events ) as $hook ) {
 				if ( $starts( (string) $hook, $owned['cron_prefixes'] ) ) {
-					wp_clear_scheduled_hook( (string) $hook );
+					wp_unschedule_hook( (string) $hook );
 				}
 			}
 		}
