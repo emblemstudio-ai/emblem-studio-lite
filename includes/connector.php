@@ -23,6 +23,11 @@ final class Emblem_Studio_SaaS_Connector
         return rtrim(defined('ESS_API_BASE') ? (string) ESS_API_BASE : self::DEFAULT_API_BASE, '/');
     }
 
+    public static function signup_url(): string
+    {
+        return self::connect_api().'/signup';
+    }
+
     const POSTDECOUPLE_OPTION = 'es_postdecouple_cfg';
     const POSTDECOUPLE_STATE = 'es_postdecouple_state';
     const POSTDECOUPLE_HOOK = 'es_saas_postdecouple_pull';

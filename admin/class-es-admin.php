@@ -470,6 +470,10 @@ class Emblem_Studio_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+		if ( Emblem_Studio_Caps::is_lite() ) {
+			include EMBLEM_STUDIO_PATH . 'admin/views/reports-lite.php';
+			return;
+		}
 		include EMBLEM_STUDIO_PATH . 'admin/views/reports.php';
 	}
 
