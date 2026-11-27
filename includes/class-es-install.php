@@ -19,7 +19,19 @@ class Emblem_Studio_Install {
 		}
 	}
 
-	public static function activate(): void {
+	public static function activate( bool $network_wide = false ): void {
+		if ( $network_wide && is_multisite() ) {
+			foreach ( get_sites( [ 'fields' => 'ids', 'number' => 100 ] ) as $site_id ) {
+				switch_to_blog( (int) $site_id );
+				self::activate_site();
+				restore_current_blog();
+			}
+			return;
+		}
+		self::activate_site();
+	}
+
+	private static function activate_site(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -100,6 +112,8 @@ class Emblem_Studio_Install {
 			KEY form_variant_event_time (form_id, variant, event_type, created_at),
 			KEY form_visitor_time (form_id, visitor, created_at),
 			KEY created_at (created_at),
+			KEY form_time (form_id, created_at),
+			KEY form_type_time (form_id, type, created_at),
 			KEY lead_id (lead_id),
 			UNIQUE KEY saas_event_id (saas_event_id)
 		) $charset_collate;";
@@ -122,6 +136,7 @@ class Emblem_Studio_Install {
 			KEY form_id (form_id),
 			KEY email (email),
 			KEY is_bot (is_bot),
+			KEY bot_time (is_bot, created_at),
 			UNIQUE KEY saas_lead_id (saas_lead_id)
 		) $charset_collate;";
 
@@ -385,7 +400,16 @@ class Emblem_Studio_Install {
 	public static function maybe_migrate(): void {
 		self::migrate_legacy_tables();
 
-		$current = get_option( 'emblem_studio_db_version', '1' );
+		$stored = get_option( 'emblem_studio_db_version' );
+		if ( $stored === false ) {
+			global $wpdb;
+			$forms = self::table( 'forms' );
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $forms ) ) ) !== $forms ) {
+				self::activate_site();
+				return;
+			}
+		}
+		$current = $stored === false ? '1' : (string) $stored;
 
 		if ( version_compare( $current, '2', '<' ) ) {
 			global $wpdb;
@@ -1014,6 +1038,9 @@ class Emblem_Studio_Install {
 		}
 
 		if ( version_compare( $current, '46', '<' ) ) {
+			if ( self::migration_failed_recently( '46' ) ) {
+				return;
+			}
 			global $wpdb;
 			$forms     = self::table( 'forms' );
 			$form_cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $forms" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -1023,10 +1050,17 @@ class Emblem_Studio_Install {
 			$form_cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $forms" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( in_array( 'funnelkit_contact_status', $form_cols, true ) ) {
 				update_option( 'emblem_studio_db_version', '46' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '46', (string) $wpdb->last_error );
+				return;
 			}
 		}
 
 		if ( version_compare( $current, '47', '<' ) ) {
+			if ( self::migration_failed_recently( '47' ) ) {
+				return;
+			}
 			global $wpdb;
 			$events = self::table( 'events' );
 			$cols   = (array) $wpdb->get_col( "SHOW COLUMNS FROM $events" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -1036,22 +1070,36 @@ class Emblem_Studio_Install {
 			$cols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $events" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( in_array( 'step', $cols, true ) ) {
 				update_option( 'emblem_studio_db_version', '47' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '47', (string) $wpdb->last_error );
+				return;
 			}
 		}
 
 		if ( version_compare( $current, '48', '<' ) ) {
+			if ( self::migration_failed_recently( '48' ) ) {
+				return;
+			}
 			global $wpdb;
 			self::create_rate_limits_table();
 			$t = Emblem_Studio_Rate_Limit::table();
-			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t ) {
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $t ) ) ) === $t ) {
 				foreach ( [ '_transient_esf_rl_', '_transient_timeout_esf_rl_' ] as $prefix ) {
 					$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $prefix ) . '%' ) );
 				}
 				update_option( 'emblem_studio_db_version', '48' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '48', (string) $wpdb->last_error );
+				return;
 			}
 		}
 
 		if ( version_compare( $current, '49', '<' ) ) {
+			if ( self::migration_failed_recently( '49' ) ) {
+				return;
+			}
 			global $wpdb;
 			$events = self::table( 'events' );
 			$leads  = self::table( 'leads' );
@@ -1067,6 +1115,10 @@ class Emblem_Studio_Install {
 			$lcols = (array) $wpdb->get_col( "SHOW COLUMNS FROM $leads" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( in_array( 'source', $ecols, true ) && in_array( 'source', $lcols, true ) ) {
 				update_option( 'emblem_studio_db_version', '49' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '49', (string) $wpdb->last_error );
+				return;
 			}
 		}
 
@@ -1102,6 +1154,37 @@ class Emblem_Studio_Install {
 				delete_option( self::MIGRATION_ERROR_OPTION );
 			} else {
 				self::record_migration_failure( '51', (string) $wpdb->last_error );
+				return;
+			}
+		}
+
+		if ( version_compare( $current, '52', '<' ) ) {
+			if ( self::migration_failed_recently( '52' ) ) {
+				return;
+			}
+			global $wpdb;
+			$events = self::table( 'events' );
+			$leads  = self::table( 'leads' );
+			$want   = [
+				[ $events, 'form_time', '(form_id, created_at)' ],
+				[ $events, 'form_type_time', '(form_id, type, created_at)' ],
+				[ $leads, 'bot_time', '(is_bot, created_at)' ],
+			];
+			$has = static function ( string $table, string $key ) use ( $wpdb ): bool {
+				return (bool) $wpdb->get_var( $wpdb->prepare( "SHOW INDEX FROM $table WHERE Key_name = %s", $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			};
+			$ok = true;
+			foreach ( $want as [ $table, $key, $cols ] ) {
+				if ( ! $has( $table, $key ) ) {
+					$wpdb->query( "ALTER TABLE $table ADD KEY $key $cols" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				}
+				$ok = $ok && $has( $table, $key );
+			}
+			if ( $ok ) {
+				update_option( 'emblem_studio_db_version', '52' );
+				delete_option( self::MIGRATION_ERROR_OPTION );
+			} else {
+				self::record_migration_failure( '52', (string) $wpdb->last_error );
 				return;
 			}
 		}

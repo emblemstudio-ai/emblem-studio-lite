@@ -1,4 +1,7 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 final class Emblem_Studio_Form_Stamp {
 
 	public const MAX_AGE_MS = 86400000;

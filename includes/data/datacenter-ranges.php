@@ -1,4 +1,7 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 return array (
   'generated' => '2026-10-29',
   'providers' => 

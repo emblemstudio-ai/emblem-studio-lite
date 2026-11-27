@@ -2,10 +2,14 @@
 /**
  * Plugin Name:       Emblem Studio Lite
  * Description:       On-site forms, popups and ribbons that convert — hand-authored HTML/CSS, with FunnelKit Automations integration.
- * Version:           1.4.11-beta
+ * Version:           1.4.12-beta
  * Requires at least: 6.4
  * Requires PHP:      8.1
+ * Tested up to:      7.1
+ * Plugin URI:        https://emblemstudio.ai/
  * Author:            Emblem Studio
+ * Author URI:        https://emblemstudio.ai/
+ * Update URI:        https://emblemstudio.ai/
  * License:           GPL-2.0-or-later
  * Text Domain:       emblem-studio
  */
@@ -14,13 +18,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EMBLEM_STUDIO_VERSION', '1.4.11-beta' );
-define( 'EMBLEM_STUDIO_DB_VERSION', '51' );
+if ( defined( 'EMBLEM_STUDIO_VERSION' ) ) {
+	add_action(
+		'admin_notices',
+		static function (): void {
+			if ( ! current_user_can( 'activate_plugins' ) ) {
+				return;
+			}
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Emblem Studio and Emblem Studio Lite cannot run at the same time. Only the first one is working. Deactivate the one you do not use.', 'emblem-studio' ) . '</p></div>';
+		}
+	);
+	return;
+}
+
+define( 'EMBLEM_STUDIO_VERSION', '1.4.12-beta' );
+define( 'EMBLEM_STUDIO_DB_VERSION', '52' );
 define( 'EMBLEM_STUDIO_FILE', __FILE__ );
 define( 'EMBLEM_STUDIO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'EMBLEM_STUDIO_URL', plugin_dir_url( __FILE__ ) );
 
-require_once EMBLEM_STUDIO_PATH . 'includes/class-es-caps.php';
+define( 'EMBLEM_STUDIO_LITE_BUILD', true ); require_once EMBLEM_STUDIO_PATH . 'includes/class-es-caps.php';
 if ( ! defined( 'EMBLEM_STUDIO_EDITION' ) ) {
 	define( 'EMBLEM_STUDIO_EDITION', 'lite' );
 }
@@ -97,6 +114,10 @@ if ( is_admin() ) {
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-authoring.php';
 	require_once EMBLEM_STUDIO_PATH . 'includes/class-es-asset-checks.php';
 }
+
+add_action( 'init', static function (): void {
+	load_plugin_textdomain( 'emblem-studio', false, dirname( plugin_basename( EMBLEM_STUDIO_FILE ) ) . '/languages' );
+} );
 
 register_activation_hook( __FILE__, [ 'Emblem_Studio_Install', 'activate' ] );
 register_deactivation_hook( __FILE__, [ 'Emblem_Studio_Install', 'deactivate' ] );

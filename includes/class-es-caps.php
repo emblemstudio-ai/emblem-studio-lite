@@ -33,6 +33,9 @@ class Emblem_Studio_Caps {
 	];
 
 	public static function edition(): string {
+		if ( defined( 'EMBLEM_STUDIO_LITE_BUILD' ) ) {
+			return 'lite';
+		}
 		$e = defined( 'EMBLEM_STUDIO_EDITION' ) ? (string) EMBLEM_STUDIO_EDITION : 'full';
 
 		return isset( self::MATRIX[ $e ] ) ? $e : 'full';

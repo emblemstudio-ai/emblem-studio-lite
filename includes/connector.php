@@ -6,7 +6,7 @@ if (! defined('ABSPATH')) {
 
 final class Emblem_Studio_SaaS_Connector
 {
-    const VERSION = '1.3.35-beta';
+    const VERSION = EMBLEM_STUDIO_VERSION;
 
     const FORMS_TRANSIENT = 'ess_connector_forms';
 
@@ -688,7 +688,7 @@ final class Emblem_Studio_SaaS_Connector
                     ?>
                 </p>
                 <p style="color:#646970;font-size:12px;margin:0 0 22px;">
-                    <?php esc_html_e('Connecting copies this site’s existing leads, subscribers and stats into your Emblem Studio account, and keeps them in sync from then on. You’ll confirm this on the next screen.', 'emblem-studio'); ?>
+                    <?php esc_html_e('Connecting copies this site’s existing leads, subscribers and stats into your Emblem Studio account, and keeps them in sync from then on. While connected, opening Emblem Studio here also sends your WordPress user name, display name and role, so the dashboard knows who you are. You’ll confirm this on the next screen.', 'emblem-studio'); ?>
                 </p>
                 <p>
                     <button id="es-connect-btn" type="button" class="button button-primary button-hero">

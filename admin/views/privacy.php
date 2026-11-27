@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 	<h2><?php esc_html_e( 'The cookie in question', 'emblem-studio' ); ?></h2>
 	<p>
-		<?php esc_html_e( 'Your forms and popups set one cookie worth mentioning: esf_visitor. It\'s a random, anonymous id — no name, no email, no IP — that just tells your stats a new visitor from a returning one, and it never leaves your site.', 'emblem-studio' ); ?>
+		<?php esc_html_e( 'Your forms and popups set one cookie worth mentioning: esf_visitor. It\'s a random, anonymous id — no name, no email, no IP — that just tells your stats a new visitor from a returning one. It stays on your site, unless the site is connected to an Emblem Studio account: then it goes there with your stats (see below).', 'emblem-studio' ); ?>
 	</p>
 	<p>
 		<?php esc_html_e( '"Already subscribed" memory and our spam trap only start after a visitor has already acted (submitting a form), so neither needs mentioning.', 'emblem-studio' ); ?>
@@ -43,7 +43,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</button>
 		<?php
 	};
-	$es_copybox( __( 'esf_visitor — an anonymous, first-party cookie (about 30 days) that lets us count unique visitors and tell new visitors from returning ones. No personal data.', 'emblem-studio' ) );
+	$es_copybox( __( 'esf_visitor — an anonymous, first-party cookie (about 30 days) that lets us count unique visitors and tell new visitors from returning ones. It holds no name, email or IP address.', 'emblem-studio' ) );
 	$es_copybox( __( 'es_src — session storage for this tab only, gone when the tab closes. Notes where the visit came from (campaign tags, the referring site, the first page) to choose which forms show and to keep with a sign-up. Never an ad click ID\'s value.', 'emblem-studio' ) );
 	?>
 	<p>
@@ -53,6 +53,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php esc_html_e( 'If not, paste this one line into your banner\'s "on accept" script instead:', 'emblem-studio' ); ?>
 	</p>
 	<?php $es_copybox( 'EmblemStudio.setAnalyticsConsent(true);' ); ?>
+
+	<h2><?php esc_html_e( 'What is kept, and what leaves your site', 'emblem-studio' ); ?></h2>
+	<ul class="ul-disc">
+		<li><?php esc_html_e( 'Stats keep the visitor id above and the browser name (the user agent), to tell phones from computers. They keep no IP address for real visitors.', 'emblem-studio' ); ?></li>
+		<li><?php esc_html_e( 'A sign-up keeps the email address and the answers given in the form.', 'emblem-studio' ); ?></li>
+		<li><?php esc_html_e( 'Blocked bot visits and blocked spam sign-ups keep the full IP address, so you can check them. They are deleted after 90 days.', 'emblem-studio' ); ?></li>
+		<li><?php esc_html_e( 'When someone sends too many sign-ups too fast, their IP address is written to the error log. The log is cleared after 30 days.', 'emblem-studio' ); ?></li>
+		<li><?php esc_html_e( 'If this site is connected to an Emblem Studio account, your stats and sign-ups are copied there and kept in sync, including everything above.', 'emblem-studio' ); ?></li>
+		<li><?php esc_html_e( 'While connected, opening Emblem Studio here also sends your WordPress user name, display name and role, so the dashboard knows who you are. It sends the names of the user roles on this site too, for display rules.', 'emblem-studio' ); ?></li>
+		<li><?php esc_html_e( 'If you send sign-ups to FunnelKit or a webhook, they go wherever you pointed them.', 'emblem-studio' ); ?></li>
+	</ul>
 
 	<h2><?php esc_html_e( 'No banner yet?', 'emblem-studio' ); ?></h2>
 	<p>

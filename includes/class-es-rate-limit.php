@@ -1,4 +1,7 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 final class Emblem_Studio_Rate_Limit {
 
 	private const CACHE_GROUP = 'emblem_studio_rate_limit';
