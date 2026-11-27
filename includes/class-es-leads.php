@@ -59,7 +59,8 @@ class Emblem_Studio_Leads {
 					$args[]    = '';
 					break;
 				case 'pending':
-					$clauses[] = 'l.funnelkit_pushed = 0 AND (l.error IS NULL OR l.error = %s)';
+					$forms     = Emblem_Studio_Install::table( 'forms' );
+					$clauses[] = "l.funnelkit_pushed = 0 AND (l.error IS NULL OR l.error = %s) AND (l.form_id IS NULL OR l.form_id NOT IN (SELECT id FROM $forms WHERE funnelkit_enabled = 0))";
 					$args[]    = '';
 					break;
 			}
@@ -121,7 +122,8 @@ class Emblem_Studio_Leads {
 		$rows_sql = "SELECT l.id, l.created_at, l.email, l.extra_fields,
 				l.funnelkit_pushed, l.funnelkit_contact_id, l.error,
 				l.is_bot, l.bot_signals, l.ip, l.source,
-				f.id AS form_id, f.name AS form_name, f.slug AS form_slug
+				f.id AS form_id, f.name AS form_name, f.slug AS form_slug,
+				f.funnelkit_enabled AS form_fk_enabled
 			FROM $leads l
 			LEFT JOIN $forms f ON f.id = l.form_id
 			{$where['sql']}
@@ -308,6 +310,42 @@ class Emblem_Studio_Leads {
 		return self::push_to_connections( $lead );
 	}
 
+	public static function not_sent( object $row ): bool {
+		return empty( $row->is_bot )
+			&& empty( $row->funnelkit_pushed )
+			&& empty( $row->error )
+			&& isset( $row->form_fk_enabled )
+			&& (string) $row->form_fk_enabled === '0';
+	}
+
+	public static function mapped_values( object $form, array $answers ): array {
+		$out     = [ 'country' => '', 'state' => '', 'timezone' => '', 'slugs' => [] ];
+		$mapping = json_decode( (string) ( $form->field_mapping ?? '' ), true );
+		if ( ! is_array( $mapping ) ) {
+			return $out;
+		}
+		$answer = static function ( string $name ) use ( $answers ) {
+			$key = sanitize_key( (string) preg_replace( '/\[\]$/', '', $name ) );
+			return $answers[ $key ] ?? '';
+		};
+		foreach ( [ 'country', 'state', 'timezone' ] as $col ) {
+			$name = (string) ( $mapping[ 'col:' . $col ] ?? '' );
+			if ( $name !== '' ) {
+				$v           = $answer( $name );
+				$out[ $col ] = is_array( $v ) ? implode( ', ', array_map( 'strval', $v ) ) : (string) $v;
+			}
+		}
+		foreach ( $mapping as $fk_key => $name ) {
+			if ( strpos( (string) $fk_key, 'slug:' ) === 0 && (string) $name !== '' ) {
+				$v = $answer( (string) $name );
+				if ( $v !== '' && $v !== [] ) {
+					$out['slugs'][ substr( (string) $fk_key, 5 ) ] = $v;
+				}
+			}
+		}
+		return $out;
+	}
+
 	private static function push_to_connections( object $lead ): array {
 		global $wpdb;
 		$leads_table = Emblem_Studio_Install::table( 'leads' );
@@ -332,6 +370,12 @@ class Emblem_Studio_Leads {
 		$asset_key = ! empty( $form->saas_form_id )
 			? 'saas:' . (int) $form->saas_form_id
 			: 'wp:' . (int) $form->id;
+		$mapped = self::mapped_values( $form, $extra );
+		$custom = array_filter(
+			$extra,
+			static fn( $k ): bool => ! in_array( $k, [ 'first_name', 'last_name', 'phone', 'tags' ], true ) && strpos( (string) $k, '_es_' ) !== 0,
+			ARRAY_FILTER_USE_KEY
+		);
 		$push_res = Emblem_Studio_FunnelKit_Delivery::dispatch(
 			$asset_key,
 			array_merge( [ 'email' => (string) $lead->email ], $extra ),
@@ -340,9 +384,13 @@ class Emblem_Studio_Leads {
 				'first_name'    => $first,
 				'last_name'     => $last,
 				'phone'         => $phone,
+				'country'       => $mapped['country'],
+				'state'         => $mapped['state'],
+				'timezone'      => $mapped['timezone'],
+				'slugs'         => $mapped['slugs'],
 				'lists'         => is_array( $lists ) ? $lists : [],
 				'tags'          => is_array( $tags ) ? $tags : [],
-				'custom_fields' => $extra,
+				'custom_fields' => $custom,
 				'contact_status' => Emblem_Studio_FunnelKit_Upsert::contact_status( $form->funnelkit_contact_status ?? null ),
 			],
 			$fk_enabled
@@ -358,6 +406,10 @@ class Emblem_Studio_Leads {
 		if ( class_exists( 'Emblem_Studio_Webhooks' ) ) {
 			$payload = Emblem_Studio_Webhooks::build_payload( $form, (string) $lead->email, $first, $last, $phone, $extra, $push_res['contact_id'] ?? null, Emblem_Studio_Visit_Source::decode( $lead->source ?? null ) );
 			Emblem_Studio_Webhooks::send_for_form( $form, $payload );
+		}
+
+		if ( ( $push_res['mode'] ?? '' ) === 'disabled' ) {
+			return [ 'ok' => false, 'off' => true, 'message' => __( 'FunnelKit is switched off for this asset, so there is nowhere to send this lead.', 'emblem-studio' ) ];
 		}
 
 		return [ 'ok' => true, 'message' => null ];

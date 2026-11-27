@@ -4156,6 +4156,7 @@
 .emblem-studio-wrap .es-lead-failed  { background: var(--es-danger-soft);  color: var(--es-danger); }
 .emblem-studio-wrap .es-lead-pending { background: var(--es-warning-soft); color: var(--es-warning); }
 .emblem-studio-wrap .es-lead-bot     { background: var(--es-gray-100); color: var(--es-text-muted); }
+.emblem-studio-wrap .es-lead-not-sent { background: var(--es-gray-100); color: var(--es-text-muted); }
 
 .emblem-studio-wrap tr.es-lead-row-bot {
 	background-color: #fdf6ee;

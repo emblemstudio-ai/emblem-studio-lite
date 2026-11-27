@@ -166,6 +166,9 @@ $status_labels = [
 	<?php if ( isset( $_GET['lead_retried'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Retried — check the Status column for the result.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
+	<?php if ( isset( $_GET['lead_retry_off'] ) ) : ?>
+		<div class="notice notice-warning is-dismissible"><p><?php esc_html_e( 'FunnelKit is switched off for this asset, so there is nowhere to send this lead. Turn it on in the settings for this asset first.', 'emblem-studio' ); ?></p></div>
+	<?php endif; ?>
 	<?php if ( isset( $_GET['lead_retry_failed'] ) ) : ?>
 		<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Could not retry lead. It may have been deleted.', 'emblem-studio' ); ?></p></div>
 	<?php endif; ?>
@@ -196,6 +199,9 @@ $status_labels = [
 				} elseif ( ! empty( $r->error ) ) {
 					$status_class = 'es-lead-failed';
 					$status_text  = __( 'Failed', 'emblem-studio' );
+				} elseif ( Emblem_Studio_Leads::not_sent( $r ) ) {
+					$status_class = 'es-lead-not-sent';
+					$status_text  = __( 'Not sent', 'emblem-studio' );
 				} else {
 					$status_class = 'es-lead-pending';
 					$status_text  = __( 'Pending', 'emblem-studio' );
@@ -203,7 +209,9 @@ $status_labels = [
 				$row_class = $is_bot_row ? 'es-lead-row-bot' : '';
 				$row_title = $r->error
 					? esc_attr( $r->error )
-					: ( $is_bot_row ? esc_attr__( 'Honeypot field was filled — submission blocked. Not sent to FunnelKit or webhooks.', 'emblem-studio' ) : '' );
+					: ( $is_bot_row
+						? esc_attr__( 'Honeypot field was filled — submission blocked. Not sent to FunnelKit or webhooks.', 'emblem-studio' )
+						: ( Emblem_Studio_Leads::not_sent( $r ) ? esc_attr__( 'FunnelKit is switched off for this asset, so this lead was not sent to it.', 'emblem-studio' ) : '' ) );
 			?>
 				<tr<?php echo $row_class ? ' class="' . esc_attr( $row_class ) . '"' : ''; ?><?php echo $row_title ? ' title="' . $row_title . '"' : ''; ?>>
 					<?php $display_name = Emblem_Studio_Leads::display_name( $r->extra_fields ); ?>
@@ -239,7 +247,7 @@ $status_labels = [
 							   onclick="return confirm('<?php esc_attr_e( 'Move this lead to Humans without pushing to FunnelKit/webhooks?', 'emblem-studio' ); ?>');"
 							   style="color:#666;font-size:11px;"><?php esc_html_e( 'Move only', 'emblem-studio' ); ?></a>
 							<br>
-						<?php elseif ( ! $r->funnelkit_pushed ) :
+						<?php elseif ( ! $r->funnelkit_pushed && ! Emblem_Studio_Leads::not_sent( $r ) ) :
 							$retry_url = wp_nonce_url( admin_url( 'admin-post.php?action=es_retry_lead&id=' . (int) $r->id ), 'es_retry_lead_' . (int) $r->id );
 						?>
 							<a href="<?php echo esc_url( $retry_url ); ?>"
@@ -289,7 +297,13 @@ $status_labels = [
 													: __( 'Synced', 'emblem-studio' )
 											);
 										} else {
-											echo esc_html( $r->error ? $r->error : __( 'Pending', 'emblem-studio' ) );
+											echo esc_html(
+												$r->error
+													? $r->error
+													: ( Emblem_Studio_Leads::not_sent( $r )
+														? __( 'Not sent: FunnelKit is switched off for this asset.', 'emblem-studio' )
+														: __( 'Pending', 'emblem-studio' ) )
+											);
 										}
 										?>
 									</dd>

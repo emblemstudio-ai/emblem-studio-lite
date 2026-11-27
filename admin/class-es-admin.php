@@ -246,7 +246,7 @@ class Emblem_Studio_Admin {
 		$push = ! isset( $_GET['push'] ) || (int) $_GET['push'] === 1;
 		$result = $id ? Emblem_Studio_Leads::move_to_humans( $id, $push ) : [ 'ok' => false ];
 		$back = self::leads_back_url();
-		$flag = $result['ok'] ? 'lead_moved' : 'lead_move_failed';
+		$flag = ( $result['ok'] || ! empty( $result['off'] ) ) ? 'lead_moved' : 'lead_move_failed';
 		wp_safe_redirect( add_query_arg( $flag, '1', $back ) );
 		exit;
 	}
@@ -259,7 +259,7 @@ class Emblem_Studio_Admin {
 		check_admin_referer( 'es_retry_lead_' . $id );
 		$result = $id ? Emblem_Studio_Leads::retry_push( $id ) : [ 'ok' => false ];
 		$back = self::leads_back_url();
-		$flag = $result['ok'] ? 'lead_retried' : 'lead_retry_failed';
+		$flag = $result['ok'] ? 'lead_retried' : ( ! empty( $result['off'] ) ? 'lead_retry_off' : 'lead_retry_failed' );
 		wp_safe_redirect( add_query_arg( $flag, '1', $back ) );
 		exit;
 	}
